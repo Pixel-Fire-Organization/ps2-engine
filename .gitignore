@@ -1,0 +1,32 @@
+# CMake Build System
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Executables Outputs and Release Folders
+exec/
+bin/
+
+# Object Files and Static Libraries
+*.o
+*.obj
+*.a
+*.lib
+
+# PlayStation 2 Specific Artifacts
+*.elf
+*.iso
+SYSTEM.CNF
+
+# Environments & IDEs
+.vscode/
+.vs/
+.idea/
+*.swp
+*~
+
+# Operating System Files
+.DS_Store
+Thumbs.db
