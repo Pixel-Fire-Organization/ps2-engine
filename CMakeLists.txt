@@ -12,7 +12,7 @@ add_library(ps2_engine STATIC
     src/engine_io.c
     src/engine_script.c
 )
-add_subdirectory(thirdparty/lua)
+add_subdirectory(thirdparty)
 target_include_directories(ps2_engine PUBLIC include)
 
 # Define the target executable name
