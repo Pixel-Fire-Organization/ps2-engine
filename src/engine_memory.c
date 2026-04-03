@@ -1,14 +1,15 @@
-#include "engine_memory.h"
+#include "engine.h"
 #include <string.h>
 
 static inline uintptr_t AlignForward(uintptr_t ptr, size_t alignment) {
-    if (alignment == 0) return ptr;
-    uintptr_t a = (uintptr_t)alignment;
-    uintptr_t modulo = ptr & (a - 1);
-    if (modulo != 0) {
-        ptr += a - modulo;
-    }
+  if (alignment == 0)
     return ptr;
+  uintptr_t a = (uintptr_t)alignment;
+  uintptr_t modulo = ptr & (a - 1);
+  if (modulo != 0) {
+    ptr += a - modulo;
+  }
+  return ptr;
 }
 
 // Internal specialized arenas (hidden from header)
@@ -22,210 +23,233 @@ static MemoryArena g_SystemArena;
 // Global pool (Encapsulated)
 static MemoryPool g_MainPool;
 
-void Engine_PoolInitMain(void* buffer, size_t capacity, size_t chunk_size) {
-    Engine_PoolInit(&g_MainPool, buffer, capacity, chunk_size);
+void Engine_PoolInitMain(void *buffer, size_t capacity, size_t chunk_size) {
+  Engine_PoolInit(&g_MainPool, buffer, capacity, chunk_size);
 }
 
-void* Engine_PoolAllocMain(void) {
-    return Engine_PoolAlloc(&g_MainPool);
-}
+void *Engine_PoolAllocMain(void) { return Engine_PoolAlloc(&g_MainPool); }
 
-void Engine_PoolFreeMain(void* ptr) {
-    Engine_PoolFree(&g_MainPool, ptr);
-}
+void Engine_PoolFreeMain(void *ptr) { Engine_PoolFree(&g_MainPool, ptr); }
 
-void* Engine_PoolGetBufferMain(void) {
-    return g_MainPool.buffer;
-}
+void *Engine_PoolGetBufferMain(void) { return g_MainPool.buffer; }
 
 // Max slots supported per arena type for metadata arrays
-#define MAX_ARENA_SLOTS 32
+#define MAX_ARENA_SLOTS MEM_ARENA_MAX_SLOTS
 static ResourceSlot s_Slots[ARENA_COUNT][MAX_ARENA_SLOTS];
-static uint32_t     s_SlotCounts[ARENA_COUNT];
+static uint32_t s_SlotCounts[ARENA_COUNT];
 
-static void Internal_InitSlots(ArenaType type, MemoryArena* arena, uint32_t count) {
-    if (count == 0) return;
-    if (count > MAX_ARENA_SLOTS) count = MAX_ARENA_SLOTS;
+static void Internal_InitSlots(ArenaType type, MemoryArena *arena,
+                               uint32_t count) {
+  if (count == 0)
+    return;
+  if (count > MAX_ARENA_SLOTS)
+    count = MAX_ARENA_SLOTS;
 
-    s_SlotCounts[type] = count;
-    
-    // Calculate size per slot, ensuring each slot start is 16KB aligned
-    size_t alignment = 16 * 1024;
-    size_t total_capacity = arena->capacity;
-    
-    // We need to account for potential padding at the start of each slot
-    // To be safe, we calculate a "safe" slot size
-    size_t slot_capacity = (total_capacity / count);
-    // Align slot capacity down to 16KB to ensure every start is aligned if we start aligned
-    slot_capacity = (slot_capacity / alignment) * alignment;
+  s_SlotCounts[type] = count;
 
-    uint8_t* ptr = arena->buffer;
-    for (uint32_t i = 0; i < count; i++) {
-        // Align the start of this specific slot
-        uintptr_t aligned_start = AlignForward((uintptr_t)ptr, alignment);
-        
-        s_Slots[type][i].ptr = (void*)aligned_start;
-        s_Slots[type][i].capacity = slot_capacity;
-        s_Slots[type][i].usedSize = 0;
-        s_Slots[type][i].locked = false;
+  // Calculate size per slot, ensuring each slot start is 16KB aligned
+  size_t alignment = MEM_ARENA_SLOT_ALIGNMENT;
+  size_t total_capacity = arena->capacity;
 
-        ptr = (uint8_t*)(aligned_start + slot_capacity);
-    }
+  // We need to account for potential padding at the start of each slot
+  // To be safe, we calculate a "safe" slot size
+  size_t slot_capacity = (total_capacity / count);
+  // Align slot capacity down to 16KB to ensure every start is aligned if we
+  // start aligned
+  slot_capacity = (slot_capacity / alignment) * alignment;
+
+  uint8_t *ptr = arena->buffer;
+  for (uint32_t i = 0; i < count; i++) {
+    // Align the start of this specific slot
+    uintptr_t aligned_start = AlignForward((uintptr_t)ptr, alignment);
+
+    s_Slots[type][i].ptr = (void *)aligned_start;
+    s_Slots[type][i].capacity = slot_capacity;
+    s_Slots[type][i].usedSize = 0;
+    s_Slots[type][i].locked = false;
+
+    ptr = (uint8_t *)(aligned_start + slot_capacity);
+  }
 }
 
-void Engine_ArenasInitSegmented(void* base_ptr, EngineMemoryMap map) {
-    uint8_t* ptr = (uint8_t*)base_ptr;
-    
-    Engine_ArenaInit(&g_TextureArena, ptr, map.textureSize);
-    Internal_InitSlots(ARENA_TEXTURE, &g_TextureArena, map.textureSlots);
-    ptr += map.textureSize;
+void Engine_ArenasInitSegmented(void *base_ptr) {
+  uint8_t *ptr = (uint8_t *)base_ptr;
 
-    Engine_ArenaInit(&g_MeshArena,    ptr, map.meshSize);
-    Internal_InitSlots(ARENA_MESH,    &g_MeshArena,    map.meshSlots);
-    ptr += map.meshSize;
+  Engine_ArenaInit(&g_TextureArena, ptr, MEM_BLOCK_TEXTURE_SIZE);
+  Internal_InitSlots(ARENA_TEXTURE, &g_TextureArena, MEM_BLOCK_TEXTURE_SLOTS);
+  ptr += MEM_BLOCK_TEXTURE_SIZE;
 
-    Engine_ArenaInit(&g_AudioArena,   ptr, map.audioSize);
-    Internal_InitSlots(ARENA_AUDIO,   &g_AudioArena,   map.audioSlots);
-    ptr += map.audioSize;
+  Engine_ArenaInit(&g_MeshArena, ptr, MEM_BLOCK_MESH_SIZE);
+  Internal_InitSlots(ARENA_MESH, &g_MeshArena, MEM_BLOCK_MESH_SLOTS);
+  ptr += MEM_BLOCK_MESH_SIZE;
 
-    Engine_ArenaInit(&g_ScriptArena,  ptr, map.scriptSize);
-    Internal_InitSlots(ARENA_SCRIPT,  &g_ScriptArena,  map.scriptSlots);
-    ptr += map.scriptSize;
+  Engine_ArenaInit(&g_AudioArena, ptr, MEM_BLOCK_AUDIO_SIZE);
+  Internal_InitSlots(ARENA_AUDIO, &g_AudioArena, MEM_BLOCK_AUDIO_SLOTS);
+  ptr += MEM_BLOCK_AUDIO_SIZE;
 
-    Engine_ArenaInit(&g_UIArena,      ptr, map.uiSize);
-    Internal_InitSlots(ARENA_UI,      &g_UIArena,      map.uiSlots);
-    ptr += map.uiSize;
+  Engine_ArenaInit(&g_ScriptArena, ptr, MEM_BLOCK_SCRIPT_SIZE);
+  Internal_InitSlots(ARENA_SCRIPT, &g_ScriptArena, MEM_BLOCK_SCRIPT_SLOTS);
+  ptr += MEM_BLOCK_SCRIPT_SIZE;
 
-    Engine_ArenaInit(&g_SystemArena,  ptr, map.systemSize);
-    Internal_InitSlots(ARENA_SYSTEM,  &g_SystemArena,  map.systemSlots);
+  Engine_ArenaInit(&g_UIArena, ptr, MEM_BLOCK_UI_SIZE);
+  Internal_InitSlots(ARENA_UI, &g_UIArena, MEM_BLOCK_UI_SLOTS);
+  ptr += MEM_BLOCK_UI_SIZE;
+
+  Engine_ArenaInit(&g_SystemArena, ptr, MEM_BLOCK_SYSTEM_SIZE);
+  Internal_InitSlots(ARENA_SYSTEM, &g_SystemArena, MEM_BLOCK_SYSTEM_SLOTS);
 }
 
-void* Engine_GetSlot(ArenaType type, uint32_t slotIndex) {
-    if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type]) return NULL;
-    return s_Slots[type][slotIndex].ptr;
+void *Engine_GetSlot(ArenaType type, uint32_t slotIndex) {
+  if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
+    return NULL;
+  return s_Slots[type][slotIndex].ptr;
 }
 
-bool Engine_LoadToSlot(ArenaType type, uint32_t slotIndex, const void* data, size_t size) {
-    if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type]) return false;
-    
-    ResourceSlot* slot = &s_Slots[type][slotIndex];
-    if (slot->locked) return false;
-    if (size > slot->capacity) return false;
+size_t Engine_GetSlotCapacity(ArenaType type, uint32_t slotIndex) {
+  if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
+    return 0;
+  return s_Slots[type][slotIndex].capacity;
+}
 
-    if (data && size > 0) {
-        memcpy(slot->ptr, data, size);
-    }
-    slot->usedSize = size;
-    return true;
+bool Engine_LoadToSlot(ArenaType type, uint32_t slotIndex, const void *data,
+                       size_t size) {
+  if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
+    return false;
+
+  ResourceSlot *slot = &s_Slots[type][slotIndex];
+  if (slot->locked)
+    return false;
+  if (size > slot->capacity)
+    return false;
+
+  if (data && size > 0) {
+    memcpy(slot->ptr, data, size);
+  }
+  slot->usedSize = size;
+  return true;
 }
 
 void Engine_LockSlot(ArenaType type, uint32_t slotIndex) {
-    if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type]) return;
-    s_Slots[type][slotIndex].locked = true;
+  if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
+    return;
+  s_Slots[type][slotIndex].locked = true;
 }
 
 void Engine_UnlockSlot(ArenaType type, uint32_t slotIndex) {
-    if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type]) return;
-    s_Slots[type][slotIndex].locked = false;
+  if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
+    return;
+  s_Slots[type][slotIndex].locked = false;
 }
 
 void Engine_ClearSlot(ArenaType type, uint32_t slotIndex) {
-    if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type]) return;
-    ResourceSlot* slot = &s_Slots[type][slotIndex];
-    if (slot->locked) return;
-    
-    memset(slot->ptr, 0, slot->capacity);
-    slot->usedSize = 0;
+  if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
+    return;
+  ResourceSlot *slot = &s_Slots[type][slotIndex];
+  if (slot->locked)
+    return;
+
+  memset(slot->ptr, 0, slot->capacity);
+  slot->usedSize = 0;
 }
 
-void* Engine_AddToArena(ArenaType type, size_t size, size_t alignment) {
-    switch (type) {
-        case ARENA_TEXTURE: return Engine_ArenaAlloc(&g_TextureArena, size, alignment);
-        case ARENA_MESH:    return Engine_ArenaAlloc(&g_MeshArena,    size, alignment);
-        case ARENA_AUDIO:   return Engine_ArenaAlloc(&g_AudioArena,   size, alignment);
-        case ARENA_SCRIPT:  return Engine_ArenaAlloc(&g_ScriptArena,  size, alignment);
-        case ARENA_UI:      return Engine_ArenaAlloc(&g_UIArena,      size, alignment);
-        case ARENA_SYSTEM:  return Engine_ArenaAlloc(&g_SystemArena,  size, alignment);
-        default:            return NULL;
-    }
+void *Engine_AddToArena(ArenaType type, size_t size, size_t alignment) {
+  switch (type) {
+  case ARENA_TEXTURE:
+    return Engine_ArenaAlloc(&g_TextureArena, size, alignment);
+  case ARENA_MESH:
+    return Engine_ArenaAlloc(&g_MeshArena, size, alignment);
+  case ARENA_AUDIO:
+    return Engine_ArenaAlloc(&g_AudioArena, size, alignment);
+  case ARENA_SCRIPT:
+    return Engine_ArenaAlloc(&g_ScriptArena, size, alignment);
+  case ARENA_UI:
+    return Engine_ArenaAlloc(&g_UIArena, size, alignment);
+  case ARENA_SYSTEM:
+    return Engine_ArenaAlloc(&g_SystemArena, size, alignment);
+  default:
+    return NULL;
+  }
 }
 
-
-void Engine_ArenaInit(MemoryArena* arena, void* backing_buffer, size_t capacity) {
-    arena->buffer = (uint8_t*)backing_buffer;
-    arena->capacity = capacity;
-    arena->offset = 0;
+void Engine_ArenaInit(MemoryArena *arena, void *backing_buffer,
+                      size_t capacity) {
+  arena->buffer = (uint8_t *)backing_buffer;
+  arena->capacity = capacity;
+  arena->offset = 0;
 }
 
-void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment) {
-    uintptr_t current_ptr = (uintptr_t)arena->buffer + arena->offset;
-    uintptr_t aligned_ptr = AlignForward(current_ptr, alignment);
-    size_t shift = (size_t)(aligned_ptr - (uintptr_t)arena->buffer);
+void *Engine_ArenaAlloc(MemoryArena *arena, size_t size, size_t alignment) {
+  uintptr_t current_ptr = (uintptr_t)arena->buffer + arena->offset;
+  uintptr_t aligned_ptr = AlignForward(current_ptr, alignment);
+  size_t shift = (size_t)(aligned_ptr - (uintptr_t)arena->buffer);
 
-    if (shift + size > arena->capacity) {
-        return NULL; // Out of memory
-    }
+  if (shift + size > arena->capacity) {
+    return NULL; // Out of memory
+  }
 
-    arena->offset = shift + size;
-    return (void*)aligned_ptr;
+  arena->offset = shift + size;
+  return (void *)aligned_ptr;
 }
 
-void Engine_ArenaReset(MemoryArena* arena) {
-    arena->offset = 0;
+void Engine_ArenaReset(MemoryArena *arena) { arena->offset = 0; }
+
+void Engine_ArenaClear(MemoryArena *arena) {
+  if (arena->buffer) {
+    memset(arena->buffer, 0, arena->capacity);
+  }
+  arena->offset = 0;
 }
 
-void Engine_ArenaClear(MemoryArena* arena) {
-    if (arena->buffer) {
-        memset(arena->buffer, 0, arena->capacity);
-    }
-    arena->offset = 0;
+void Engine_PoolInit(MemoryPool *pool, void *backing_buffer, size_t capacity,
+                     size_t chunk_size) {
+  pool->buffer = (uint8_t *)backing_buffer;
+  pool->capacity = capacity;
+  if (chunk_size < sizeof(PoolFreeNode)) {
+    chunk_size = sizeof(PoolFreeNode);
+  }
+  pool->chunk_size = chunk_size;
+  Engine_PoolReset(pool);
 }
 
-void Engine_PoolInit(MemoryPool* pool, void* backing_buffer, size_t capacity, size_t chunk_size) {
-    pool->buffer = (uint8_t*)backing_buffer;
-    pool->capacity = capacity;
-    if (chunk_size < sizeof(PoolFreeNode)) {
-        chunk_size = sizeof(PoolFreeNode);
-    }
-    pool->chunk_size = chunk_size;
-    Engine_PoolReset(pool);
+void Engine_PoolReset(MemoryPool *pool) {
+  if (pool->capacity < pool->chunk_size || !pool->buffer) {
+    pool->head = NULL;
+    return;
+  }
+
+  size_t num_chunks = pool->capacity / pool->chunk_size;
+  pool->head = (PoolFreeNode *)pool->buffer;
+  PoolFreeNode *curr = pool->head;
+
+  for (size_t i = 1; i < num_chunks; ++i) {
+    PoolFreeNode *next_node =
+        (PoolFreeNode *)(pool->buffer + i * pool->chunk_size);
+    curr->next = next_node;
+    curr = next_node;
+  }
+  curr->next = NULL;
 }
 
-void Engine_PoolReset(MemoryPool* pool) {
-    if (pool->capacity < pool->chunk_size || !pool->buffer) {
-        pool->head = NULL;
-        return;
-    }
+void *Engine_PoolAlloc(MemoryPool *pool) {
+  if (pool->head == NULL) {
+    return NULL;
+  }
+  PoolFreeNode *node = pool->head;
+  pool->head = pool->head->next;
 
-    size_t num_chunks = pool->capacity / pool->chunk_size;
-    pool->head = (PoolFreeNode*)pool->buffer;
-    PoolFreeNode* curr = pool->head;
-
-    for (size_t i = 1; i < num_chunks; ++i) {
-        PoolFreeNode* next_node = (PoolFreeNode*)(pool->buffer + i * pool->chunk_size);
-        curr->next = next_node;
-        curr = next_node;
-    }
-    curr->next = NULL;
+  // Clear chunk memory for determinism (excluding what was used by the node
+  // itself, actually we clear all of it)
+  memset((void *)node, 0, pool->chunk_size);
+  return (void *)node;
 }
 
-void* Engine_PoolAlloc(MemoryPool* pool) {
-    if (pool->head == NULL) {
-        return NULL;
-    }
-    PoolFreeNode* node = pool->head;
-    pool->head = pool->head->next;
-    
-    // Clear chunk memory for determinism (excluding what was used by the node itself, actually we clear all of it)
-    memset((void*)node, 0, pool->chunk_size);
-    return (void*)node;
-}
+void Engine_PoolFree(MemoryPool *pool, void *ptr) {
+  if (ptr == NULL)
+    return;
 
-void Engine_PoolFree(MemoryPool* pool, void* ptr) {
-    if (ptr == NULL) return;
-    
-    // In a robust pool allocator, you'd verify ptr is within bounds and aligned. For speed we assume it is.
-    PoolFreeNode* node = (PoolFreeNode*)ptr;
-    node->next = pool->head;
-    pool->head = node;
+  // In a robust pool allocator, you'd verify ptr is within bounds and aligned.
+  // For speed we assume it is.
+  PoolFreeNode *node = (PoolFreeNode *)ptr;
+  node->next = pool->head;
+  pool->head = node;
 }

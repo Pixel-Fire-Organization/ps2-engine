@@ -21,6 +21,7 @@ bin/
 SYSTEM.CNF
 
 # Environments & IDEs
+.clangd
 .vscode/
 .vs/
 .idea/

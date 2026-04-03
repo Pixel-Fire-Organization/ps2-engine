@@ -4,17 +4,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "engine_memory.h"
-
 typedef struct {
-    int screenWidth;
-    int screenHeight;
-    const char* windowTitle;
-    size_t memoryPoolSize;
-    EngineMemoryMap memoryMap;
+  const char *windowTitle;
 } EngineConfig;
 
 bool Engine_Init(EngineConfig config);
+bool Engine_Is_GFX_Initialized();
 void Engine_Update(void);
 void Engine_Close(void);
 

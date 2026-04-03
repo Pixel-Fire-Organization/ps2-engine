@@ -1,192 +1,175 @@
-#include "engine_io.h"
-#include "engine_debug.h"
-#include "engine_memory.h"
+#include "engine.h"
 #include <malloc.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#ifdef _PS2
+#include <delaythread.h>
 #include <kernel.h>
 #include <sifrpc.h>
-#else
-#include <pthread.h>
-#endif
+#include <stdbool.h>
+#include <stddef.h>
 
-#define MAX_IO_REQUESTS 16
+#define MAX_IO_REQUESTS IO_ASYNC_MAX_REQUESTS
+
+typedef enum {
+  IO_STATE_IDLE,
+  IO_STATE_QUEUED,
+  IO_STATE_COMPLETED
+} IORequestState;
 
 typedef struct {
-    char filepath[256];
-    IO_Callback callback;
-    void* userData;
-    bool active;
-    bool completed;
-    void* loadedData;
-    size_t loadedSize;
+  char filepath[IO_FILE_MAX_PATH];
+  IO_Callback callback;
+  void *userData;
+  IORequestState state;
+  void *loadedData;
+  size_t loadedSize;
 } IORequest;
 
 static IORequest s_Requests[MAX_IO_REQUESTS];
 static volatile bool s_IOThreadActive = false;
 
-#ifdef _PS2
 static int s_IOThreadID = -1;
 static int s_IOMutex = -1;
 extern void *_gp;
 
-static void IOThreadEntry(void* arg) {
-    while (s_IOThreadActive) {
-        WaitSema(s_IOMutex);
-        for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
-            if (s_Requests[i].active && !s_Requests[i].completed) {
-                FILE* f = fopen(s_Requests[i].filepath, "rb");
-                if (f) {
-                    fseek(f, 0, SEEK_END);
-                    size_t size = ftell(f);
-                    fseek(f, 0, SEEK_SET);
-                    
-                    void* data = malloc(size);
-                    if (data) {
-                        fread(data, 1, size, f);
-                    }
-                    fclose(f);
-                    
-                    s_Requests[i].loadedData = data;
-                    s_Requests[i].loadedSize = size;
-                } else {
-                    Engine_LogError("Failed to open %s", s_Requests[i].filepath);
-                    s_Requests[i].loadedData = NULL;
-                    s_Requests[i].loadedSize = 0;
-                }
-                s_Requests[i].completed = true;
-            }
-        }
-        SignalSema(s_IOMutex);
-    }
-}
-#else
-static pthread_t s_IOThreadID;
-static pthread_mutex_t s_IOMutex;
+static void IOThreadEntry(void *arg) {
+  while (s_IOThreadActive) {
+    int reqIndex = -1;
+    char filepath[IO_FILE_MAX_PATH];
 
-static void* IOThreadEntry(void* arg) {
-    while (s_IOThreadActive) {
-        pthread_mutex_lock(&s_IOMutex);
-        for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
-            if (s_Requests[i].active && !s_Requests[i].completed) {
-                FILE* f = fopen(s_Requests[i].filepath, "rb");
-                if (f) {
-                    fseek(f, 0, SEEK_END);
-                    size_t size = ftell(f);
-                    fseek(f, 0, SEEK_SET);
-                    void* data = malloc(size);
-                    if (data) {
-                        fread(data, 1, size, f);
-                    }
-                    fclose(f);
-                    s_Requests[i].loadedData = data;
-                    s_Requests[i].loadedSize = size;
-                } else {
-                    Engine_LogError("Failed to open %s", s_Requests[i].filepath);
-                    s_Requests[i].loadedData = NULL;
-                    s_Requests[i].loadedSize = 0;
-                }
-                s_Requests[i].completed = true;
-            }
+    if (s_IOMutex >= 0) {
+      WaitSema(s_IOMutex);
+      for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
+        if (s_Requests[i].state == IO_STATE_QUEUED) {
+          reqIndex = i;
+          strncpy(filepath, s_Requests[i].filepath, IO_FILE_MAX_PATH - 1);
+          filepath[IO_FILE_MAX_PATH - 1] = '\0';
+          break;
         }
-        pthread_mutex_unlock(&s_IOMutex);
+      }
+      SignalSema(s_IOMutex);
     }
-    return NULL;
+
+    if (reqIndex != -1) {
+      FILE *f = fopen(filepath, "rb");
+      void *data = NULL;
+      size_t size = 0;
+      if (f) {
+        fseek(f, 0, SEEK_END);
+        size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+
+        data = malloc(size);
+        if (data) {
+          fread(data, 1, size, f);
+        }
+        fclose(f);
+      } else {
+        Engine_LogError("Failed to open %s", filepath);
+      }
+
+      if (s_IOMutex >= 0) {
+        WaitSema(s_IOMutex);
+        s_Requests[reqIndex].loadedData = data;
+        s_Requests[reqIndex].loadedSize = size;
+        s_Requests[reqIndex].state = IO_STATE_COMPLETED;
+        SignalSema(s_IOMutex);
+      }
+    } else {
+      DelayThread(IO_THREAD_SLEEP_USEC);
+    }
+  }
 }
-#endif
 
 bool Engine_IO_Init(void) {
-    memset(s_Requests, 0, sizeof(s_Requests));
-    s_IOThreadActive = true;
+  memset(s_Requests, 0, sizeof(s_Requests));
+  s_IOThreadActive = true;
 
-#ifdef _PS2
-    ee_sema_t sema;
-    sema.init_count = 1;
-    sema.max_count = 1;
-    sema.option = 0;
-    s_IOMutex = CreateSema(&sema);
+  ee_sema_t sema;
+  sema.init_count = 1;
+  sema.max_count = 1;
+  sema.option = 0;
+  s_IOMutex = CreateSema(&sema);
 
-    ee_thread_t threadParam;
-    threadParam.func = IOThreadEntry;
-    threadParam.stack_size = 0x8000;
-    threadParam.gp_reg = &_gp;
-    threadParam.initial_priority = 0x40;
-    
-    s_IOThreadID = CreateThread(&threadParam);
-    if (s_IOThreadID >= 0) {
-        StartThread(s_IOThreadID, NULL);
-    }
-#else
-    pthread_mutex_init(&s_IOMutex, NULL);
-    pthread_create(&s_IOThreadID, NULL, IOThreadEntry, NULL);
-#endif
+  if (s_IOMutex < 0) {
+    Engine_LogError("Failed to create IO semaphore! Error: %d", s_IOMutex);
+    return false;
+  }
 
-    Engine_LogInfo("Async IO system initialized.");
-    return true;
+  ee_thread_t threadParam;
+  threadParam.func = IOThreadEntry;
+  threadParam.stack_size = 0x8000;
+  threadParam.gp_reg = &_gp;
+  threadParam.initial_priority = 0x40;
+
+  s_IOThreadID = CreateThread(&threadParam);
+  if (s_IOThreadID < 0) {
+    Engine_LogError("Failed to create IO thread! Error: %d", s_IOThreadID);
+    return false;
+  }
+
+  StartThread(s_IOThreadID, NULL);
+
+  Engine_LogInfo("Async IO system initialized.");
+  return true;
 }
 
-bool Engine_IO_ReadAsync(const char* filepath, IO_Callback callback, void* userData) {
-    bool queued = false;
+bool Engine_IO_ReadAsync(const char *filepath, IO_Callback callback,
+                         void *userData) {
+  if (s_IOMutex < 0)
+    return false;
 
-#ifdef _PS2
-    WaitSema(s_IOMutex);
-#else
-    pthread_mutex_lock(&s_IOMutex);
-#endif
+  bool queued = false;
+  WaitSema(s_IOMutex);
 
-    for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
-        if (!s_Requests[i].active) {
-            strncpy(s_Requests[i].filepath, filepath, 255);
-            s_Requests[i].callback = callback;
-            s_Requests[i].userData = userData;
-            s_Requests[i].active = true;
-            s_Requests[i].completed = false;
-            queued = true;
-            break;
-        }
+  for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
+    if (s_Requests[i].state == IO_STATE_IDLE) {
+      strncpy(s_Requests[i].filepath, filepath, IO_FILE_MAX_PATH - 1);
+      s_Requests[i].filepath[IO_FILE_MAX_PATH - 1] = '\0';
+      s_Requests[i].callback = callback;
+      s_Requests[i].userData = userData;
+      s_Requests[i].state = IO_STATE_QUEUED;
+      queued = true;
+      break;
     }
+  }
 
-#ifdef _PS2
-    SignalSema(s_IOMutex);
-#else
-    pthread_mutex_unlock(&s_IOMutex);
-#endif
+  SignalSema(s_IOMutex);
 
-    if (!queued) {
-        Engine_LogError("Failed to queue IO request for %s. Queue full.", filepath);
-    }
-    return queued;
+  if (!queued) {
+    Engine_LogError("Failed to queue IO request for %s. Queue full.", filepath);
+  }
+  return queued;
 }
 
 void Engine_IO_Update(void) {
-#ifdef _PS2
-    WaitSema(s_IOMutex);
-#else
-    pthread_mutex_lock(&s_IOMutex);
-#endif
+  if (s_IOMutex < 0)
+    return;
 
-    for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
-        if (s_Requests[i].active && s_Requests[i].completed) {
-            if (s_Requests[i].callback) {
-                s_Requests[i].callback(s_Requests[i].loadedData, s_Requests[i].loadedSize, s_Requests[i].userData);
-            }
-            if (s_Requests[i].loadedData) {
-                free(s_Requests[i].loadedData);
-            }
-            s_Requests[i].active = false;
-        }
+  WaitSema(s_IOMutex);
+
+  for (int i = 0; i < MAX_IO_REQUESTS; ++i) {
+    if (s_Requests[i].state == IO_STATE_COMPLETED) {
+      if (s_Requests[i].callback) {
+        s_Requests[i].callback(s_Requests[i].loadedData,
+                               s_Requests[i].loadedSize,
+                               s_Requests[i].userData);
+      }
+      if (s_Requests[i].loadedData) {
+        free(s_Requests[i].loadedData);
+        s_Requests[i].loadedData = NULL;
+      }
+      s_Requests[i].state = IO_STATE_IDLE;
     }
+  }
 
-#ifdef _PS2
-    SignalSema(s_IOMutex);
-#else
-    pthread_mutex_unlock(&s_IOMutex);
-#endif
+  SignalSema(s_IOMutex);
 }
 
 void Engine_IO_Shutdown(void) {
-    s_IOThreadActive = false;
+  s_IOThreadActive = false;
+  // Note: Thread cleanup should involve DeleteThread/DeleteSema but wait for
+  // exit
 }

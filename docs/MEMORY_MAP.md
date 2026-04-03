@@ -11,18 +11,18 @@ This document serves as the master record for the PS2's limited **32 MB (EE) Mai
 | `0x0080_0000` | ~Variable | Main Heap / `g_MainArena` |
 | `0x01E0_0000` | ~Variable | Scrapyard / Temporary Pool / DMAC Buffers |
 
-## Segmented Arena Layout (30 MB Total)
+## Segmented Arena Layout (16 MB Total)
 
 The arena starts at the base pointer allocated during `Engine_Init` (~0xXXXX_XXXX) and is explicitly partitioned as follows:
 
 | Segment | Default Size | Default Slots | Purpose | Arena Global |
 | :--- | :--- | :--- | :--- | :--- |
-| **Textures** | 15 MB | 10 Slots | Texture data (PCX/BMP/TIM2 clones) | `ARENA_TEXTURE` |
-| **Meshes** | 4 MB | 8 Slots | Vertex/Index buffers & Models | `ARENA_MESH` |
-| **Audio** | 4 MB | 8 Slots | SPU2/VAG Audio sample cache | `ARENA_AUDIO` |
-| **Scripts** | 4 MB | 16 Slots | Game logic, entity states, script VMs | `ARENA_SCRIPT` |
+| **Textures** | 8 MB | 10 Slots | Texture data (PCX/BMP/TIM2 clones) | `ARENA_TEXTURE` |
+| **Meshes** | 2 MB | 8 Slots | Vertex/Index buffers & Models | `ARENA_MESH` |
+| **Audio** | 2 MB | 8 Slots | SPU2/VAG Audio sample cache | `ARENA_AUDIO` |
+| **Scripts** | 2 MB | 16 Slots | Game logic, entity states, script VMs | `ARENA_SCRIPT` |
 | **UI** | 1 MB | 4 Slots | Fonts, UI textures, menus | `ARENA_UI` |
-| **System** | 2 MB | 4 Slots | Internal scratchpads, DMA chains | `ARENA_SYSTEM` |
+| **System** | 1 MB | 4 Slots | Internal scratchpads, DMA chains | `ARENA_SYSTEM` |
 
 ---
 
