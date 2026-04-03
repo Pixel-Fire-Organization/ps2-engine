@@ -2,7 +2,7 @@
 #define CONSTANTS_H
 
 /**
- * @file constants.h
+ * @file Constants.h
  * @brief Centralized engine constants and configuration.
  * 
  * Naming convention: <ENGINE_CATEGORY>_<SUBMODULE>_<ID>

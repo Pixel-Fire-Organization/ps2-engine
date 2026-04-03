@@ -34,7 +34,7 @@ echo "=== Building engine & app"
 cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -B build && cmake --build build || exit 1
 
 echo "=== Generating .clangd for IDE"
-# Get absolute paths for the project and SDK to handle cross-environment indexing
+
 ENG_PATH=$(realpath .)
 SDK_PATH=$(realpath "${PS2SDK:-/usr/local/ps2dev/ps2sdk}")
 

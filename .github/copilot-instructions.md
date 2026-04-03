@@ -76,7 +76,6 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 | :--- | :--- | :--- |
 | **Files** | `PascalCase.c` | `EngineMemory.c` |
 | **Functions** | `PascalCase_SnakeCase` | `Engine_LoadToSlot()` |
-| **Local (Translation Unit) Variables** | `m_camelCase` | `uint32_t m_slotIndex;` |
 | **Function Variables** | `camelCase` | `uint32_t slotIndex;` |
 | **Static/Globals** | `PascalCase` | `static int SlotCount;` |
 | **Macros/Consts** | `UPPER_SNAKE_CASE` | `MAX_SLOT_COUNT` |
@@ -86,7 +85,7 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 ### 3. Types & Constants
 - **Fixed-width**: **ALWAYS** use `<stdint.h>` types (`uint32_t`, `int16_t`, `uint8_t`, etc.).
 - **Booleans**: Use `<stdbool.h>` (`bool`, `true`, `false`).
-- **Constants**: Place all engine-wide constants in `include/constants.h`.
+- **Constants**: Place all engine-wide constants in `include/Constants.h`.
 - **Magic Numbers**: Prohibited. Use descriptive macros or enums.
 - **Bitwise**: Use enums or macros for bitmasks.
 
@@ -94,7 +93,7 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 - **No Dynamic Allocation**: `malloc`, `free`, `realloc`, `calloc` are **FORBIDDEN**. Use the Engine's Arena or Pool systems.
 - **Alignment**: PS2 DMA requires **16-byte alignment** (Quadwords).
   - Use `__attribute__((aligned(16)))` for buffers sent to GS/VIF.
-  - Slots in `engine_memory.c` are 16KB aligned for safety.
+  - Slots in `EngineMemory.c` are 16KB aligned for safety.
 - **Pointers**: Avoid raw pointer arithmetic where possible. Use `Engine_GetSlot` or `Engine_LoadToSlot`.
 - **Volatile**: Use `volatile` when accessing hardware registers or memory shared with DMA/Interrupts.
 
@@ -111,8 +110,8 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 - **Git Strategy**: `.clangd` is ignored by Git (`.gitignore`). Each developer produces their own local copy by running the build script.
 
 ## Constants & Configuration Standard
-- **Categorization**: All engine-wide constants MUST reside in `include/constants.h`.
+- **Categorization**: All engine-wide constants MUST reside in `include/Constants.h`.
 - **Naming Rule**: `<ENGINE_CATEGORY>_<SUBMODULE>_<ID>` (e.g., `IO_FILE_MAX_PATH`).
-- **No Magic Numbers**: Any numeric or string literal used for configuration or logic limits must be extracted to `constants.h`.
-- **Memory Safety**: The engine uses a fixed memory map defined in `constants.h`. The total allocation (Arenas + Main Pool) MUST NOT exceed **30MB** to ensure stability on PS2 hardware.
+- **No Magic Numbers**: Any numeric or string literal used for configuration or logic limits must be extracted to `Constants.h`.
+- **Memory Safety**: The engine uses a fixed memory map defined in `Constants.h`. The total allocation (Arenas + Main Pool) MUST NOT exceed **30MB** to ensure stability on PS2 hardware.
 - **Panic System**: Use `Engine_Panic(const char *message)` for unrecoverable errors. This will trigger a Red Screen of Death (BSOD) on debug builds.

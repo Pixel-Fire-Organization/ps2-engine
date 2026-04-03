@@ -31,19 +31,19 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
 endif()
 
 add_library(ps2_engine STATIC
-    src/engine_core.c
-    src/engine_debug.c
-    src/engine_memory.c
-    src/engine_io.c
-    src/engine_script.c
+    src/EngineCore.c
+    src/EngineDebug.c
+    src/EngineMemory.c
+    src/EngineIO.c
+    src/EngineScript.c
     
     # Headers
-    include/engine.h
-    include/engine_core.h
-    include/engine_debug.h
-    include/engine_io.h
-    include/engine_memory.h
-    include/engine_script.h
+    include/Engine.h
+    include/EngineCore.h
+    include/EngineDebug.h
+    include/EngineIO.h
+    include/EngineMemory.h
+    include/EngineScript.h
 )
 target_include_directories(ps2_engine PUBLIC 
     "${CMAKE_SOURCE_DIR}/include"
@@ -58,7 +58,7 @@ set(APP_EXE_NAME "main.elf")
 set(APP_ISO_NAME "engine.iso")
 set(APP_REGION ${REGION})
 
-add_executable(${APP_EXE_NAME} test_app/main.c)
+add_executable(${APP_EXE_NAME} test_app/Main.c)
 set_target_properties(${APP_EXE_NAME} PROPERTIES 
     LINKER_LANGUAGE CXX
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/exec"

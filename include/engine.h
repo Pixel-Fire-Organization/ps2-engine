@@ -2,12 +2,12 @@
 #define ENGINE_H
 
 // Core definitions
-#include "constants.h"
-#include "engine_core.h"
-#include "engine_debug.h"
-#include "engine_io.h"
-#include "engine_memory.h"
-#include "engine_script.h"
+#include "Constants.h"
+#include "EngineCore.h"
+#include "EngineDebug.h"
+#include "EngineIO.h"
+#include "EngineMemory.h"
+#include "EngineScript.h"
 
 // Raylib wrapper for Graphics / Input
 #include <raylib.h>
