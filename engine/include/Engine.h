@@ -3,6 +3,7 @@
 
 // Core definitions
 #include "Constants.h"
+#include "Macros.h"
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineIO.h"
