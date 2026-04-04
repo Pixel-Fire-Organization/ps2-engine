@@ -15,11 +15,11 @@ static void OnFileLoaded(void* data, size_t size, void* userData)
   Engine_LogInfo("Async File Load Complete: %zu bytes read", size);
   if (data)
   {
-// Allocate space into System Slot 0
-    if (Engine_LoadToSlot(ARENA_SYSTEM, 0, data, size))
+// Store into Config arena slot 0 for demo purposes
+    if (Engine_LoadToSlot(ARENA_CONFIG, 0, data, size))
     {
-      void* persistentData = Engine_GetSlot(ARENA_SYSTEM, 0);
-      size_t capacity = Engine_GetSlotCapacity(ARENA_SYSTEM, 0);
+      void* persistentData = Engine_GetSlot(ARENA_CONFIG, 0);
+      size_t capacity = Engine_GetSlotCapacity(ARENA_CONFIG, 0);
 
       // Safety: null terminate only if there's room, otherwise it might overflow
       if (size < capacity)

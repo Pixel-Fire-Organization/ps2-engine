@@ -34,25 +34,17 @@
 #define MEM_LIMIT_MAX_EE_RAM          (30 * 1024 * 1024)
 
 // Segmented Arena Map (Fixed Sizes)
-#define MEM_BLOCK_TEXTURE_SIZE        (10 * 1024 * 1024)
-#define MEM_BLOCK_TEXTURE_SLOTS       10
-
-#define MEM_BLOCK_MESH_SIZE           (2 * 1024 * 1024)
-#define MEM_BLOCK_MESH_SLOTS          8
-
-#define MEM_BLOCK_AUDIO_SIZE          (2 * 1024 * 1024)
-#define MEM_BLOCK_AUDIO_SLOTS         8
-
+// GFX resources are managed by Raylib — only engine-internal arenas remain.
 #define MEM_BLOCK_SCRIPT_SIZE         (2 * 1024 * 1024)
 #define MEM_BLOCK_SCRIPT_SLOTS        16
 
-#define MEM_BLOCK_UI_SIZE             (1 * 1024 * 1024)
-#define MEM_BLOCK_UI_SLOTS            4
+#define MEM_BLOCK_CONFIG_SIZE         (1 * 1024 * 1024)
+#define MEM_BLOCK_CONFIG_SLOTS        4
 
-#define MEM_BLOCK_SYSTEM_SIZE         (2 * 1024 * 1024)
-#define MEM_BLOCK_SYSTEM_SLOTS        4
+#define MEM_BLOCK_LEVEL_DATA_SIZE     (4 * 1024 * 1024)
+#define MEM_BLOCK_LEVEL_DATA_SLOTS    8
 
-// General Pool Configuration
+// General Pool Configuration (scratch allocator for short-lived temp objects)
 #define MEM_POOL_MAIN_SIZE            (1 * 1024 * 1024)
 #define MEM_POOL_CHUNK_SIZE           256
 
@@ -64,6 +56,17 @@
 #define IO_FILE_MAX_PATH              256
 #define IO_ASYNC_MAX_REQUESTS         16
 #define IO_THREAD_SLEEP_USEC          1000
+// Stack size for the background IO thread. Must be a power-of-2; 32KB is
+// sufficient for a single fopen/fread/fclose + a 256-byte filepath local.
+#define IO_THREAD_STACK_SIZE          (32 * 1024)
+
+// --- RESOURCE (Resource Manager) ---
+#define RES_MAX_ENTRIES               64
+#define RES_MAX_DEPENDENCIES          8
+#define RES_ASSET_MAGIC               0x50533241  /* "PS2A" in little-endian */
+
+// --- LEVEL ---
+#define LEVEL_MAX_RESOURCES_COUNT     16
 
 // --- SCRIPTING (Lua Management) ---
 #define SCRIPTING_LUA_MAX_UNITS       8

@@ -31,6 +31,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     add_dependencies(${APP_EXE_NAME} ps2gl_build raylib_build)
 endif()
 
+# Pack raw assets (RAYLIB/ folder) into .ps2a binaries (rassets/ folder)
+find_program(PYTHON3_BIN python3)
+if(PYTHON3_BIN)
+    add_custom_target(pack-assets
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/pack_assets.py"
+            --src "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/RAYLIB"
+            --dst "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/rassets"
+        COMMENT "Packing assets from cd_files/RAYLIB -> cd_files/rassets..."
+        VERBATIM
+    )
+    add_dependencies(${APP_EXE_NAME} pack-assets)
+else()
+    message(WARNING "python3 not found. Asset packing (pack_assets.py) will be skipped.")
+endif()
+
 # Generate a bootable ISO after the ELF is linked
 find_program(MKISOFS_BIN mkisofs)
 if(MKISOFS_BIN)

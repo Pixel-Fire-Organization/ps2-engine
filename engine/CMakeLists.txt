@@ -3,6 +3,8 @@ add_library(ps2_engine STATIC
     src/EngineDebug.c
     src/EngineMemory.c
     src/EngineIO.c
+    src/EngineResource.c
+    src/EngineLevel.c
     src/EngineScript.c
 
     # Headers
@@ -11,6 +13,8 @@ add_library(ps2_engine STATIC
     include/EngineDebug.h
     include/EngineIO.h
     include/EngineMemory.h
+    include/EngineResource.h
+    include/EngineLevel.h
     include/EngineScript.h
 )
 target_include_directories(ps2_engine PUBLIC

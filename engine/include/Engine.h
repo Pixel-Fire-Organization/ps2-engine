@@ -8,6 +8,8 @@
 #include "EngineDebug.h"
 #include "EngineIO.h"
 #include "EngineMemory.h"
+#include "EngineResource.h"
+#include "EngineLevel.h"
 #include "EngineScript.h"
 
 // Raylib wrapper for Graphics / Input

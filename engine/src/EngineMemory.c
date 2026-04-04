@@ -13,12 +13,10 @@ static inline uintptr_t AlignForward(uintptr_t ptr, size_t alignment) {
 }
 
 // Internal specialized arenas (hidden from header)
-static MemoryArena g_TextureArena;
-static MemoryArena g_MeshArena;
-static MemoryArena g_AudioArena;
+// GFX resources are managed by Raylib — only engine-internal arenas remain.
 static MemoryArena g_ScriptArena;
-static MemoryArena g_UIArena;
-static MemoryArena g_SystemArena;
+static MemoryArena g_ConfigArena;
+static MemoryArena g_LevelDataArena;
 
 // Global pool (Encapsulated)
 static MemoryPool g_MainPool;
@@ -75,28 +73,17 @@ static void Internal_InitSlots(ArenaType type, MemoryArena *arena,
 void Engine_ArenasInitSegmented(void *base_ptr) {
   uint8_t *ptr = (uint8_t *)base_ptr;
 
-  Engine_ArenaInit(&g_TextureArena, ptr, MEM_BLOCK_TEXTURE_SIZE);
-  Internal_InitSlots(ARENA_TEXTURE, &g_TextureArena, MEM_BLOCK_TEXTURE_SLOTS);
-  ptr += MEM_BLOCK_TEXTURE_SIZE;
-
-  Engine_ArenaInit(&g_MeshArena, ptr, MEM_BLOCK_MESH_SIZE);
-  Internal_InitSlots(ARENA_MESH, &g_MeshArena, MEM_BLOCK_MESH_SLOTS);
-  ptr += MEM_BLOCK_MESH_SIZE;
-
-  Engine_ArenaInit(&g_AudioArena, ptr, MEM_BLOCK_AUDIO_SIZE);
-  Internal_InitSlots(ARENA_AUDIO, &g_AudioArena, MEM_BLOCK_AUDIO_SLOTS);
-  ptr += MEM_BLOCK_AUDIO_SIZE;
-
   Engine_ArenaInit(&g_ScriptArena, ptr, MEM_BLOCK_SCRIPT_SIZE);
   Internal_InitSlots(ARENA_SCRIPT, &g_ScriptArena, MEM_BLOCK_SCRIPT_SLOTS);
   ptr += MEM_BLOCK_SCRIPT_SIZE;
 
-  Engine_ArenaInit(&g_UIArena, ptr, MEM_BLOCK_UI_SIZE);
-  Internal_InitSlots(ARENA_UI, &g_UIArena, MEM_BLOCK_UI_SLOTS);
-  ptr += MEM_BLOCK_UI_SIZE;
+  Engine_ArenaInit(&g_ConfigArena, ptr, MEM_BLOCK_CONFIG_SIZE);
+  Internal_InitSlots(ARENA_CONFIG, &g_ConfigArena, MEM_BLOCK_CONFIG_SLOTS);
+  ptr += MEM_BLOCK_CONFIG_SIZE;
 
-  Engine_ArenaInit(&g_SystemArena, ptr, MEM_BLOCK_SYSTEM_SIZE);
-  Internal_InitSlots(ARENA_SYSTEM, &g_SystemArena, MEM_BLOCK_SYSTEM_SLOTS);
+  Engine_ArenaInit(&g_LevelDataArena, ptr, MEM_BLOCK_LEVEL_DATA_SIZE);
+  Internal_InitSlots(ARENA_LEVEL_DATA, &g_LevelDataArena,
+                     MEM_BLOCK_LEVEL_DATA_SLOTS);
 }
 
 void *Engine_GetSlot(ArenaType type, uint32_t slotIndex) {
@@ -154,18 +141,12 @@ void Engine_ClearSlot(ArenaType type, uint32_t slotIndex) {
 
 void *Engine_AddToArena(ArenaType type, size_t size, size_t alignment) {
   switch (type) {
-  case ARENA_TEXTURE:
-    return Engine_ArenaAlloc(&g_TextureArena, size, alignment);
-  case ARENA_MESH:
-    return Engine_ArenaAlloc(&g_MeshArena, size, alignment);
-  case ARENA_AUDIO:
-    return Engine_ArenaAlloc(&g_AudioArena, size, alignment);
   case ARENA_SCRIPT:
     return Engine_ArenaAlloc(&g_ScriptArena, size, alignment);
-  case ARENA_UI:
-    return Engine_ArenaAlloc(&g_UIArena, size, alignment);
-  case ARENA_SYSTEM:
-    return Engine_ArenaAlloc(&g_SystemArena, size, alignment);
+  case ARENA_CONFIG:
+    return Engine_ArenaAlloc(&g_ConfigArena, size, alignment);
+  case ARENA_LEVEL_DATA:
+    return Engine_ArenaAlloc(&g_LevelDataArena, size, alignment);
   default:
     return NULL;
   }

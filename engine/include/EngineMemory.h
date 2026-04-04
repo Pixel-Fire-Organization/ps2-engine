@@ -19,13 +19,12 @@ typedef struct {
 } ResourceSlot;
 
 // Arena Types for segmented memory allocation
+// GFX resources (textures, meshes, audio) are managed by Raylib's allocator.
+// These arenas are for engine-internal subsystems only.
 typedef enum {
-  ARENA_TEXTURE,
-  ARENA_MESH,
-  ARENA_AUDIO,
   ARENA_SCRIPT,
-  ARENA_UI,
-  ARENA_SYSTEM,
+  ARENA_CONFIG,
+  ARENA_LEVEL_DATA,
   ARENA_COUNT
 } ArenaType;
 

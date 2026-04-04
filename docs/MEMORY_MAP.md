@@ -8,39 +8,48 @@ This document serves as the master record for the PS2's limited **32 MB (EE) Mai
 | :--- | :--- | :--- |
 | `0x0000_0000` | ~1.5 MB | PS2 Kernel Reserved (OS, stacks, etc.) |
 | `0x0010_0000` | ~Varies | Application ELF Code (`.text`, `.data`, `.bss`) |
-| `0x0080_0000` | ~Variable | Main Heap / `g_MainArena` |
+| `0x0080_0000` | ~Variable | Heap — Raylib resources (`RL_MALLOC`), IO temp buffers |
 | `0x01E0_0000` | ~Variable | Scrapyard / Temporary Pool / DMAC Buffers |
 
-## Segmented Arena Layout (16 MB Total)
+## Segmented Arena Layout (7 MB Total)
 
-The arena starts at the base pointer allocated during `Engine_Init` (~0xXXXX_XXXX) and is explicitly partitioned as follows:
+GFX resources (textures, meshes, audio) are **not** stored in engine arenas — they are managed entirely by Raylib's allocator (`RL_MALLOC`/`RL_FREE`) via the Resource Manager. The engine arenas serve only internal subsystems.
 
-| Segment | Default Size | Default Slots | Purpose | Arena Global |
+The arena starts at the base pointer allocated during `Engine_Init` and is partitioned as follows:
+
+| Segment | Default Size | Default Slots | Purpose | Arena Enum |
 | :--- | :--- | :--- | :--- | :--- |
-| **Textures** | 8 MB | 10 Slots | Texture data (PCX/BMP/TIM2 clones) | `ARENA_TEXTURE` |
-| **Meshes** | 2 MB | 8 Slots | Vertex/Index buffers & Models | `ARENA_MESH` |
-| **Audio** | 2 MB | 8 Slots | SPU2/VAG Audio sample cache | `ARENA_AUDIO` |
-| **Scripts** | 2 MB | 16 Slots | Game logic, entity states, script VMs | `ARENA_SCRIPT` |
-| **UI** | 1 MB | 4 Slots | Fonts, UI textures, menus | `ARENA_UI` |
-| **System** | 1 MB | 4 Slots | Internal scratchpads, DMA chains | `ARENA_SYSTEM` |
+| **Script** | 2 MB | 16 Slots | Lua VM heaps and bytecode storage | `ARENA_SCRIPT` |
+| **Config** | 1 MB | 4 Slots | Configuration data, cached file reads | `ARENA_CONFIG` |
+| **Level Data** | 4 MB | 8 Slots | Entity tables, nav data, spawn points | `ARENA_LEVEL_DATA` |
 
 ---
 
 ## Slot System (O(1) Replacement)
+
 The Segmented Slot System partitions each arena into fixed-capacity buckets aligned to **16KB boundaries** for peak PS2 DMA/VIF performance.
 
 1. **Alignment**: Every slot start is 16KB aligned.
 2. **Locking**: Use `Engine_LockSlot` to prevent overwriting assets during active VIF transfers or draw calls.
 3. **Usage**:
    ```c
-   Engine_LoadToSlot(ARENA_TEXTURE, 5, myData, dataSize);
-   Engine_LockSlot(ARENA_TEXTURE, 5); 
-   // ... Draw texture ...
-   Engine_UnlockSlot(ARENA_TEXTURE, 5);
+   Engine_LoadToSlot(ARENA_CONFIG, 0, myData, dataSize);
+   Engine_LockSlot(ARENA_CONFIG, 0);
+   // ... Use data ...
+   Engine_UnlockSlot(ARENA_CONFIG, 0);
    ```
 
-## Usage Guidelines
-1. **Allocation**: Use `Engine_LoadToSlot` for replaceable assets, or `Engine_AddToArena` for linear stack allocation.
-
 ## Memory Pool
-- **`g_MainPool`**: 1 MB (Default). Used for small, fixed-size objects (256 bytes) that need frequent allocation/deallocation. Manual defragmentation may be required if using handles.
+
+- **`g_MainPool`**: 1 MB (Default), 256-byte chunks. Used as a **scratch allocator** for short-lived temporary objects: IO request metadata, transient decode contexts, particles, entities. Objects are either moved to an arena or freed quickly.
+
+## Resource Manager (Raylib Resources)
+
+Textures, models, sounds, and fonts are loaded through the **Resource Manager** (`EngineResource.h`), which delegates allocation to Raylib's `RL_MALLOC`/`RL_FREE`. The engine tracks these via a 64-entry handle table with reference counting and LRU eviction. See [RESOURCE_MANAGER.md](RESOURCE_MANAGER.md) for full details.
+
+## Usage Guidelines
+
+1. **Engine internals** (scripts, config, level data): Use `Engine_LoadToSlot` or `Engine_AddToArena`.
+2. **GFX/Audio resources**: Use `Engine_Resource_Load` — never allocate these in engine arenas.
+3. **Short-lived temp objects**: Use `Engine_PoolAllocMain` / `Engine_PoolFreeMain`.
+4. **IO file buffers**: Managed by `EngineIO.c` using `malloc`/`free` (documented exception — freed after callback delivery).

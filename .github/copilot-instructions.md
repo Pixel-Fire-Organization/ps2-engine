@@ -52,16 +52,17 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 
 ## Memory Management & Allocation Strategy
 - **Master Reference**: Always refer to `docs/MEMORY_MAP.md` for the current EE RAM (32MB) layout.
-- **Unified Allocation**: Use `Engine_LoadToSlot(ARENA_TYPE, slot, data, size)` for asset replacement.
+- **GFX Resources**: Textures, models, sounds, and fonts are managed by **Raylib's allocator** via the **Resource Manager** (`EngineResource.h`). Never allocate GFX resources in engine arenas.
+  - Use `Engine_Resource_Load(type, path)` to load, `Engine_Resource_Get(handle)` to access.
+  - See `docs/RESOURCE_MANAGER.md` for full API and `.ps2a` asset format.
+- **Engine Arenas** (for internal subsystems only):
+  - `ARENA_SCRIPT`: 2 MB, 16 slots — Lua VM heaps and bytecode.
+  - `ARENA_CONFIG`: 1 MB, 4 slots — Configuration data, cached reads.
+  - `ARENA_LEVEL_DATA`: 4 MB, 8 slots — Entity tables, nav data, spawn points.
+  - Use `Engine_LoadToSlot(ARENA_TYPE, slot, data, size)` for slot replacement.
   - Slots are **16KB aligned** for DMA/VIF performance.
-  - Use `Engine_LockSlot` before drawing or transmitting and `Engine_UnlockSlot` after completion.
-- **Arenas**:
-  - `ARENA_TEXTURE`: 15 MB default, 10 slots.
-  - `ARENA_SCRIPT`: 4 MB default, 16 slots.
-  - `ARENA_MESH`: 4 MB default, 8 slots.
-  - `ARENA_AUDIO`: 4 MB default, 8 slots.
-  - `ARENA_SYSTEM`: 2 MB default, 4 slots.
-  - `ARENA_UI`: 1 MB default, 4 slots.
+- **Memory Pool** (`g_MainPool`): 1 MB, 256B chunks — scratch allocator for short-lived temp objects only.
+- **Asset Authoring**: Raw assets go in `app/cd_files/RAYLIB/` as JSON+source pairs. `scripts/pack_assets.py` compiles them to `.ps2a` in `app/cd_files/rassets/`.
 
 ## C Coding Standards
 

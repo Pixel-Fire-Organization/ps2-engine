@@ -55,7 +55,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     add_custom_command(
         OUTPUT "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a"
         COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} clean
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} PLATFORM=PLATFORM_PLAYSTATION2 "GRAPHICS=GRAPHICS_API_OPENGL_11 -I../../ps2gl/include" "CFLAGS=-w"
+        # WARNING_FLAGS=-w silences all warnings without overriding CFLAGS.
+        # Passing CFLAGS=... on the command line would override the Makefile's
+        # ifeq(PLATFORM_PLAYSTATION2) block which sets -DPLATFORM_PLAYSTATION2.
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} PLATFORM=PLATFORM_PLAYSTATION2 "GRAPHICS=GRAPHICS_API_OPENGL_11 -I../../ps2gl/include" "WARNING_FLAGS=-w"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src"
         DEPENDS "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
         COMMENT "Building raylib for PS2..."

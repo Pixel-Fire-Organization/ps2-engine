@@ -36,6 +36,11 @@ static int s_IOThreadID = -1;
 static int s_IOMutex = -1;
 extern void* _gp;
 
+// Stack for the IO thread. Must be statically allocated and 16-byte aligned
+// so that the PS2 kernel can map it correctly. Never use a local/heap buffer
+// here — the kernel holds a pointer to this for the thread's lifetime.
+static uint8_t s_IOThreadStack[IO_THREAD_STACK_SIZE] __attribute__((aligned(16)));
+
 static void IOThreadEntry(void* arg)
 {
   UNUSED_VAR(arg);
@@ -118,7 +123,8 @@ bool Engine_IO_Init(void)
 
   ee_thread_t threadParam;
   threadParam.func = IOThreadEntry;
-  threadParam.stack_size = 0x8000;
+  threadParam.stack = s_IOThreadStack;
+  threadParam.stack_size = IO_THREAD_STACK_SIZE;
   threadParam.gp_reg = &_gp;
   threadParam.initial_priority = 0x40;
 

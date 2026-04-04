@@ -17,7 +17,7 @@ Once inside WSL, install the required build dependencies:
 ```bash
 sudo apt update
 sudo apt install -y build-essential cmake git make patch wget texinfo flex bison gettext \
-    libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev genisoimage
+    libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev genisoimage python3
 ```
 
 > `genisoimage` provides the `mkisofs` utility used by the engine's build system to generate bootable `.iso` files.
