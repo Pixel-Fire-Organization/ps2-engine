@@ -1,42 +1,53 @@
-#include "../include/Engine.h"
+#include "Engine.h"
 #include <stdio.h>
 #include <string.h>
 
-typedef enum {
+typedef enum
+{
   LOAD_STATE_LOADING,
   LOAD_STATE_SUCCESS,
   LOAD_STATE_FAILED
 } LoadState;
 
-static void OnFileLoaded(void *data, size_t size, void *userData) {
-  LoadState *state = (LoadState *)userData;
+static void OnFileLoaded(void* data, size_t size, void* userData)
+{
+  LoadState* state = (LoadState*) userData;
   Engine_LogInfo("Async File Load Complete: %zu bytes read", size);
-  if (data) {
-    // Allocate space into System Slot 0
-    if (Engine_LoadToSlot(ARENA_SYSTEM, 0, data, size)) {
-      void *persistentData = Engine_GetSlot(ARENA_SYSTEM, 0);
+  if (data)
+  {
+// Allocate space into System Slot 0
+    if (Engine_LoadToSlot(ARENA_SYSTEM, 0, data, size))
+    {
+      void* persistentData = Engine_GetSlot(ARENA_SYSTEM, 0);
       size_t capacity = Engine_GetSlotCapacity(ARENA_SYSTEM, 0);
-      
+
       // Safety: null terminate only if there's room, otherwise it might overflow
-      if (size < capacity) {
-          ((char *)persistentData)[size] = '\0';
-          Engine_LogInfo("Slot 0 allocated string: %s", (char *)persistentData);
-      } else {
-          Engine_LogInfo("Slot 0 allocated data (not null terminated, size matches capacity)");
+      if (size < capacity)
+      {
+        ((char*) persistentData)[size] = '\0';
+        Engine_LogInfo("Slot 0 allocated string: %s", (char*) persistentData);
+      }
+      else
+      {
+        Engine_LogInfo("Slot 0 allocated data (not null terminated, size matches capacity)");
       }
     }
     *state = LOAD_STATE_SUCCESS;
-  } else {
+  }
+  else
+  {
     *state = LOAD_STATE_FAILED;
   }
 }
 
-int main(void) {
+int main(void)
+{
   EngineConfig config = {
       .windowTitle = "PS2 Engine Test"
   };
 
-  if (!Engine_Init(config)) {
+  if (!Engine_Init(config))
+  {
     return -1;
   }
 
@@ -53,17 +64,22 @@ int main(void) {
 
   Vector3 cubePosition = {0.0f, 0.0f, 0.0f};
 
-  while (!WindowShouldClose()) {
+  while (!WindowShouldClose())
+  {
     Engine_Update();
 
     // Multi-controller Input Example
-    if (IsGamepadAvailable(0)) {
-      if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) {
+    if (IsGamepadAvailable(0))
+    {
+      if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+      {
         cubePosition.y += 0.1f;
       }
     }
-    if (IsGamepadAvailable(1)) {
-      if (IsGamepadButtonDown(1, GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) {
+    if (IsGamepadAvailable(1))
+    {
+      if (IsGamepadButtonDown(1, GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+      {
         cubePosition.y -= 0.1f;
       }
     }
@@ -78,11 +94,16 @@ int main(void) {
     EndMode3D();
 
     DrawText("PS2 Engine Demo", 10, 50, 20, DARKGRAY);
-    if (loadState == LOAD_STATE_SUCCESS) {
+    if (loadState == LOAD_STATE_SUCCESS)
+    {
       DrawText("Async Load Status: SUCCESS", 10, 80, 20, DARKGREEN);
-    } else if (loadState == LOAD_STATE_FAILED) {
+    }
+    else if (loadState == LOAD_STATE_FAILED)
+    {
       DrawText("Async Load Status: FAILED", 10, 80, 20, RED);
-    } else {
+    }
+    else
+    {
       DrawText("Async Load Status: LOADING...", 10, 80, 20, ORANGE);
     }
 

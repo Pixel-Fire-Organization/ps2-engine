@@ -81,6 +81,6 @@ All successfully linked targets are automatically routed away from the build slu
 
 ### Custom ISO Assets
 
-Any custom assets (textures, scripts, data files) that you want to include in the generated `.iso` should be placed in `test_app/cd_files/`. These files will be automatically bundled at the **root** of the ISO filesystem during the build process.
+Any custom assets (textures, scripts, data files) that you want to include in the generated `.iso` should be placed in `app/cd_files/`. These files will be automatically bundled at the **root** of the ISO filesystem during the build process.
 
-For example, a file at `test_app/cd_files/levels/map.bin` will be accessible on the PS2 as `cdrom0:\\LEVELS\\MAP.BIN;1`.
+For example, a file at `app/cd_files/levels/map.bin` will be accessible on the PS2 as `cdrom0:\\LEVELS\\MAP.BIN;1`.
