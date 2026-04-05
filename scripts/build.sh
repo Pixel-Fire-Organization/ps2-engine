@@ -25,4 +25,4 @@ case "${REGION^^}" in
 esac
 
 echo "=== Building engine & app ($BUILD_TYPE, DEBUG=$DEBUG_FLAG, REGION=$REGION_FLAG)"
-cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -DDEBUG="$DEBUG_FLAG" -DREGION="$REGION_FLAG" -B build && cmake --build build --target main.elf || exit 1
+cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -DDEBUG="$DEBUG_FLAG" -DREGION="$REGION_FLAG" -B build && cmake --build build --target generate-iso || exit 1

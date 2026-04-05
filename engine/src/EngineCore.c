@@ -2,6 +2,10 @@
 #include <raylib.h>
 #include <stdlib.h>
 
+// ps2gl C API — needed for pglAddGsMemSlot() after InitWindow.
+// Must come after raylib.h (which sets up the PS2/GL include path).
+#include <GL/ps2gl.h>
+
 static void *s_UnifiedArenaBlock = NULL;
 static bool s_IsGFXInitialized = false;
 
@@ -25,9 +29,7 @@ bool Engine_Init(EngineConfig config) {
   void *poolMem = malloc(MEM_POOL_MAIN_SIZE);
 
   if (!s_UnifiedArenaBlock || !poolMem) {
-    Engine_LogError(
-        "Failed to allocate main memory blocks! Total Arena: %zu, Pool: %zu",
-        totalArenaSize, (size_t)MEM_POOL_MAIN_SIZE);
+    Engine_Panic("Failed to allocate engine memory — out of EE RAM");
     return false;
   }
 
@@ -45,19 +47,19 @@ bool Engine_Init(EngineConfig config) {
 
   // Initialize the specialized subsystems
   if (!Engine_Script_Init()) {
-    Engine_LogError("Failed to initialize Lua Scripting subsystem!");
+    Engine_Panic("Lua Scripting subsystem failed to initialize");
     return false;
   }
 
   // Handle IO Subsystem automatically
   if (!Engine_IO_Init()) {
-    Engine_LogError("Failed to initialize Async IO subsystem!");
+    Engine_Panic("Async IO subsystem failed to initialize");
     return false;
   }
 
   // Initialize the Resource Manager
   if (!Engine_Resource_Init()) {
-    Engine_LogError("Failed to initialize Resource Manager!");
+    Engine_Panic("Resource Manager failed to initialize");
     return false;
   }
 

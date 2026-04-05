@@ -49,7 +49,10 @@ Textures, models, sounds, and fonts are loaded through the **Resource Manager** 
 
 ## Usage Guidelines
 
-1. **Engine internals** (scripts, config, level data): Use `Engine_LoadToSlot` or `Engine_AddToArena`.
-2. **GFX/Audio resources**: Use `Engine_Resource_Load` — never allocate these in engine arenas.
-3. **Short-lived temp objects**: Use `Engine_PoolAllocMain` / `Engine_PoolFreeMain`.
-4. **IO file buffers**: Managed by `EngineIO.c` using `malloc`/`free` (documented exception — freed after callback delivery).
+1. **App shell** (`main.c`): Use only `EngineApp.h` — `EngineStart / EngineUpdate / EngineExited / EngineStop`. Never touch arenas, the pool, or `EngineResource` directly. See `docs/APP_API.md`.
+2. **Engine internals** (scripts, config, level data): Use `Engine_LoadToSlot` or `Engine_AddToArena`.
+3. **GFX/Audio resources**: Use `Engine_Resource_Load` — never allocate these in engine arenas.
+4. **Short-lived temp objects**: Use `Engine_PoolAllocMain` / `Engine_PoolFreeMain`.
+5. **IO file buffers**: Managed by `EngineIO.c` using `malloc`/`free` (documented exception — freed after callback delivery).
+
+> **Note**: `ARENA_CONFIG` slot 0 is reserved during `EngineStart` for the main script bootstrap read. It is freed immediately after `Engine_Script_Load` returns. Slots 1–3 are available for `io.open` descriptors at runtime.

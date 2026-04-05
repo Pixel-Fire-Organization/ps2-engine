@@ -26,13 +26,15 @@ typedef enum {
 } ResourceState;
 
 // .ps2a file header (binary, written by pack_assets.py, read at runtime)
+// Total size: 4+4+1+3+16+(8*256)+4 = 2080 bytes
 typedef struct {
-  uint32_t magic;                                  // RES_ASSET_MAGIC
-  uint32_t type;                                   // ResourceType
-  uint8_t depCount;                                // Number of dependencies
-  uint8_t reserved[3];                             // Padding for alignment
-  char deps[RES_MAX_DEPENDENCIES][IO_FILE_MAX_PATH]; // Dependency asset paths
-  uint32_t dataSize;                               // Size of payload after header
+  uint32_t magic;                                    // RES_ASSET_MAGIC
+  uint32_t type;                                     // ResourceType
+  uint8_t  depCount;                                 // Number of dependencies
+  uint8_t  reserved[3];                              // Padding
+  char     ext[16];                                  // Source file extension e.g. ".jpg", ".png"
+  char     deps[RES_MAX_DEPENDENCIES][IO_FILE_MAX_PATH]; // Dependency asset paths
+  uint32_t dataSize;                                 // Size of payload after header
 } AssetFileHeader;
 
 // Initialize the resource manager (call once during Engine_Init)
@@ -69,6 +71,15 @@ void Engine_Resource_UnloadAll(void);
 
 // Called once per frame (from Engine_Update) to advance the current frame counter.
 void Engine_Resource_Update(void);
+
+// Returns the number of GS VRAM pages currently occupied by loaded textures.
+// Compared against GFX_GS_TEXTURE_PAGE_BUDGET (264) to detect VRAM pressure.
+// When over budget ps2gl performs silent LRU eviction — textures are re-uploaded
+// from CPU RAM on next use at a performance cost.
+uint32_t Engine_Resource_GetAllocatedGsPages(void);
+
+// Returns the compile-time GS VRAM texture page budget (GFX_GS_TEXTURE_PAGE_BUDGET).
+uint32_t Engine_Resource_GetGsPageBudget(void);
 
 #endif // ENGINE_RESOURCE_H
 

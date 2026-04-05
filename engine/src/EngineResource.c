@@ -7,9 +7,10 @@
 typedef struct {
   ResourceType type;
   ResourceState state;
-  char key[IO_FILE_MAX_PATH];
   uint32_t refCount;
   uint32_t lastUsedFrame;
+  uint32_t gsPages;    // GS VRAM pages consumed (RES_TEXTURE only; 0 otherwise)
+  char key[IO_FILE_MAX_PATH];
   bool pinned;
   int32_t deps[RES_MAX_DEPENDENCIES];
   uint8_t depCount;
@@ -26,6 +27,11 @@ typedef struct {
 
 static ResourceEntry s_Entries[RES_MAX_ENTRIES];
 static uint32_t s_CurrentFrame = 0;
+// Shadow counter: total GS VRAM pages occupied by all currently READY textures.
+// ps2gl has no public query API for this; we maintain it ourselves.
+// When the budget is exceeded ps2gl silently LRU-evicts the oldest texture slot
+// from GS VRAM — the texture object stays in CPU RAM and is re-uploaded on demand.
+static uint32_t s_AllocatedGsPages = 0;
 
 // --- Internal helpers ---
 
@@ -52,6 +58,23 @@ static void Internal_UnloadEntry(int32_t index);
 static bool Internal_ParseHeaderAndLoadDeps(const void *data, size_t size,
                                             AssetFileHeader *outHeader,
                                             int32_t entryIndex);
+
+// Sum the GS pages that COULD be freed right now (non-pinned, reference-free,
+// READY textures). Used only to produce an actionable error message when the
+// budget is exceeded — does NOT perform any eviction.
+static void Internal_CalcEvictablePages(uint32_t *outPages,
+                                        int32_t  *outCount) {
+  *outPages = 0;
+  *outCount = 0;
+  for (int32_t i = 0; i < RES_MAX_ENTRIES; i++) {
+    if (s_Entries[i].state  != RES_STATE_READY) continue;
+    if (s_Entries[i].type   != RES_TEXTURE)     continue;
+    if (s_Entries[i].pinned)                    continue;
+    if (s_Entries[i].refCount > 0)              continue;
+    *outPages += s_Entries[i].gsPages;
+    (*outCount)++;
+  }
+}
 
 static int32_t Internal_EvictLRU(void) {
   int32_t bestIndex = -1;
@@ -122,6 +145,13 @@ static void Internal_UnloadEntry(int32_t index) {
 
   Internal_UnloadRaylibHandle(entry);
 
+  // Release shadow GS page accounting for textures
+  if (entry->type == RES_TEXTURE && entry->gsPages > 0) {
+    s_AllocatedGsPages = (s_AllocatedGsPages >= entry->gsPages)
+                             ? s_AllocatedGsPages - entry->gsPages
+                             : 0;
+  }
+
   // Clear the slot
   memset(entry, 0, sizeof(ResourceEntry));
   entry->state = RES_STATE_EMPTY;
@@ -131,7 +161,6 @@ static void Internal_UnloadEntry(int32_t index) {
 typedef struct {
   int32_t entryIndex;
   ResourceType type;
-  char fileExt[16];
 } ResourceLoadContext;
 
 static void Internal_OnAsyncLoadComplete(void *data, size_t size,
@@ -174,11 +203,70 @@ static void Internal_OnAsyncLoadComplete(void *data, size_t size,
   switch (ctx->type) {
   case RES_TEXTURE: {
     Image img =
-        LoadImageFromMemory(ctx->fileExt, payload, (int)header.dataSize);
+        LoadImageFromMemory(header.ext, payload, (int)header.dataSize);
     if (img.data != NULL) {
+      // Hard-reject textures that exceed the GS VRAM slot budget.
+      // Raylib registers slots up to 64 pages (512×256 at PSM32); anything larger
+      // has no valid slot and LoadTextureFromImage would silently return id=0
+      // while aliasing GS VRAM (TBP field is 14-bit, page 512 wraps to page 0).
+      uint32_t pagesW = ((uint32_t)img.width  + GFX_GS_PAGE_WIDTH_PSM32  - 1)
+                        / GFX_GS_PAGE_WIDTH_PSM32;
+      uint32_t pagesH = ((uint32_t)img.height + GFX_GS_PAGE_HEIGHT_PSM32 - 1)
+                        / GFX_GS_PAGE_HEIGHT_PSM32;
+      uint32_t pages  = pagesW * pagesH;
+      if (img.width  > GFX_MAX_TEXTURE_WIDTH  ||
+          img.height > GFX_MAX_TEXTURE_HEIGHT ||
+          pages      > GFX_MAX_TEXTURE_GS_PAGES) {
+        Engine_LogError(
+            "Resource: texture rejected — %dx%d (%u pages) exceeds budget "
+            "(max %u pages, dimension cap %dx%d) in slot %d '%s'",
+            img.width, img.height, pages,
+            GFX_MAX_TEXTURE_GS_PAGES,
+            GFX_MAX_TEXTURE_WIDTH, GFX_MAX_TEXTURE_HEIGHT,
+            idx, entry->key);
+        UnloadImage(img);
+        entry->state = RES_STATE_EMPTY;
+        Engine_PoolFreeMain(ctx);
+        return;
+      }
+
+      // Hard-fail when the cumulative GS VRAM budget is exceeded.
+      // GS VRAM management is the programmer's responsibility — the engine will
+      // never silently evict a texture to make room (that would hide bugs).
+      // Call Engine_Resource_Unload() on textures that are no longer needed,
+      // then retry.
+      if (s_AllocatedGsPages + pages > GFX_GS_TEXTURE_PAGE_BUDGET) {
+        uint32_t evictablePages = 0;
+        int32_t  evictableCount = 0;
+        Internal_CalcEvictablePages(&evictablePages, &evictableCount);
+        Engine_LogError(
+            "Resource: GS VRAM full — cannot load %dx%d (%u pages). "
+            "Usage: %u/%u pages. "
+            "Call Engine_Resource_Unload() to free up to %u pages "
+            "across %d unloaded texture(s), then retry.",
+            img.width, img.height, pages,
+            s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET,
+            evictablePages, evictableCount);
+        UnloadImage(img);
+        entry->state = RES_STATE_EMPTY;
+        Engine_PoolFreeMain(ctx);
+        return;
+      }
+
+      entry->gsPages = pages;
       entry->handle.texture = LoadTextureFromImage(img);
       UnloadImage(img);
-      entry->state = RES_STATE_READY;
+      // Guard against silent GPU upload failures (texture.id == 0 means
+      // the hardware rejected the upload — treat as a decode failure).
+      if (entry->handle.texture.id > 0) {
+        s_AllocatedGsPages += pages;
+        entry->state = RES_STATE_READY;
+      } else {
+        entry->gsPages = 0;
+        Engine_LogError("Resource: GPU texture upload failed for slot %d (%s)", idx,
+                        entry->key);
+        entry->state = RES_STATE_EMPTY;
+      }
     } else {
       Engine_LogError("Resource: failed to decode texture slot %d (%s)", idx,
                       entry->key);
@@ -188,7 +276,7 @@ static void Internal_OnAsyncLoadComplete(void *data, size_t size,
   case RES_SOUND: {
 #if defined(SUPPORT_MODULE_RAUDIO)
     Wave wave =
-        LoadWaveFromMemory(ctx->fileExt, payload, (int)header.dataSize);
+        LoadWaveFromMemory(header.ext, payload, (int)header.dataSize);
     if (wave.data != NULL) {
       entry->handle.sound = LoadSoundFromWave(wave);
       UnloadWave(wave);
@@ -204,7 +292,7 @@ static void Internal_OnAsyncLoadComplete(void *data, size_t size,
 #endif
   } break;
   case RES_FONT: {
-    entry->handle.font = LoadFontFromMemory(ctx->fileExt, payload,
+    entry->handle.font = LoadFontFromMemory(header.ext, payload,
                                             (int)header.dataSize, 32, NULL, 0);
     if (entry->handle.font.texture.id > 0) {
       entry->state = RES_STATE_READY;
@@ -224,21 +312,6 @@ static void Internal_OnAsyncLoadComplete(void *data, size_t size,
   Engine_PoolFreeMain(ctx);
 }
 
-// Extract a file extension hint from a .ps2a path by looking at
-// the original source extension stored in the asset name convention.
-// For simplicity, the pack tool stores the original extension in the first
-// dependency slot as a hint, OR we derive it from the key name.
-static const char *Internal_GuessExtFromKey(const char *key) {
-  // Walk backwards to find '.'
-  const char *dot = NULL;
-  for (const char *p = key; *p != '\0'; p++) {
-    if (*p == '.')
-      dot = p;
-  }
-  if (dot)
-    return dot; // e.g. ".png"
-  return ".raw";
-}
 
 // Parse a .ps2a header from raw file data and load dependencies.
 // Returns true if the header is valid.
@@ -292,7 +365,8 @@ bool Engine_Resource_Init(void) {
   for (int32_t i = 0; i < RES_MAX_ENTRIES; i++) {
     s_Entries[i].state = RES_STATE_EMPTY;
   }
-  s_CurrentFrame = 0;
+  s_CurrentFrame     = 0;
+  s_AllocatedGsPages = 0;
   Engine_LogInfo("Resource Manager Initialized (%d slots)", RES_MAX_ENTRIES);
   return true;
 }
@@ -362,10 +436,6 @@ int32_t Engine_Resource_Load(ResourceType type, const char *path) {
   ctx->entryIndex = slot;
   ctx->type = type;
 
-  // Store the file extension hint for Raylib's FromMemory decoders
-  const char *ext = Internal_GuessExtFromKey(path);
-  strncpy(ctx->fileExt, ext, sizeof(ctx->fileExt) - 1);
-  ctx->fileExt[sizeof(ctx->fileExt) - 1] = '\0';
 
   if (!Engine_IO_ReadAsync(path, Internal_OnAsyncLoadComplete, ctx)) {
     Engine_LogError("Resource: IO queue full for '%s'", path);
@@ -429,6 +499,7 @@ void Engine_Resource_Unload(int32_t handle) {
 }
 
 void Engine_Resource_UnloadAll(void) {
+  s_AllocatedGsPages = 0;
   for (int32_t i = 0; i < RES_MAX_ENTRIES; i++) {
     if (s_Entries[i].state != RES_STATE_EMPTY) {
       Internal_UnloadRaylibHandle(&s_Entries[i]);
@@ -439,4 +510,7 @@ void Engine_Resource_UnloadAll(void) {
 }
 
 void Engine_Resource_Update(void) { s_CurrentFrame++; }
+
+uint32_t Engine_Resource_GetAllocatedGsPages(void) { return s_AllocatedGsPages; }
+uint32_t Engine_Resource_GetGsPageBudget(void)     { return GFX_GS_TEXTURE_PAGE_BUDGET; }
 

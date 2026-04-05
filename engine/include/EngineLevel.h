@@ -6,10 +6,18 @@
 
 #include "Constants.h"
 
+// On-disc header for .ps2l files.
+// Must be read and validated before deserializing the Level struct.
+typedef struct {
+  uint32_t magic;      // Must equal LEVEL_FILE_MAGIC
+  uint8_t  version;    // Must equal LEVEL_FILE_VERSION
+  uint8_t  reserved[3];
+} LevelFileHeader;
+
 // Minimal level descriptor.
 // Only stores the paths of required (pinned) resources.
-// Kept as small as possible — no runtime resource handle tracking.
-typedef struct {
+// Packed to eliminate host/target padding divergence when serializing to .ps2l.
+typedef struct __attribute__((packed)) {
   char name[64];
   char requiredResources[LEVEL_MAX_RESOURCES_COUNT][IO_FILE_MAX_PATH];
   uint32_t requiredCount;

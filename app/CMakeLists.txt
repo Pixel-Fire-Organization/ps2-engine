@@ -23,7 +23,10 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     add_custom_command(TARGET ${APP_EXE_NAME} PRE_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_SOURCE_DIR}/exec"
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
+            "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_SOURCE_DIR}/exec/iso_contents"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/exec"
         COMMENT "Cleaning exec/..."
         VERBATIM
@@ -73,26 +76,45 @@ endif()
 set(ISO_STAGING_DIR "${CMAKE_BINARY_DIR}/iso_root")
 find_program(MKISOFS_BIN mkisofs)
 if(MKISOFS_BIN)
-    add_custom_command(TARGET ${APP_EXE_NAME} POST_BUILD
+    set(ISO_OUTPUT "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}")
+
+    # Always regenerate the ISO on every build, just like pack-assets.
+    # Using add_custom_target (no OUTPUT) ensures the commands run unconditionally
+    # so edited Lua scripts, configs, or packed assets are always included.
+    add_custom_target(generate-iso
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/exec"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${ISO_STAGING_DIR}"
-
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/cd_files" "${ISO_STAGING_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_EXE_NAME_UPPER}"
-        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "${ISO_STAGING_DIR}/SYSTEM.CNF"
-
-        COMMAND ${MKISOFS_BIN} -l -o "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}" "${ISO_STAGING_DIR}"
-        COMMENT "Generating bootable PS2 iso: exec/${APP_ISO_NAME} with assets from app/cd_files"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/cd_files" "${ISO_STAGING_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy
+                "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_EXE_NAME_UPPER}"
+        COMMAND ${CMAKE_COMMAND} -E copy
+                "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "${ISO_STAGING_DIR}/SYSTEM.CNF"
+        COMMAND ${MKISOFS_BIN} -l -o "${ISO_OUTPUT}" "${ISO_STAGING_DIR}"
+        COMMENT "Generating bootable PS2 iso: exec/${APP_ISO_NAME}"
+        VERBATIM
     )
+
+    if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
+        add_custom_command(TARGET generate-iso POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${ISO_STAGING_DIR}" "${CMAKE_SOURCE_DIR}/exec/iso_contents"
+            COMMENT "Copying ISO contents to exec/iso_contents/..."
+            VERBATIM
+        )
+    endif()
 else()
+    # mkisofs not available — generate-iso still exists so `--target generate-iso`
+    # in build.sh doesn't fail; it just builds the ELF without packaging.
+    add_custom_target(generate-iso
+        COMMENT "mkisofs not found — skipping ISO generation"
+    )
     message(WARNING "mkisofs not found in environment. Skipping ISO bundle generation.")
 endif()
 
-if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic" AND MKISOFS_BIN)
-    add_custom_command(TARGET ${APP_EXE_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${ISO_STAGING_DIR}" "${CMAKE_SOURCE_DIR}/exec/iso_contents"
-        COMMENT "Copying ISO contents to exec/iso_contents/..."
-        VERBATIM
-    )
+# ELF and asset packing must finish before the ISO is assembled.
+add_dependencies(generate-iso ${APP_EXE_NAME})
+if(PYTHON3_BIN)
+    add_dependencies(generate-iso pack-assets)
 endif()
 
