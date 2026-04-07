@@ -17,6 +17,8 @@ add_library(ps2_engine STATIC
     # Headers
     include/Engine.h
     include/EngineApp.h
+    include/Constants.h
+    include/Macros.h
     include/EngineCore.h
     include/EngineDebug.h
     include/EngineIO.h
