@@ -40,9 +40,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     endif()
 
     # Build ps2gl if the static library does not yet exist
+    # CFLAGS must explicitly include ports/include so ps2stuff headers (ps2s/) are found;
+    # Makefile.eeglobal only adds ee/include and common/include by default.
     add_custom_command(
         OUTPUT "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} "CFLAGS=-w"
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} "CFLAGS=-w -I${_PS2SDK}/ports/include"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl"
         COMMENT "Building ps2gl..."
         VERBATIM
