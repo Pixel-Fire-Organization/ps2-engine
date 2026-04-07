@@ -45,21 +45,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install build dependencies
-        run: |
-          apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison gettext gmp-dev mpfr-dev mpc1-dev zlib-dev gcompat
-
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: 'c-cpp'
 
-      - name: Build Project via Script
-        run: |
-          chmod +x ./scripts/build.sh
-          # CodeQL only needs to observe ONE build configuration. 
-          # We pass 'debug' and 'PAL' as defaults based on your build matrix.
-          bash ./scripts/build.sh debug PAL
+      - name: Run Build Action
+        uses: ./.github/actions/build-engine
+        with:
+          build_type: 'debug'
+          region: 'PAL'
+          install_gcompat: 'true'
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
