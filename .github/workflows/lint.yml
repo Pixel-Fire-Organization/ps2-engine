@@ -55,7 +55,7 @@ jobs:
           languages: 'c-cpp'
 
       - name: Run Build Action
-        uses: .github/actions/build-engine
+        uses: ./.github/actions/build-engine
         with:
           build_type: 'debug'
           region: 'PAL'
