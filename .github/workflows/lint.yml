@@ -29,6 +29,7 @@ jobs:
     name: CodeQL Security Scan
     needs: check-style
     runs-on: ubuntu-latest
+    container: ghcr.io/ps2dev/ps2sdk-ports:latest
 
     permissions:
       actions: read
@@ -36,8 +37,17 @@ jobs:
       security-events: write
 
     steps:
+      - name: Install Git
+        run: apk add --no-cache git
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison gettext gmp-dev mpfr-dev mpc1-dev zlib-dev gcompat
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -47,7 +57,9 @@ jobs:
       - name: Build Project via Script
         run: |
           chmod +x ./scripts/build.sh
-          ./scripts/build.sh
+          # CodeQL only needs to observe ONE build configuration. 
+          # We pass 'debug' and 'PAL' as defaults based on your build matrix.
+          bash ./scripts/build.sh debug PAL
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
