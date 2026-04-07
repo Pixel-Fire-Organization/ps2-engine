@@ -32,6 +32,10 @@ endif()
 set(APP_EXE_NAME "main.elf")
 set(APP_ISO_NAME "engine.iso")
 set(APP_REGION ${REGION})
+set(APP_SERIAL ${APP_EXE_NAME})
+
+option(USERETAILNAME "Changes the executable's name to the retail scheme." OFF)
+if(USERETAILNAME)
 
 # PS2 game serial — used as the boot executable name inside the ISO and as the
 # disc volume label.  OPL2 Manager (and OPL itself) parse the BOOT2 field of
@@ -43,6 +47,8 @@ string(TOUPPER "${APP_SERIAL}" APP_SERIAL)
 # Derive the volume-label form: SLHB_000.00 -> SLHB-00000
 string(REPLACE "." "" _APP_SERIAL_NODOT "${APP_SERIAL}")
 string(REPLACE "_" "-" APP_SERIAL_LABEL "${_APP_SERIAL_NODOT}")
+
+endif()
 
 string(TOUPPER ${APP_EXE_NAME} APP_EXE_NAME_UPPER)
 file(WRITE "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "BOOT2 = cdrom0:\\${APP_SERIAL};1\r\nVER = 1.00\r\nVMODE = ${APP_REGION}\r\n")

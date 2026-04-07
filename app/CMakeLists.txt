@@ -74,6 +74,11 @@ if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
 endif()
 
 set(ISO_STAGING_DIR "${CMAKE_BINARY_DIR}/iso_root")
+
+set(ISO_CONTENT_BLACKLIST
+    "RAYLIB"   # Raw asset sources; packed output lives in rassets/
+)
+
 find_program(MKISOFS_BIN mkisofs)
 if(MKISOFS_BIN)
     set(ISO_OUTPUT "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}")
@@ -87,8 +92,11 @@ if(MKISOFS_BIN)
         # (e.g. an old executable under a different name) never end up in the ISO.
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${ISO_STAGING_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${ISO_STAGING_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/cd_files" "${ISO_STAGING_DIR}"
+        COMMAND ${CMAKE_COMMAND}
+                -D "SRC=${CMAKE_CURRENT_SOURCE_DIR}/cd_files"
+                -D "DST=${ISO_STAGING_DIR}"
+                -D "BLACKLIST=${ISO_CONTENT_BLACKLIST}"
+                -P "${CMAKE_SOURCE_DIR}/scripts/copy_iso_files.cmake"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_SERIAL}"
         COMMAND ${CMAKE_COMMAND} -E copy
