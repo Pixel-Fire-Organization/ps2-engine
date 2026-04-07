@@ -59,7 +59,7 @@
 
 // Segmented Arena Map (Fixed Sizes)
 // GFX resources are managed by Raylib — only engine-internal arenas remain.
-#define MEM_BLOCK_SCRIPT_SIZE (4 * 1024 * 1024)  // 256 KB per unit (4 MB / 16 slots)
+#define MEM_BLOCK_SCRIPT_SIZE (4 * 1024 * 1024) // 256 KB per unit (4 MB / 16 slots)
 #define MEM_BLOCK_SCRIPT_SLOTS 16
 
 #define MEM_BLOCK_CONFIG_SIZE (1 * 1024 * 1024)
@@ -88,7 +88,7 @@
 // --- RESOURCE (Resource Manager) ---
 #define RES_MAX_ENTRIES 64
 #define RES_MAX_DEPENDENCIES 8
-#define RES_ASSET_MAGIC 0x50533241  /* "PS2A" in little-endian */
+#define RES_ASSET_MAGIC 0x50533241 /* "PS2A" in little-endian */
 
 // --- LEVEL ---
 #define LEVEL_MAX_RESOURCES_COUNT 16
@@ -120,7 +120,7 @@
 
 // --- LEVEL FILE FORMAT (.ps2l) ---
 // Binary format: LevelFileHeader (8 bytes) + packed Level struct.
-#define LEVEL_FILE_MAGIC 0x4C325350u  /* "PS2L" in little-endian */
+#define LEVEL_FILE_MAGIC 0x4C325350u /* "PS2L" in little-endian */
 #define LEVEL_FILE_VERSION 1u
 #define LEVEL_FILE_EXT ".ps2l"
 

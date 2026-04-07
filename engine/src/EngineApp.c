@@ -143,13 +143,15 @@ size_t EngineApp_FileRead(int32_t fileId, const void** outData)
     if (fileId < 0 || fileId >= APP_MAX_FILE_SLOTS || !s_Files[fileId].inUse)
     {
         Engine_LogError("EngineApp: FileRead called with invalid fileId %d", fileId);
-        if (outData) *outData = NULL;
+        if (outData)
+            *outData = NULL;
         return 0;
     }
     if (s_Files[fileId].mode != FILE_MODE_READ)
     {
         Engine_LogError("EngineApp: FileRead called on WRITE descriptor (fileId %d)", fileId);
-        if (outData) *outData = NULL;
+        if (outData)
+            *outData = NULL;
         return 0;
     }
 
@@ -176,7 +178,8 @@ size_t EngineApp_FileWrite(int32_t fileId, const void* data, size_t size)
         Engine_LogError("EngineApp: FileWrite called on READ descriptor (fileId %d) — use io.open_write", fileId);
         return 0;
     }
-    if (!data || size == 0) return 0;
+    if (!data || size == 0)
+        return 0;
 
     FILE* f = fopen(s_Files[fileId].path, "wb");
     if (!f)

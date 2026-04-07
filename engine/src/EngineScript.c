@@ -43,17 +43,17 @@ static uint32_t s_Camera2DLastUsed[SCRIPTING_MAX_CAMERAS_2D];
 static uint32_t s_FrameCount = 0;
 
 // Forward declare internal binding registers
-static void RegisterCoreBindings(lua_State * L);
+static void RegisterCoreBindings(lua_State* L);
 
-static void RegisterGraphicsBindings(lua_State * L);
+static void RegisterGraphicsBindings(lua_State* L);
 
-static void RegisterInputBindings(lua_State * L);
+static void RegisterInputBindings(lua_State* L);
 
-static void RegisterIOBindings(lua_State * L);
+static void RegisterIOBindings(lua_State* L);
 
-static void RegisterResourceBindings(lua_State * L);
+static void RegisterResourceBindings(lua_State* L);
 
-static void RegisterLevelBindings(lua_State * L);
+static void RegisterLevelBindings(lua_State* L);
 
 // Custom allocator that restricts Lua to her assigned EVEN slot in ARENA_SCRIPT
 static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
@@ -125,13 +125,11 @@ bool Engine_Script_Init(void)
             // Skipping io/os/package/debug/coroutine saves ~60KB of heap per unit
             // and avoids "nulldev call" spam from Lua's io lib init (stdin/stdout
             // are null devices on PS2).
-            static const luaL_Reg s_Libs[] = {
-                {"_G", luaopen_base}, // print, type, pairs, tostring, etc.
-                {"math", luaopen_math}, // math.sin, math.sqrt, etc.
-                {"string", luaopen_string}, // string.format, string.find, etc.
-                {"table", luaopen_table}, // table.insert, table.remove, etc.
-                {NULL, NULL}
-            };
+            static const luaL_Reg s_Libs[] = {{"_G", luaopen_base}, // print, type, pairs, tostring, etc.
+                                              {"math", luaopen_math}, // math.sin, math.sqrt, etc.
+                                              {"string", luaopen_string}, // string.format, string.find, etc.
+                                              {"table", luaopen_table}, // table.insert, table.remove, etc.
+                                              {NULL, NULL}};
             for (const luaL_Reg* lib = s_Libs; lib->func; lib++)
             {
                 luaL_requiref(s_ScriptUnits[i].L, lib->name, lib->func, 1);
@@ -334,19 +332,9 @@ static int Lua_Graphics_MakeCamera3D(lua_State* L)
 
     Camera3D cam;
     cam.position =
-        (Vector3)
-    {
-        (float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3)
-    };
-    cam.target =
-        (Vector3)
-    {
-        (float)luaL_checknumber(L, 4), (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6)
-    };
-    cam.up = (Vector3)
-    {
-        (float)luaL_checknumber(L, 7), (float)luaL_checknumber(L, 8), (float)luaL_checknumber(L, 9)
-    };
+        (Vector3){(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3)};
+    cam.target = (Vector3){(float)luaL_checknumber(L, 4), (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6)};
+    cam.up = (Vector3){(float)luaL_checknumber(L, 7), (float)luaL_checknumber(L, 8), (float)luaL_checknumber(L, 9)};
     cam.fovy = (float)luaL_checknumber(L, 10);
     cam.projection = (int)luaL_checkinteger(L, 11);
 
@@ -380,14 +368,8 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
     }
 
     Camera2D cam;
-    cam.offset = (Vector2)
-    {
-        (float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2)
-    };
-    cam.target = (Vector2)
-    {
-        (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4)
-    };
+    cam.offset = (Vector2){(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2)};
+    cam.target = (Vector2){(float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4)};
     cam.rotation = (float)luaL_checknumber(L, 5);
     cam.zoom = (float)luaL_checknumber(L, 6);
 
@@ -515,12 +497,7 @@ static int Lua_Graphics_Clear(lua_State* L)
         lua_geti(L, 1, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        ClearBackground((Color)
-        {
-            r, g, b, a
-        }
-        )
-        ;
+        ClearBackground((Color){r, g, b, a});
     }
     return 0;
 }
@@ -543,12 +520,7 @@ static int Lua_Graphics_DrawRect(lua_State* L)
         lua_geti(L, 5, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        DrawRectangle((int)x, (int)y, (int)w, (int)h, (Color)
-        {
-            r, g, b, a
-        }
-        )
-        ;
+        DrawRectangle((int)x, (int)y, (int)w, (int)h, (Color){r, g, b, a});
     }
     return 0;
 }
@@ -571,17 +543,7 @@ static int Lua_Graphics_DrawCube(lua_State* L)
         lua_geti(L, 5, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        DrawCube((Vector3)
-        {
-            px, py, pz
-        }
-        ,
-        sz, sz, sz, (Color)
-        {
-            r, g, b, a
-        }
-        )
-        ;
+        DrawCube((Vector3){px, py, pz}, sz, sz, sz, (Color){r, g, b, a});
     }
     return 0;
 }
@@ -617,14 +579,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     if (!tex || tex->id == 0)
     {
         // Resource not ready or GPU upload failed — fall back to a solid draw.
-        DrawCube((Vector3)
-        {
-            px, py, pz
-        }
-        ,
-        sz, sz, sz, WHITE
-        )
-        ;
+        DrawCube((Vector3){px, py, pz}, sz, sz, sz, WHITE);
         return 0;
     }
 
@@ -640,10 +595,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
         lua_geti(L, 6, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        tint = (Color)
-        {
-            r, g, b, a
-        };
+        tint = (Color){r, g, b, a};
     }
 
     float h = sz / 2.0f;
@@ -737,7 +689,7 @@ static int Lua_Input_IsPadPressed(lua_State* L)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
     else if (strcmp(btn, "tri") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_UP);
-        // D-pad
+    // D-pad
     else if (strcmp(btn, "dpad_up") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_UP);
     else if (strcmp(btn, "dpad_down") == 0)
@@ -746,7 +698,7 @@ static int Lua_Input_IsPadPressed(lua_State* L)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_LEFT);
     else if (strcmp(btn, "dpad_right") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
-        // Shoulder buttons
+    // Shoulder buttons
     else if (strcmp(btn, "l1") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
     else if (strcmp(btn, "l2") == 0)
@@ -755,12 +707,12 @@ static int Lua_Input_IsPadPressed(lua_State* L)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
     else if (strcmp(btn, "r2") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
-        // Stick clicks
+    // Stick clicks
     else if (strcmp(btn, "l3") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_THUMB);
     else if (strcmp(btn, "r3") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_THUMB);
-        // Menu
+    // Menu
     else if (strcmp(btn, "start") == 0)
         pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_MIDDLE_RIGHT);
     else if (strcmp(btn, "select") == 0)

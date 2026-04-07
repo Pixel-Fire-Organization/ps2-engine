@@ -18,7 +18,7 @@ typedef struct
 // Minimal level descriptor.
 // Only stores the paths of required (pinned) resources.
 // Packed to eliminate host/target padding divergence when serializing to .ps2l.
-typedef struct __attribute__ ((packed))
+typedef struct __attribute__((packed))
 {
     char name[64];
     char requiredResources[LEVEL_MAX_RESOURCES_COUNT][IO_FILE_MAX_PATH];
@@ -27,7 +27,7 @@ typedef struct __attribute__ ((packed))
 
 // Load a level: loads and pins all required resources.
 // Returns true if all required resources were successfully queued/loaded.
-bool Engine_Level_Load(Level * level);
+bool Engine_Level_Load(Level* level);
 
 // Unload a level: unpins required resources and resets ARENA_LEVEL_DATA.
 // If keepPinned is true, required resources remain pinned (e.g. shared UI/fonts).

@@ -1,6 +1,6 @@
-#include "Engine.h"
 #include <raylib.h>
 #include <stdlib.h>
+#include "Engine.h"
 
 // ps2gl C API — needed for pglAddGsMemSlot() after InitWindow.
 // Must come after raylib.h (which sets up the PS2/GL include path).

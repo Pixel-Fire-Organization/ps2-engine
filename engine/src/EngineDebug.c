@@ -4,15 +4,15 @@
 #include "Engine.h"
 
 static const char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
-    "+,-./01234\n" /* 43-52  */
-    "56789:;<=>\n" /* 53-62  */
-    "?@ABCDEFGH\n" /* 63-72  */
-    "IJKLMNOPQR\n" /* 73-82  */
-    "STUVWXYZ[\\\n" /* 83-92  */
-    "]^_`abcdef\n" /* 93-102 */
-    "ghijklmnop\n" /* 103-112 */
-    "qrstuvwxyz\n" /* 113-122 */
-    "{|}~\x7f"; /* 123-127 */
+                                      "+,-./01234\n" /* 43-52  */
+                                      "56789:;<=>\n" /* 53-62  */
+                                      "?@ABCDEFGH\n" /* 63-72  */
+                                      "IJKLMNOPQR\n" /* 73-82  */
+                                      "STUVWXYZ[\\\n" /* 83-92  */
+                                      "]^_`abcdef\n" /* 93-102 */
+                                      "ghijklmnop\n" /* 103-112 */
+                                      "qrstuvwxyz\n" /* 113-122 */
+                                      "{|}~\x7f"; /* 123-127 */
 
 
 static void CustomLog(int logLevel, const char* text, va_list args)
@@ -76,7 +76,8 @@ void Engine_Panic(const char* message)
         InitWindow(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, "PS2 Engine");
     }
 
-    while (!IsWindowReady());
+    while (!IsWindowReady())
+        ;
 
     // Because Raylib requires a window to draw, and we will never close it, nor
     // will the user close it, the loop will be indefinite.
@@ -99,7 +100,8 @@ void Engine_Panic(const char* message)
     // Since this variable will never be used in release,
     // we declare it as unused, so the compiler doesn't complain.
     UNUSED_VAR(message);
-    while (1);
+    while (1)
+        ;
 
 #endif
 }
