@@ -35,6 +35,13 @@ jobs:
         run: |
           bash scripts/build.sh ${{ matrix.build_type }} ${{ matrix.region }}
 
+      - name: Upload exec folder (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exec-${{ matrix.build_type }}-${{ matrix.region }}
+          path: exec/
+
       - name: Verify ISO contents
         run: |
           test -f exec/engine.iso || (echo "ERROR: exec/engine.iso not found" && exit 1)
