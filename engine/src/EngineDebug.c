@@ -96,7 +96,9 @@ void Engine_Panic(const char *message) {
     }
   }
 #else
-  (void)message;
+  // Since this variable will never be used in release,
+  // we declare it as unused, so the compiler doesn't complain.
+  UNUSED_VAR(message);
   while (1)
     ;
 
