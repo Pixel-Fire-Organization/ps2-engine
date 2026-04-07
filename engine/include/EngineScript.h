@@ -8,8 +8,9 @@
 // Forward declaration of lua_State to keep header clean
 typedef struct lua_State lua_State;
 
-typedef struct {
-    lua_State *L;
+typedef struct
+{
+    lua_State* L;
     uint32_t slotIndex; // Base index (EVEN: Heap, ODD: Bytecode)
     size_t heapOffset;
     size_t codeSize; // Actual byte count of the loaded script (not slot capacity)
@@ -27,7 +28,7 @@ void Engine_Script_SetExitCallback(void (*onExit)(void));
 
 // Script Loading and Execution
 // loads a script into a free slot pair (even/odd)
-int Engine_Script_Load(const void *data, size_t size);
+int Engine_Script_Load(const void* data, size_t size);
 
 bool Engine_Script_Run(int unitIndex);
 

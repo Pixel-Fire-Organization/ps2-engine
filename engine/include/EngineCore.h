@@ -4,8 +4,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct {
-    const char *windowTitle;
+typedef struct
+{
+    const char* windowTitle;
 } EngineConfig;
 
 bool Engine_Init(EngineConfig config);

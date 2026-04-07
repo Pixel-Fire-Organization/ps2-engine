@@ -1,12 +1,15 @@
 #include <stdlib.h>
 #include "EngineApp.h"
 
-int main(void) {
-    if (!EngineStart(NULL)) {
+int main(void)
+{
+    if (!EngineStart(NULL))
+    {
         return -1;
     }
 
-    while (!EngineExited()) {
+    while (!EngineExited())
+    {
         EngineUpdate();
     }
 
