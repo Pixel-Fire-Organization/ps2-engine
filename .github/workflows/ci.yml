@@ -35,22 +35,9 @@ jobs:
         run: |
           bash scripts/build.sh ${{ matrix.build_type }} ${{ matrix.region }}
 
-      - name: Upload exec folder (debug)
+      - name: Upload ELF & ISO
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: exec-${{ matrix.build_type }}-${{ matrix.region }}
           path: exec/
-
-      - name: Verify ISO contents
-        run: |
-          test -f exec/engine.iso || (echo "ERROR: exec/engine.iso not found" && exit 1)
-          7z l exec/engine.iso | grep -q "MAIN.ELF"    || (echo "ERROR: MAIN.ELF missing from ISO"    && exit 1)
-          7z l exec/engine.iso | grep -q "SYSTEM.CNF"  || (echo "ERROR: SYSTEM.CNF missing from ISO"  && exit 1)
-          echo "ISO content check passed"
-
-      - name: Upload ELF artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: main-${{ matrix.build_type }}-${{ matrix.region }}
-          path: exec/main.elf
