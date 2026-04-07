@@ -31,6 +31,10 @@ jobs:
         run: |
           apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison gettext gmp-dev mpfr-dev mpc1-dev zlib-dev
 
+      - name: Install PS2 SDK ports (zlib, libpng)
+        run: |
+          ps2-pacman -Sy --noconfirm ps2sdk-zlib ps2sdk-libpng
+
       - name: Build engine (${{ matrix.build_type }}, ${{ matrix.region }})
         run: |
           bash scripts/build.sh ${{ matrix.build_type }} ${{ matrix.region }}
