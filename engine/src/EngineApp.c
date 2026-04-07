@@ -26,11 +26,11 @@ typedef enum {
 } FileMode;
 
 typedef struct {
-    int32_t  slotIndex;
-    size_t   size;
+    int32_t slotIndex;
+    size_t size;
     FileMode mode;
-    char     path[IO_FILE_MAX_PATH];
-    bool     inUse;
+    char path[IO_FILE_MAX_PATH];
+    bool inUse;
 } FileDescriptor;
 
 static FileDescriptor s_Files[APP_MAX_FILE_SLOTS];
@@ -62,7 +62,7 @@ int32_t EngineApp_FileOpen(const char *path) {
     }
 
     fseek(f, 0, SEEK_END);
-    size_t fileSize = (size_t)ftell(f);
+    size_t fileSize = (size_t) ftell(f);
     fseek(f, 0, SEEK_SET);
 
     if (fileSize == 0 || fileSize > APP_MAX_FILE_DATA_SIZE) {
@@ -72,26 +72,26 @@ int32_t EngineApp_FileOpen(const char *path) {
     }
 
     // Use the descriptor index as the config arena slot index.
-    if (!Engine_LoadToSlot(ARENA_CONFIG, (uint32_t)fd, NULL, fileSize)) {
+    if (!Engine_LoadToSlot(ARENA_CONFIG, (uint32_t) fd, NULL, fileSize)) {
         Engine_LogError("EngineApp: failed to reserve config slot %d for '%s'", fd, path);
         fclose(f);
         return -1;
     }
 
-    void *slotPtr = Engine_GetSlot(ARENA_CONFIG, (uint32_t)fd);
+    void *slotPtr = Engine_GetSlot(ARENA_CONFIG, (uint32_t) fd);
     size_t bytesRead = fread(slotPtr, 1, fileSize, f);
     fclose(f);
 
     if (bytesRead != fileSize) {
         Engine_LogError("EngineApp: partial read for '%s' (%zu / %zu bytes)", path, bytesRead, fileSize);
-        Engine_ClearSlot(ARENA_CONFIG, (uint32_t)fd);
+        Engine_ClearSlot(ARENA_CONFIG, (uint32_t) fd);
         return -1;
     }
 
     s_Files[fd].slotIndex = fd;
-    s_Files[fd].size      = bytesRead;
-    s_Files[fd].mode      = FILE_MODE_READ;
-    s_Files[fd].inUse     = true;
+    s_Files[fd].size = bytesRead;
+    s_Files[fd].mode = FILE_MODE_READ;
+    s_Files[fd].inUse = true;
     strncpy(s_Files[fd].path, path, IO_FILE_MAX_PATH - 1);
     s_Files[fd].path[IO_FILE_MAX_PATH - 1] = '\0';
 
@@ -112,9 +112,9 @@ int32_t EngineApp_FileOpenWrite(const char *path) {
     }
 
     s_Files[fd].slotIndex = -1;
-    s_Files[fd].size      = 0;
-    s_Files[fd].mode      = FILE_MODE_WRITE;
-    s_Files[fd].inUse     = true;
+    s_Files[fd].size = 0;
+    s_Files[fd].mode = FILE_MODE_WRITE;
+    s_Files[fd].inUse = true;
     strncpy(s_Files[fd].path, path, IO_FILE_MAX_PATH - 1);
     s_Files[fd].path[IO_FILE_MAX_PATH - 1] = '\0';
 
@@ -138,7 +138,7 @@ size_t EngineApp_FileRead(int32_t fileId, const void **outData) {
     }
 
     if (outData) {
-        *outData = Engine_GetSlot(ARENA_CONFIG, (uint32_t)s_Files[fileId].slotIndex);
+        *outData = Engine_GetSlot(ARENA_CONFIG, (uint32_t) s_Files[fileId].slotIndex);
     }
     return s_Files[fileId].size;
 }
@@ -180,7 +180,7 @@ bool EngineApp_FileClose(int32_t fileId) {
     }
 
     if (s_Files[fileId].mode == FILE_MODE_READ) {
-        Engine_ClearSlot(ARENA_CONFIG, (uint32_t)s_Files[fileId].slotIndex);
+        Engine_ClearSlot(ARENA_CONFIG, (uint32_t) s_Files[fileId].slotIndex);
     }
 
     memset(&s_Files[fileId], 0, sizeof(FileDescriptor));
@@ -275,4 +275,3 @@ bool EngineExited(void) {
 void EngineStop(void) {
     Engine_Close();
 }
-
