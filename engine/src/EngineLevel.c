@@ -7,60 +7,59 @@ static int32_t s_LoadedHandles[LEVEL_MAX_RESOURCES_COUNT];
 static uint32_t s_LoadedCount = 0;
 
 bool Engine_Level_Load(Level *level) {
-  if (!level)
-    return false;
+    if (!level)
+        return false;
 
-  s_LoadedCount = 0;
+    s_LoadedCount = 0;
 
-  for (uint32_t i = 0; i < level->requiredCount; i++) {
-    if (i >= LEVEL_MAX_RESOURCES_COUNT)
-      break;
+    for (uint32_t i = 0; i < level->requiredCount; i++) {
+        if (i >= LEVEL_MAX_RESOURCES_COUNT)
+            break;
 
-    const char *path = level->requiredResources[i];
-    if (path[0] == '\0')
-      continue;
+        const char *path = level->requiredResources[i];
+        if (path[0] == '\0')
+            continue;
 
-    // Determine resource type from .ps2a extension prefix convention:
-    // The Resource Manager will read the header to get the actual type.
-    // We default to RES_TEXTURE here; the header's type field is authoritative.
-    int32_t handle = Engine_Resource_Load(RES_TEXTURE, path);
-    if (handle >= 0) {
-      Engine_Resource_Pin(handle);
-      s_LoadedHandles[s_LoadedCount] = handle;
-      s_LoadedCount++;
-    } else {
-      Engine_LogError("Level '%s': failed to load required resource '%s'",
-                      level->name, path);
+        // Determine resource type from .ps2a extension prefix convention:
+        // The Resource Manager will read the header to get the actual type.
+        // We default to RES_TEXTURE here; the header's type field is authoritative.
+        int32_t handle = Engine_Resource_Load(RES_TEXTURE, path);
+        if (handle >= 0) {
+            Engine_Resource_Pin(handle);
+            s_LoadedHandles[s_LoadedCount] = handle;
+            s_LoadedCount++;
+        } else {
+            Engine_LogError("Level '%s': failed to load required resource '%s'",
+                            level->name, path);
+        }
     }
-  }
 
-  Engine_LogInfo("Level '%s' loaded: %u/%u required resources pinned",
-                 level->name, s_LoadedCount, level->requiredCount);
-  return s_LoadedCount == level->requiredCount;
+    Engine_LogInfo("Level '%s' loaded: %u/%u required resources pinned",
+                   level->name, s_LoadedCount, level->requiredCount);
+    return s_LoadedCount == level->requiredCount;
 }
 
 void Engine_Level_Unload(Level *level, bool keepPinned) {
-  UNUSED_VAR(level);
+    UNUSED_VAR(level);
 
-  if (!keepPinned) {
-    // Unpin and unload all resources that were loaded for this level
-    for (uint32_t i = 0; i < s_LoadedCount; i++) {
-      int32_t h = s_LoadedHandles[i];
-      Engine_Resource_Unpin(h);
-      Engine_Resource_Unload(h);
+    if (!keepPinned) {
+        // Unpin and unload all resources that were loaded for this level
+        for (uint32_t i = 0; i < s_LoadedCount; i++) {
+            int32_t h = s_LoadedHandles[i];
+            Engine_Resource_Unpin(h);
+            Engine_Resource_Unload(h);
+        }
     }
-  }
 
-  s_LoadedCount = 0;
+    s_LoadedCount = 0;
 
-  // Bulk-clear level-specific cached data (entity tables, nav data, etc.)
-  // We need access to the arena — use Engine_AddToArena's underlying arena.
-  // For now, clear all slots in ARENA_LEVEL_DATA.
-  for (uint32_t i = 0; i < MEM_BLOCK_LEVEL_DATA_SLOTS; i++) {
-    Engine_ClearSlot(ARENA_LEVEL_DATA, i);
-  }
+    // Bulk-clear level-specific cached data (entity tables, nav data, etc.)
+    // We need access to the arena — use Engine_AddToArena's underlying arena.
+    // For now, clear all slots in ARENA_LEVEL_DATA.
+    for (uint32_t i = 0; i < MEM_BLOCK_LEVEL_DATA_SLOTS; i++) {
+        Engine_ClearSlot(ARENA_LEVEL_DATA, i);
+    }
 
-  Engine_LogInfo("Level unloaded (keepPinned=%s)",
-                 keepPinned ? "true" : "false");
+    Engine_LogInfo("Level unloaded (keepPinned=%s)",
+                   keepPinned ? "true" : "false");
 }
-

@@ -263,7 +263,8 @@ static void Internal_OnAsyncLoadComplete(void *data, size_t size,
                 // the hardware rejected the upload — treat as a decode failure).
                 if (entry->handle.texture.id > 0) {
                     s_AllocatedGsPages += pages;
-                    Engine_LogInfo("Texture loaded successfully. Remaining pages: %u", (uint32_t)GFX_GS_TEXTURE_PAGE_BUDGET - (s_AllocatedGsPages + pages));
+                    Engine_LogInfo("Texture loaded successfully. Remaining pages: %u",
+                                   (uint32_t) GFX_GS_TEXTURE_PAGE_BUDGET - (s_AllocatedGsPages + pages));
                     entry->state = RES_STATE_READY;
                 } else {
                     entry->gsPages = 0;

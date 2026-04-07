@@ -9,15 +9,16 @@
 typedef struct lua_State lua_State;
 
 typedef struct {
-  lua_State *L;
-  uint32_t slotIndex; // Base index (EVEN: Heap, ODD: Bytecode)
-  size_t heapOffset;
-  size_t codeSize;    // Actual byte count of the loaded script (not slot capacity)
-  bool active;
+    lua_State *L;
+    uint32_t slotIndex; // Base index (EVEN: Heap, ODD: Bytecode)
+    size_t heapOffset;
+    size_t codeSize; // Actual byte count of the loaded script (not slot capacity)
+    bool active;
 } ScriptUnit;
 
 // Initializer for the Lua subsystem
 bool Engine_Script_Init(void);
+
 void Engine_Script_Close(void);
 
 // Register a callback invoked when Lua calls engine.exit().
@@ -27,6 +28,7 @@ void Engine_Script_SetExitCallback(void (*onExit)(void));
 // Script Loading and Execution
 // loads a script into a free slot pair (even/odd)
 int Engine_Script_Load(const void *data, size_t size);
+
 bool Engine_Script_Run(int unitIndex);
 
 // Called every frame to trigger OnUpdate in all active scripts

@@ -31,8 +31,9 @@ void EngineStop(void);
 // Avoids pulling in EngineDebug.h (and transitively raylib.h) into the app.
 // ---------------------------------------------------------------------------
 extern void Engine_LogInfo(const char *text, ...);
+
 extern void Engine_LogError(const char *text, ...);
+
 extern void Engine_Panic(const char *message);
 
 #endif // ENGINE_APP_H
-

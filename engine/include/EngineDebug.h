@@ -8,6 +8,7 @@ void Engine_InitDebug(void);
 
 // Log a message
 void Engine_LogInfo(const char *text, ...);
+
 void Engine_LogError(const char *text, ...);
 
 // Draw the debug overlay (FPS, memory usage, etc.)

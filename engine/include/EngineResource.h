@@ -12,29 +12,29 @@
 //       On PS2 the raudio module is disabled — Engine_Resource_Load(RES_SOUND, ...) will
 //       log an error and return -1 at runtime. Use the PS2 native audio subsystem instead.
 typedef enum {
-  RES_TEXTURE,
-  RES_MODEL,
-  RES_SOUND,
-  RES_FONT
+    RES_TEXTURE,
+    RES_MODEL,
+    RES_SOUND,
+    RES_FONT
 } ResourceType;
 
 // Lifecycle state of a resource entry
 typedef enum {
-  RES_STATE_EMPTY,
-  RES_STATE_LOADING,
-  RES_STATE_READY
+    RES_STATE_EMPTY,
+    RES_STATE_LOADING,
+    RES_STATE_READY
 } ResourceState;
 
 // .ps2a file header (binary, written by pack_assets.py, read at runtime)
 // Total size: 4+4+1+3+16+(8*256)+4 = 2080 bytes
 typedef struct {
-  uint32_t magic;                                    // RES_ASSET_MAGIC
-  uint32_t type;                                     // ResourceType
-  uint8_t  depCount;                                 // Number of dependencies
-  uint8_t  reserved[3];                              // Padding
-  char     ext[16];                                  // Source file extension e.g. ".jpg", ".png"
-  char     deps[RES_MAX_DEPENDENCIES][IO_FILE_MAX_PATH]; // Dependency asset paths
-  uint32_t dataSize;                                 // Size of payload after header
+    uint32_t magic; // RES_ASSET_MAGIC
+    uint32_t type; // ResourceType
+    uint8_t depCount; // Number of dependencies
+    uint8_t reserved[3]; // Padding
+    char ext[16]; // Source file extension e.g. ".jpg", ".png"
+    char deps[RES_MAX_DEPENDENCIES][IO_FILE_MAX_PATH]; // Dependency asset paths
+    uint32_t dataSize; // Size of payload after header
 } AssetFileHeader;
 
 // Initialize the resource manager (call once during Engine_Init)
@@ -82,4 +82,3 @@ uint32_t Engine_Resource_GetAllocatedGsPages(void);
 uint32_t Engine_Resource_GetGsPageBudget(void);
 
 #endif // ENGINE_RESOURCE_H
-
