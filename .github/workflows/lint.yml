@@ -37,8 +37,12 @@ jobs:
       security-events: write
 
     steps:
-      - name: Install Git
-        run: apk add --no-cache git
+      - name: Prepare Container
+        run: |
+          # Install GNU tar, zstd, and gcompat for CodeQL, plus git
+          apk add --no-cache git tar zstd gcompat bash
+          # Tell Git it's safe to operate in this directory
+          git config --global --add safe.directory '*'
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,13 +55,13 @@ jobs:
           languages: 'c-cpp'
 
       - name: Run Build Action
-        uses: ./.github/actions/build-engine
+        uses: .github/actions/build-engine
         with:
           build_type: 'debug'
           region: 'PAL'
-          install_gcompat: 'true'
+          install_gcompat: 'false'
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:c-cpp"
