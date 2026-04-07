@@ -66,7 +66,9 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
           buffer lives in BSS for the entire application lifetime, eliminating the race entirely. The two
           `UnloadImage(imFont)` calls inside `LoadFontDefault` are also guarded with
           `#if !defined(PLATFORM_PLAYSTATION2)` to prevent freeing static storage.
-- `thirdparty/ps2gl`: Graphics abstraction layer.
+- `thirdparty/raylib`: Custom PS2 port (usually `work` branch). There is a script for injecting custom patches into raylib. Never modify raylib directly or commit the changes there.
+- `thirdparty/ps2gl`: Graphics abstraction layer. Depends on ps2stuff headers (`ps2s/`) at compile time.
+- `thirdparty/ps2stuff`: Low-level PS2 hardware utility library. Must be built and installed (`make install`) **before** ps2gl. Its install step copies `include/ps2s/` headers to `$(PS2SDK)/ports/include/ps2s/`. Never modify ps2stuff directly or commit the changes there.
 - **Link Order Matters**: Ensure `ps2stuff` is linked when using `ps2gl`.
 
 ## Documentation

@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-static constexpr char ASCII_TABLE_STR[] =
+static const char ASCII_TABLE_STR[] =
     "!\"#$%&'()*\n"  /* 33-42  */
     "+,-./01234\n"   /* 43-52  */
     "56789:;<=>\n"   /* 53-62  */
@@ -96,7 +96,9 @@ void Engine_Panic(const char *message) {
     }
   }
 #else
-
+  // Since this variable will never be used in release,
+  // we declare it as unused, so the compiler doesn't complain.
+  UNUSED_VAR(message);
   while (1)
     ;
 

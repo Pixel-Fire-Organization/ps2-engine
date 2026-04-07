@@ -39,17 +39,34 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         message(FATAL_ERROR "patch_raylib.sh failed")
     endif()
 
-    # Build ps2gl if the static library does not yet exist
+    # Build and install ps2stuff first; its install target copies ps2s/ headers to
+    # $(PS2SDK)/ports/include/ps2s/ which ps2gl requires at compile time.
+    add_custom_command(
+        OUTPUT "${_PS2SDK}/ports/lib/libps2stuff.a"
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} all
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} install
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2stuff"
+        COMMENT "Building and installing ps2stuff..."
+        VERBATIM
+    )
+    add_custom_target(ps2stuff_build
+        DEPENDS "${_PS2SDK}/ports/lib/libps2stuff.a"
+    )
+
+    # Build ps2gl after ps2stuff has installed ps2s/ headers into $(PS2SDK)/ports/include.
+    # ps2gl's Makefile already adds -I$(PS2SDK)/ports/include via EE_INCS.
     add_custom_command(
         OUTPUT "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} "CFLAGS=-w"
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM}
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl"
+        DEPENDS "${_PS2SDK}/ports/lib/libps2stuff.a"
         COMMENT "Building ps2gl..."
         VERBATIM
     )
     add_custom_target(ps2gl_build
         DEPENDS "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
     )
+    add_dependencies(ps2gl_build ps2stuff_build)
 
     # Build raylib if the static library does not yet exist (patch applied above at configure time)
     add_custom_command(

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/ps2dev/ps2sdk-ports:latest
+
+    strategy:
+      matrix:
+        build_type: [debug, release]
+        region: [PAL, NTSC]
+
+    steps:
+      - name: Install Git
+        run: apk add --no-cache git
+
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison gettext gmp-dev mpfr-dev mpc1-dev zlib-dev
+
+      - name: Build engine (${{ matrix.build_type }}, ${{ matrix.region }})
+        run: |
+          bash scripts/build.sh ${{ matrix.build_type }} ${{ matrix.region }}
+
+      - name: Upload ELF & ISO
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exec-${{ matrix.build_type }}-${{ matrix.region }}
+          path: exec/
