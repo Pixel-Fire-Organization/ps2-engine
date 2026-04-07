@@ -48,6 +48,7 @@ jobs:
           
             cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           
+            # Added unmatchedSuppression to prevent locationless internal warnings
             cppcheck --project=build/compile_commands.json \
               --enable=all \
               --inconclusive \
@@ -55,6 +56,7 @@ jobs:
               --suppress=*:thirdparty/* \
               --suppress=missingIncludeSystem \
               --suppress=missingInclude \
+              --suppress=unmatchedSuppression \
               2> cppcheck-report.xml
           
             chmod 666 cppcheck-report.xml
@@ -66,9 +68,21 @@ jobs:
           input: 'cppcheck-report.xml'
           output: 'cppcheck.sarif'
 
-      - name: Clean Invalid SARIF Line Numbers
+      - name: Clean Invalid SARIF Results
         run: |
-          jq '(.runs[].results) |= map(select(.locations == null or .locations[0].physicalLocation.region.startLine >= 1))' cppcheck.sarif > cppcheck-cleaned.sarif
+          # This filter now explicitly checks that:
+          # 1. The locations array exists and has at least 1 item.
+          # 2. A valid file path (uri) exists.
+          # 3. The starting line is >= 1.
+          jq '(.runs[].results) |= map(select(
+            .locations != null and 
+            (.locations | length > 0) and 
+            try (
+              .locations[0].physicalLocation.artifactLocation.uri != null and 
+              .locations[0].physicalLocation.artifactLocation.uri != "" and 
+              .locations[0].physicalLocation.region.startLine >= 1
+            ) catch false
+          ))' cppcheck.sarif > cppcheck-cleaned.sarif
 
       - name: Upload Analysis to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v4
