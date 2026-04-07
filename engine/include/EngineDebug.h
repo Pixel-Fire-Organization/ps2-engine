@@ -14,6 +14,10 @@ void Engine_LogError(const char *text, ...);
 // Assumes raylib's BeginDrawing() has been called.
 void Engine_DrawDebugOverlay(void);
 
+// Draw a printable ASCII table (codepoints 33–127) for font/glyph diagnostics.
+// Assumes raylib's BeginDrawing() has been called.
+void Engine_DrawAsciiTable(void);
+
 // PS2-specific panic BSOD trigger
 void Engine_Panic(const char *message);
 

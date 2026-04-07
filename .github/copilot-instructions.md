@@ -56,6 +56,16 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
         - `PGL_PATCHED_FONT_ALIGN` — changes the default font atlas allocation in `rtext.c` from `RL_CALLOC` (no
           alignment guarantee) to `memalign(16, ...)` (16-byte aligned). ps2gl's `glTexImage2D` requires 16-byte aligned
           pixel data for GS DMA; misaligned data silently corrupts the texel upload, causing garbled text on PS2.
+        - `PGL_PATCHED_ATLAS_LIFETIME` — replaces the heap-allocated atlas buffer with a `static` file-scope buffer for
+          the PS2 path only (Dreamcast/N64 keep `memalign`). ps2gl stores only a *pointer* to the pixel data and defers
+          the GS DMA until the first draw (`CMMTexture::Load` → `FlushCache(0)` → `SendImage`). Raylib calls
+          `UnloadImage(imFont)` immediately after `LoadTextureFromImage`, freeing that pointer. On PS2's write-back EE
+          cache, arena/pool allocations that follow inside `Engine_Init` can evict the atlas's dirty cache lines before
+          `FlushCache(0)` syncs them, leaving stale (garbage) data in main memory for specific GS-VRAM page rows — the
+          root cause of the pattern of specific glyphs being blank or garbled while neighbours are correct. A `static`
+          buffer lives in BSS for the entire application lifetime, eliminating the race entirely. The two
+          `UnloadImage(imFont)` calls inside `LoadFontDefault` are also guarded with
+          `#if !defined(PLATFORM_PLAYSTATION2)` to prevent freeing static storage.
 - `thirdparty/ps2gl`: Graphics abstraction layer.
 - **Link Order Matters**: Ensure `ps2stuff` is linked when using `ps2gl`.
 

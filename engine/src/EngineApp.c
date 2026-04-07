@@ -256,11 +256,11 @@ void EngineUpdate(void) {
     float dt = GetFrameTime();
 
     BeginDrawing();
-    Engine_Script_UpdateAll(dt);
-    // Close any open BeginMode3D / BeginMode2D before the debug overlay draws —
-    // DrawFPS and DrawText are 2D calls and must not execute inside a 3D projection.
-    Engine_Script_EndCurrentMode();
-    Engine_DrawDebugOverlay();
+    {
+        Engine_Script_UpdateAll(dt);
+        Engine_Script_EndCurrentMode(); // If any modes have started end them.
+        Engine_DrawDebugOverlay();
+    }
     EndDrawing();
 
     Engine_IO_Update();

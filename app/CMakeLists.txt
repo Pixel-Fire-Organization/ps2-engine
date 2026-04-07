@@ -83,14 +83,25 @@ if(MKISOFS_BIN)
     # so edited Lua scripts, configs, or packed assets are always included.
     add_custom_target(generate-iso
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/exec"
+        # Wipe and recreate the staging dir so stale files from previous builds
+        # (e.g. an old executable under a different name) never end up in the ISO.
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${ISO_STAGING_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${ISO_STAGING_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/cd_files" "${ISO_STAGING_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy
-                "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_EXE_NAME_UPPER}"
+                "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_SERIAL}"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "${ISO_STAGING_DIR}/SYSTEM.CNF"
-        COMMAND ${MKISOFS_BIN} -l -o "${ISO_OUTPUT}" "${ISO_STAGING_DIR}"
+        # -sysid "PLAYSTATION" : sets the System Identifier field in the ISO 9660
+        #   Primary Volume Descriptor.  OPL2 Manager (and other PS2 disc tools) check
+        #   this field to confirm the image is a PS2 disc; the default ("LINUX") causes
+        #   them to report the ISO as invalid.
+        # -V "PS2ENGINE" : volume label shown by disc managers and used as the game
+        #   identifier.  A non-empty label also prevents genisoimage from defaulting to
+        #   the generic "CDROM" label.
+        COMMAND ${MKISOFS_BIN} -l -sysid "PLAYSTATION" -V "${APP_SERIAL_LABEL}"
+                -o "${ISO_OUTPUT}" "${ISO_STAGING_DIR}"
         COMMENT "Generating bootable PS2 iso: exec/${APP_ISO_NAME}"
         VERBATIM
     )

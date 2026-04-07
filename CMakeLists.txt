@@ -33,8 +33,19 @@ set(APP_EXE_NAME "main.elf")
 set(APP_ISO_NAME "engine.iso")
 set(APP_REGION ${REGION})
 
+# PS2 game serial — used as the boot executable name inside the ISO and as the
+# disc volume label.  OPL2 Manager (and OPL itself) parse the BOOT2 field of
+# SYSTEM.CNF to extract a serial; a plain "MAIN.ELF" name fails that parse.
+# Format: XXYY_NNN.NN  (e.g. SLES_508.77 for retail, SLHB_000.00 for homebrew).
+# Override with -DAPP_SERIAL=... when configuring for a distinct release.
+set(APP_SERIAL "SLHB_000.00" CACHE STRING "PS2 game serial placed inside the ISO (format XXYY_NNN.NN)")
+string(TOUPPER "${APP_SERIAL}" APP_SERIAL)
+# Derive the volume-label form: SLHB_000.00 -> SLHB-00000
+string(REPLACE "." "" _APP_SERIAL_NODOT "${APP_SERIAL}")
+string(REPLACE "_" "-" APP_SERIAL_LABEL "${_APP_SERIAL_NODOT}")
+
 string(TOUPPER ${APP_EXE_NAME} APP_EXE_NAME_UPPER)
-file(WRITE "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "BOOT2 = cdrom0:\\${APP_EXE_NAME_UPPER};1\r\nVER = 1.00\r\nVMODE = ${APP_REGION}\r\n")
+file(WRITE "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "BOOT2 = cdrom0:\\${APP_SERIAL};1\r\nVER = 1.00\r\nVMODE = ${APP_REGION}\r\n")
 
 add_subdirectory(thirdparty)
 add_subdirectory(engine)
@@ -51,6 +62,48 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     add_custom_target(run-emulator-elf
         COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/runEmulator.sh" "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
         COMMENT "Launching PCSX2 with ELF..."
+        VERBATIM
+    )
+
+    # Derive toolchain paths (mirrors thirdparty/CMakeLists.txt so the thirdparty
+    # Makefiles can find the PS2 cross-compiler during the clean step).
+    if(DEFINED ENV{PS2DEV})
+        set(_CLEAN_PS2DEV "$ENV{PS2DEV}")
+    else()
+        set(_CLEAN_PS2DEV "/usr/local/ps2dev")
+    endif()
+    set(_CLEAN_PS2SDK "${_CLEAN_PS2DEV}/ps2sdk")
+    set(_CLEAN_PATH "${_CLEAN_PS2DEV}/ee/bin:${_CLEAN_PS2DEV}/iop/bin:${_CLEAN_PS2DEV}/dvp/bin:$ENV{PATH}")
+
+    # NOTE: CMake reserves the name "clean" for its own built-in target, so this
+    # extended target is named "clean-all".  It cleans every artefact that the
+    # built-in "clean" misses: thirdparty source objects and exec/ outputs.
+    #
+    # Usage:  cmake --build build --target clean-all
+    add_custom_target(clean-all
+        COMMENT "Cleaning all build artefacts for a full from-scratch rebuild..."
+        # 1. CMake-tracked objects and libraries (engine, lua, .o files in build/).
+        COMMAND ${CMAKE_MAKE_PROGRAM} clean
+        # 2. Thirdparty cached libraries — deleting them forces CMake's
+        #    add_custom_command to re-trigger the full thirdparty build next time.
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a"
+            "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
+        # 3. Raylib source objects (the raylib Makefile tracks these itself).
+        COMMAND ${CMAKE_COMMAND} -E env
+            "PS2DEV=${_CLEAN_PS2DEV}" "PS2SDK=${_CLEAN_PS2SDK}" "PATH=${_CLEAN_PATH}"
+            ${CMAKE_MAKE_PROGRAM} -C "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src" clean
+        # 4. ps2gl source objects.
+        COMMAND ${CMAKE_COMMAND} -E env
+            "PS2DEV=${_CLEAN_PS2DEV}" "PS2SDK=${_CLEAN_PS2SDK}" "PATH=${_CLEAN_PATH}"
+            ${CMAKE_MAKE_PROGRAM} -C "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl" clean
+        # 5. Final outputs in exec/.
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
+            "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}"
+            "${CMAKE_SOURCE_DIR}/exec/main.sym"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "${CMAKE_SOURCE_DIR}/exec/iso_contents"
         VERBATIM
     )
 endif()
