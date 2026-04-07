@@ -29,8 +29,6 @@ jobs:
     name: Cppcheck Security Scan
     needs: check-style
     runs-on: ubuntu-latest
-    # Notice we REMOVED the "container:" directive here.
-    # The job runs on standard Ubuntu to prevent glibc/Node.js crashes.
 
     permissions:
       actions: read
@@ -43,33 +41,37 @@ jobs:
         with:
           submodules: recursive
 
-      # 1. Spin up the PS2 container inline to generate compile commands and run Cppcheck
       - name: Run Cppcheck Analysis
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ghcr.io/ps2dev/ps2sdk-ports:latest sh -c "
-            # Install cppcheck alongside base dependencies
             apk add --no-cache build-base cmake cppcheck
           
-            # Generate compile_commands.json so Cppcheck knows your exact include paths
             cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           
-            # Run Cppcheck and pipe output to XML (v2 is required for SARIF converters)
-            cppcheck --project=build/compile_commands.json --enable=all --inconclusive --xml --xml-version=2 2> cppcheck-report.xml
+            cppcheck --project=build/compile_commands.json \
+              --enable=all \
+              --inconclusive \
+              --xml --xml-version=2 \
+              --suppress=*:thirdparty/* \
+              --suppress=missingIncludeSystem \
+              --suppress=missingInclude \
+              2> cppcheck-report.xml
           
-            # Fix permissions so the Ubuntu runner can read the generated file
             chmod 666 cppcheck-report.xml
           "
 
-      # 2. Convert the Cppcheck XML report into GitHub's required SARIF format
       - name: Convert Cppcheck XML to SARIF
         uses: Flast/cppcheck-sarif@v2
         with:
           input: 'cppcheck-report.xml'
           output: 'cppcheck.sarif'
 
-      # 3. Upload the results directly to the Security > Code Scanning Alerts tab
+      - name: Clean Invalid SARIF Line Numbers
+        run: |
+          jq '(.runs[].results) |= map(select(.locations == null or .locations[0].physicalLocation.region.startLine >= 1))' cppcheck.sarif > cppcheck-cleaned.sarif
+
       - name: Upload Analysis to GitHub Security Tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: 'cppcheck.sarif'
+          sarif_file: 'cppcheck-cleaned.sarif'
           category: 'cppcheck'
