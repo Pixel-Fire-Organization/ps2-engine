@@ -11,7 +11,8 @@
 // NOTE: RES_SOUND requires SUPPORT_MODULE_RAUDIO to be defined in raylib's config.h.
 //       On PS2 the raudio module is disabled — Engine_Resource_Load(RES_SOUND, ...) will
 //       log an error and return -1 at runtime. Use the PS2 native audio subsystem instead.
-typedef enum {
+typedef enum
+{
     RES_TEXTURE,
     RES_MODEL,
     RES_SOUND,
@@ -19,7 +20,8 @@ typedef enum {
 } ResourceType;
 
 // Lifecycle state of a resource entry
-typedef enum {
+typedef enum
+{
     RES_STATE_EMPTY,
     RES_STATE_LOADING,
     RES_STATE_READY
@@ -27,7 +29,8 @@ typedef enum {
 
 // .ps2a file header (binary, written by pack_assets.py, read at runtime)
 // Total size: 4+4+1+3+16+(8*256)+4 = 2080 bytes
-typedef struct {
+typedef struct
+{
     uint32_t magic; // RES_ASSET_MAGIC
     uint32_t type; // ResourceType
     uint8_t depCount; // Number of dependencies
@@ -47,12 +50,12 @@ void Engine_Resource_Shutdown(void);
 // For RES_MODEL: loads synchronously via Raylib's LoadModel.
 // For all others: streams via Engine_IO_ReadAsync, then decodes via *FromMemory.
 // Returns a handle >= 0 on success, or -1 on failure.
-int32_t Engine_Resource_Load(ResourceType type, const char *path);
+int32_t Engine_Resource_Load(ResourceType type, const char* path);
 
 // Retrieve a pointer to the underlying Raylib resource.
 // Returns NULL if the resource is not yet ready or the handle is invalid.
 // Caller must cast to the appropriate Raylib type (Texture2D*, Model*, etc.).
-void *Engine_Resource_Get(int32_t handle);
+void* Engine_Resource_Get(int32_t handle);
 
 // Check if a resource has finished loading.
 bool Engine_Resource_IsReady(int32_t handle);

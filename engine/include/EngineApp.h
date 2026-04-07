@@ -14,7 +14,7 @@
 // Start the engine and run the entry-point Lua script.
 // If mainScript is NULL, the canonical SCRIPTING_MAIN_SCRIPT_PATH is used.
 // Returns false if the engine failed to initialise or the script could not be loaded.
-bool EngineStart(const char *mainScript);
+bool EngineStart(const char* mainScript);
 
 // Advance one frame: runs Lua OnUpdate, renders, pumps IO and resource systems.
 // Must be called inside the main loop while !EngineExited().
@@ -30,10 +30,10 @@ void EngineStop(void);
 // Logging & panic — forward declarations resolved by EngineDebug.c.
 // Avoids pulling in EngineDebug.h (and transitively raylib.h) into the app.
 // ---------------------------------------------------------------------------
-extern void Engine_LogInfo(const char *text, ...);
+extern void Engine_LogInfo(const char* text, ...);
 
-extern void Engine_LogError(const char *text, ...);
+extern void Engine_LogError(const char* text, ...);
 
-extern void Engine_Panic(const char *message);
+extern void Engine_Panic(const char* message);
 
 #endif // ENGINE_APP_H
