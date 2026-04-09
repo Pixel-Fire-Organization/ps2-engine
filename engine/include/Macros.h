@@ -3,6 +3,10 @@
 
 #define UNUSED_VAR(x) ((void)(x))
 
+// Evaluates to 1 if x is a non-zero power of two, 0 otherwise.
+// Only correct for integer types; do not use with signed values or 0.
+#define IS_POWER_OF_TWO(x) (((x) != 0u) && (((x) & ((x) - 1u)) == 0u))
+
 // Forward declaration so ENGINE_NOT_IMPLEMENTED can log without pulling in EngineDebug.h.
 // The definition lives in EngineDebug.c and is resolved by the linker.
 extern void Engine_LogError(const char* text, ...);

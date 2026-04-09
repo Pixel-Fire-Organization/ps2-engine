@@ -4,6 +4,16 @@
 #include <string.h>
 #include "Engine.h"
 
+// Stable per-dependency reference: packs a slot index and a generation counter
+// into 4 bytes (same width as the old int32_t). The generation must match the
+// target slot's generation at unload time; a mismatch means the slot was reused
+// for a different resource, so the decrement is skipped.
+typedef struct
+{
+    int16_t index; // slot index, or -1 for "none"
+    uint16_t generation; // slot generation when this dep was bound
+} DepHandle;
+
 // Internal resource entry — holds a Raylib resource handle + metadata
 typedef struct
 {
@@ -14,7 +24,11 @@ typedef struct
     uint32_t gsPages; // GS VRAM pages consumed (RES_TEXTURE only; 0 otherwise)
     char key[IO_FILE_MAX_PATH];
     bool pinned;
-    int32_t deps[RES_MAX_DEPENDENCIES];
+    // Generation counter — incremented every time this slot is cleared.
+    // DepHandle.generation is compared against this value on unload to detect
+    // stale references caused by slot reuse.
+    uint16_t generation;
+    DepHandle deps[RES_MAX_DEPENDENCIES];
     uint8_t depCount;
 
     // Raylib resource storage (only one is active based on type)
@@ -152,11 +166,16 @@ static void Internal_UnloadEntry(int32_t index)
     if (entry->state == RES_STATE_EMPTY)
         return;
 
-    // Decrement refCount on all dependencies
+    // Decrement refCount on all dependencies.
+    // Validate the generation before touching the slot — if the dep was already
+    // unloaded and its slot reused for a different resource, the generation will
+    // have advanced and we must NOT decrement the new resource's refCount.
     for (uint8_t d = 0; d < entry->depCount; d++)
     {
-        int32_t depIdx = entry->deps[d];
-        if (depIdx >= 0 && depIdx < RES_MAX_ENTRIES && s_Entries[depIdx].state != RES_STATE_EMPTY)
+        int16_t depIdx = entry->deps[d].index;
+        uint16_t depGen = entry->deps[d].generation;
+        if (depIdx >= 0 && depIdx < RES_MAX_ENTRIES && s_Entries[depIdx].state != RES_STATE_EMPTY &&
+            s_Entries[depIdx].generation == depGen)
         {
             if (s_Entries[depIdx].refCount > 0)
             {
@@ -173,9 +192,16 @@ static void Internal_UnloadEntry(int32_t index)
         s_AllocatedGsPages = (s_AllocatedGsPages >= entry->gsPages) ? s_AllocatedGsPages - entry->gsPages : 0;
     }
 
+    // Bump the generation BEFORE clearing the slot so any parent whose async
+    // unload races with a new load into this slot will see the mismatch.
+    uint16_t nextGeneration = (uint16_t)(entry->generation + 1u);
+
     // Clear the slot
     memset(entry, 0, sizeof(ResourceEntry));
     entry->state = RES_STATE_EMPTY;
+    // Restore the incremented generation so future DepHandle bindings get the
+    // new value and old stale bindings remain detectable.
+    entry->generation = nextGeneration;
 }
 
 // Callback context for async IO loads
@@ -413,7 +439,8 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
         {
             // Already loaded — just bump refCount
             s_Entries[depHandle].refCount++;
-            entry->deps[d] = depHandle;
+            entry->deps[d].index = (int16_t)depHandle;
+            entry->deps[d].generation = s_Entries[depHandle].generation;
         }
         else
         {
@@ -425,19 +452,22 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
             if (!Internal_PeekAssetType(outHeader->deps[d], &depType))
             {
                 Engine_LogError("Resource: cannot determine type for dependency '%s'", outHeader->deps[d]);
-                entry->deps[d] = -1;
+                entry->deps[d].index = -1;
+                entry->deps[d].generation = 0;
                 continue;
             }
             int32_t newDep = Engine_Resource_Load(depType, outHeader->deps[d]);
             if (newDep >= 0)
             {
                 s_Entries[newDep].refCount++;
-                entry->deps[d] = newDep;
+                entry->deps[d].index = (int16_t)newDep;
+                entry->deps[d].generation = s_Entries[newDep].generation;
             }
             else
             {
                 Engine_LogError("Resource: failed to load dependency '%s'", outHeader->deps[d]);
-                entry->deps[d] = -1;
+                entry->deps[d].index = -1;
+                entry->deps[d].generation = 0;
             }
         }
     }
@@ -489,7 +519,12 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
 
     // Initialize the entry
     ResourceEntry* entry = &s_Entries[slot];
+    // The generation must survive the memset: it was already incremented by
+    // Internal_UnloadEntry (eviction path) or holds the boot-time 0 (fresh slot).
+    // Saving it here and restoring it below keeps the counter monotonic.
+    uint16_t savedGeneration = entry->generation;
     memset(entry, 0, sizeof(ResourceEntry));
+    entry->generation = savedGeneration;
     entry->type = type;
     entry->state = RES_STATE_LOADING;
     entry->lastUsedFrame = s_CurrentFrame;
@@ -501,7 +536,8 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
 
     for (uint8_t d = 0; d < RES_MAX_DEPENDENCIES; d++)
     {
-        entry->deps[d] = -1;
+        entry->deps[d].index = -1;
+        entry->deps[d].generation = 0;
     }
 
     // Synchronous path for models (no FromMemory variant in Raylib)

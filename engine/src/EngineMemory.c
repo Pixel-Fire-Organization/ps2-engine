@@ -1,12 +1,16 @@
 #include <string.h>
 #include "Engine.h"
 
+// Round ptr up to the next multiple of alignment.
+// PRECONDITION: alignment must be a power of two (or 0 to skip alignment).
+// Callers are responsible for validating this before calling.
 static inline uintptr_t AlignForward(uintptr_t ptr, size_t alignment)
 {
     if (alignment == 0)
         return ptr;
     uintptr_t a = (uintptr_t)alignment;
-    uintptr_t modulo = ptr & (a - 1);
+    // Safe only for power-of-two alignment: (ptr & (a-1)) gives the remainder.
+    uintptr_t modulo = ptr & (a - 1u);
     if (modulo != 0)
     {
         ptr += a - modulo;
@@ -173,6 +177,16 @@ void Engine_ArenaInit(MemoryArena* arena, void* backing_buffer, size_t capacity)
 
 void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
 {
+    // AlignForward uses a bitmask trick that is only correct for power-of-two
+    // alignments. Catch bad values here so a misaligned alloc never silently
+    // corrupts memory. alignment == 0 means "no alignment", which is also
+    // accepted.
+    if (alignment != 0 && !IS_POWER_OF_TWO(alignment))
+    {
+        Engine_LogError("Engine_ArenaAlloc: alignment %zu is not a power of two", alignment);
+        return NULL;
+    }
+
     uintptr_t current_ptr = (uintptr_t)arena->buffer + arena->offset;
     uintptr_t aligned_ptr = AlignForward(current_ptr, alignment);
     size_t shift = (size_t)(aligned_ptr - (uintptr_t)arena->buffer);

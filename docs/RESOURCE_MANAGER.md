@@ -23,17 +23,18 @@ The table has a fixed capacity of **`RES_MAX_ENTRIES` (64)** slots, defined in `
 
 Each entry stores:
 
-| Field           | Type            | Description                                                        |
-|:----------------|:----------------|:-------------------------------------------------------------------|
-| `type`          | `ResourceType`  | `RES_TEXTURE`, `RES_MODEL`, `RES_SOUND`, `RES_FONT`                |
-| `state`         | `ResourceState` | `RES_STATE_EMPTY`, `RES_STATE_LOADING`, `RES_STATE_READY`          |
-| `key`           | `char[256]`     | Disc path used to identify the resource                            |
-| `refCount`      | `uint32_t`      | How many other loaded resources depend on this one                 |
-| `lastUsedFrame` | `uint32_t`      | Frame counter updated on every `Engine_Resource_Get` call          |
-| `pinned`        | `bool`          | If true, the resource is never auto-evicted                        |
-| `deps`          | `int32_t[8]`    | Handles of resources this entry depends on                         |
-| `depCount`      | `uint8_t`       | Number of active dependencies                                      |
-| `handle`        | union           | The actual Raylib resource (`Texture2D`, `Model`, `Sound`, `Font`) |
+| Field           | Type            | Description                                                                       |
+|:----------------|:----------------|:----------------------------------------------------------------------------------|
+| `type`          | `ResourceType`  | `RES_TEXTURE`, `RES_MODEL`, `RES_SOUND`, `RES_FONT`                               |
+| `state`         | `ResourceState` | `RES_STATE_EMPTY`, `RES_STATE_LOADING`, `RES_STATE_READY`                         |
+| `key`           | `char[256]`     | Disc path used to identify the resource                                           |
+| `refCount`      | `uint32_t`      | How many other loaded resources depend on this one                                |
+| `lastUsedFrame` | `uint32_t`      | Frame counter updated on every `Engine_Resource_Get` call                         |
+| `pinned`        | `bool`          | If true, the resource is never auto-evicted                                       |
+| `generation`    | `uint16_t`      | Incremented every time this slot is freed; used to detect stale dep references    |
+| `deps`          | `DepHandle[8]`  | Generation-safe dep handles `{index, generation}` for resources this one requires |
+| `depCount`      | `uint8_t`       | Number of active dependencies                                                     |
+| `handle`        | union           | The actual Raylib resource (`Texture2D`, `Model`, `Sound`, `Font`)                |
 
 ---
 
@@ -94,6 +95,15 @@ Resources track how many other loaded resources depend on them via `refCount`.
 - A resource with `refCount > 0` is **never evicted** by LRU (another resource still needs it).
 
 Dependencies are declared in the `.ps2a` file header (see Asset Format below).
+
+### Generation safety
+
+Each slot carries a `generation` counter that is incremented every time the slot is freed. When A's dependency on B is
+recorded, the current `generation` of B's slot is snapshotted alongside the slot index into a `DepHandle
+{index, generation}`. On unload, the engine checks that the slot's live generation still matches the stored one before
+decrementing `refCount`. If the slot was freed and reused for a different resource since the dependency was bound, the
+generation will have advanced and the decrement is skipped — preventing silent `refCount` corruption on the new
+occupant.
 
 ---
 

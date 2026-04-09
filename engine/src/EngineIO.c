@@ -1,6 +1,4 @@
-#include <malloc.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "Engine.h"
 
@@ -16,7 +14,10 @@ typedef enum
 {
     IO_STATE_IDLE,
     IO_STATE_QUEUED,
-    IO_STATE_COMPLETED
+    IO_STATE_COMPLETED,
+    // Buffer is live on the main thread inside the callback.
+    // The IO thread must not reuse this slot until it transitions back to IDLE.
+    IO_STATE_DISPATCHING
 } IORequestState;
 
 typedef struct
@@ -34,12 +35,29 @@ static volatile bool s_IOThreadActive = false;
 
 static int s_IOThreadID = -1;
 static int s_IOMutex = -1;
+
+// Binary semaphore protecting s_SharedReadBuffer.
+// Initialised to 1 (buffer free). The IO thread acquires it before reading a
+// file; the main thread releases it once the callback has finished consuming
+// the data and the slot is marked IDLE.
+static int s_IOBufferSema = -1;
+
 extern void* _gp;
 
 // Stack for the IO thread. Must be statically allocated and 16-byte aligned
 // so that the PS2 kernel can map it correctly. Never use a local/heap buffer
 // here — the kernel holds a pointer to this for the thread's lifetime.
 static uint8_t s_IOThreadStack[IO_THREAD_STACK_SIZE] __attribute__((aligned(16)));
+
+// Single shared read buffer — replaces the previous per-slot array.
+// Using one buffer (512 KB) instead of one per slot (16 × 512 KB = 8 MB) keeps
+// BSS inside the PS2 EE TLB coverage window. Per-slot buffers pushed .bss to
+// virtual address 0x30000000, which has no TLB mapping, causing a store TLB
+// miss cascade during the crt0 BSS-zero loop at startup.
+// Ownership alternates: IO thread acquires s_IOBufferSema before reading, main
+// thread releases it after the callback returns — enforcing serial buffer use.
+// 16-byte alignment is required for GS DMA (LoadImageFromMemory, etc.).
+static uint8_t s_SharedReadBuffer[IO_READ_BUFFER_SIZE] __attribute__((aligned(16)));
 
 static void IOThreadEntry(void* arg)
 {
@@ -67,21 +85,50 @@ static void IOThreadEntry(void* arg)
 
         if (reqIndex != -1)
         {
+            // Acquire the shared buffer before reading.
+            // Blocks until Engine_IO_Update has finished dispatching the previous
+            // callback — i.e. the callback has returned and s_SharedReadBuffer is
+            // no longer referenced by the main thread.
+            if (s_IOBufferSema >= 0)
+                WaitSema(s_IOBufferSema);
+
+            // Engine_IO_Shutdown signals the sema to unblock a waiting IO thread.
+            // Exit immediately if that is why we woke up.
+            if (!s_IOThreadActive)
+                break;
+
             FILE* f = fopen(filepath, "rb");
             void* data = NULL;
             size_t size = 0;
             if (f)
             {
                 fseek(f, 0, SEEK_END);
-                size = ftell(f);
+                const long sizeL = ftell(f);
+                if (sizeL < 0)
+                {
+                    Engine_LogError("IO: File seek failed. File: %s", filepath);
+                    fclose(f);
+                    return;
+                }
+                size = (size_t)sizeL;
                 fseek(f, 0, SEEK_SET);
 
-                data = malloc(size);
-                if (data)
+                if (size > IO_READ_BUFFER_SIZE)
                 {
-                    fread(data, 1, size, f);
+                    // File exceeds the static buffer cap. Reject rather than truncate
+                    // — a truncated asset would silently corrupt the decoded resource.
+                    Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath,
+                                    size, IO_READ_BUFFER_SIZE);
+                    fclose(f);
+                    size = 0;
+                    // data stays NULL; callback receives (NULL, 0, userData).
                 }
-                fclose(f);
+                else
+                {
+                    fread(s_SharedReadBuffer, 1, size, f);
+                    fclose(f);
+                    data = s_SharedReadBuffer;
+                }
             }
             else
             {
@@ -121,6 +168,23 @@ bool Engine_IO_Init(void)
         return false;
     }
 
+    // Buffer semaphore: 1 = s_SharedReadBuffer is free for the IO thread.
+    // Acquiring it before a read and releasing it after the callback guarantees
+    // the IO thread never overwrites the buffer while the main thread is inside
+    // the callback using the pointer.
+    ee_sema_t bufSema;
+    bufSema.init_count = 1;
+    bufSema.max_count = 1;
+    bufSema.option = 0;
+    s_IOBufferSema = CreateSema(&bufSema);
+    if (s_IOBufferSema < 0)
+    {
+        Engine_LogError("Failed to create IO buffer semaphore! Error: %d", s_IOBufferSema);
+        DeleteSema(s_IOMutex);
+        s_IOMutex = -1;
+        return false;
+    }
+
     // Zero-initialise the entire struct first so that the 'attr', 'option',
     // 'status', and 'current_priority' fields never contain stack garbage.
     // PS2 kernel behaviour on CreateThread is undefined for non-zero 'attr'
@@ -129,8 +193,7 @@ bool Engine_IO_Init(void)
     // is modified) and can corrupt the EE kernel's thread table, which then
     // manifests as a crash inside an unrelated ISR (typically libpad's DMA
     // handler in the pad polling interrupt).
-    ee_thread_t threadParam;
-    memset(&threadParam, 0, sizeof(threadParam));
+    ee_thread_t threadParam = {0};
     threadParam.func = IOThreadEntry;
     threadParam.stack = s_IOThreadStack;
     threadParam.stack_size = IO_THREAD_STACK_SIZE;
@@ -192,17 +255,20 @@ void Engine_IO_Update(void)
     {
         if (s_Requests[i].state == IO_STATE_COMPLETED)
         {
-            // Copy callback data to locals and mark the slot idle BEFORE releasing
-            // the mutex. The callback (e.g. Internal_OnAsyncLoadComplete) may itself
-            // call Engine_IO_ReadAsync for dependency loads, which tries to acquire
-            // s_IOMutex — invoking it while the lock is held would deadlock.
+            // Copy callback data to locals before releasing the mutex.
+            // The callback (e.g. Internal_OnAsyncLoadComplete) may itself call
+            // Engine_IO_ReadAsync for dependency loads, which acquires s_IOMutex —
+            // invoking it while the lock is held would deadlock.
             IO_Callback cb = s_Requests[i].callback;
             void* data = s_Requests[i].loadedData;
             size_t size = s_Requests[i].loadedSize;
             void* userData = s_Requests[i].userData;
 
-            s_Requests[i].loadedData = NULL;
-            s_Requests[i].state = IO_STATE_IDLE;
+            // Transition to DISPATCHING before releasing the mutex. The IO thread
+            // only picks up QUEUED slots, so this keeps s_SharedReadBuffer protected
+            // for the full duration of the callback — preventing a requeue of slot i
+            // from racing with the callback's use of the buffer pointer.
+            s_Requests[i].state = IO_STATE_DISPATCHING;
 
             SignalSema(s_IOMutex);
 
@@ -210,13 +276,18 @@ void Engine_IO_Update(void)
             {
                 cb(data, size, userData);
             }
-            if (data)
-            {
-                free(data);
-            }
+            // data points into s_SharedReadBuffer (or NULL on error) — no free() needed.
 
-            // Re-acquire for the next iteration
+            // Re-acquire to mark the slot idle and continue the scan.
             WaitSema(s_IOMutex);
+            s_Requests[i].loadedData = NULL;
+            s_Requests[i].state = IO_STATE_IDLE;
+
+            // Release the shared read buffer AFTER setting the slot to IDLE, so
+            // that any new request the callback may have queued during DISPATCHING
+            // is already visible to the IO thread when it next scans.
+            if (s_IOBufferSema >= 0)
+                SignalSema(s_IOBufferSema);
         }
     }
 
@@ -226,6 +297,10 @@ void Engine_IO_Update(void)
 void Engine_IO_Shutdown(void)
 {
     s_IOThreadActive = false;
-    // Note: Thread cleanup should involve DeleteThread/DeleteSema but wait for
-    // exit
+    // Wake the IO thread if it is blocked on WaitSema(s_IOBufferSema).
+    // Without this signal the thread would stall indefinitely after shutdown.
+    if (s_IOBufferSema >= 0)
+        SignalSema(s_IOBufferSema);
+    // Note: Full thread cleanup (DeleteThread / DeleteSema) requires waiting
+    // for the thread to exit — deferred until proper join support is added.
 }

@@ -69,7 +69,14 @@ int32_t EngineApp_FileOpen(const char* path)
     }
 
     fseek(f, 0, SEEK_END);
-    size_t fileSize = (size_t)ftell(f);
+    long fileSizeL = ftell(f);
+    if (fileSizeL < 0)
+    {
+        Engine_LogError("EngineApp: failed to get file length '%s'", path);
+        fclose(f);
+        return -1;
+    }
+    size_t fileSize = (size_t)fileSizeL;
     fseek(f, 0, SEEK_SET);
 
     if (fileSize == 0 || fileSize > APP_MAX_FILE_DATA_SIZE)

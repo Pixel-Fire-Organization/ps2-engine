@@ -85,6 +85,17 @@
 // sufficient for a single fopen/fread/fclose + a 256-byte filepath local.
 #define IO_THREAD_STACK_SIZE (32 * 1024)
 
+// Maximum file size for a single async IO read.
+// Files exceeding this limit are rejected at read-time with an error; the
+// callback receives (NULL, 0, userData) so callers can handle the failure.
+// A SINGLE shared buffer of this size lives in BSS (512 KB total).
+// The IO thread and main thread take turns owning it via s_IOBufferSema:
+//   IO thread acquires → reads file → main thread dispatches callback → releases.
+// This serial ownership avoids a per-slot buffer array (which would be
+// IO_ASYNC_MAX_REQUESTS × IO_READ_BUFFER_SIZE = 8 MB and pushes BSS beyond
+// the PS2 EE TLB coverage window, causing TLB misses at startup).
+#define IO_READ_BUFFER_SIZE (512 * 1024)
+
 // --- RESOURCE (Resource Manager) ---
 #define RES_MAX_ENTRIES 64
 #define RES_MAX_DEPENDENCIES 8
