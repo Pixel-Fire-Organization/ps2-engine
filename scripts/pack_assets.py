@@ -30,9 +30,15 @@ AssetFileHeader (C struct, packed):
     char     deps[8][256]   — null-terminated dependency asset paths
     uint32_t dataSize       — byte count of the raw payload
 
-Note: TEXTURE payloads are always transcoded to QOI regardless of source
-format. QOI uses a trivially simple decoder (no IDCT, no entropy coding)
-that is reliable on the PS2 R5900 MIPS processor.
+TEXTURE payload encoding (in priority order):
+  1. Normal path  — Pillow decodes the source image and re-encodes it as QOI.
+                    QOI uses a trivially simple decoder (no IDCT, no entropy
+                    coding) that is reliable on the PS2 R5900 MIPS processor.
+  2. --skip-convert passed — the source file is embedded raw without any
+                    transcoding. The original extension is preserved in
+                    AssetFileHeader.ext. NOT recommended for PS2 targets.
+  3. Pillow absent — falls back to raw embed with a warning printed to stdout.
+                    The .ps2a is written but may fail to decode on PS2 hardware.
 """
 
 import json
@@ -196,10 +202,14 @@ def pack_asset(json_path, src_dir, dst_dir, skip_convert=False):
         deps = deps[:MAX_DEPS]
 
     # --- Build payload ---
-    # TEXTURE assets are always transcoded to QOI for reliable PS2 decode.
-    # stb_image's JPEG decoder (used by raylib) can fail on progressive JPEGs
-    # on the PS2 R5900 MIPS; qoi_decode is a trivially simple loop with no
-    # integer-overflow-sensitive arithmetic.
+    # TEXTURE encoding priority:
+    #   1. QOI (preferred) — Pillow decodes the source and re-encodes as QOI.
+    #      qoi_decode is a trivially simple loop; stb_image's JPEG decoder can
+    #      fail on progressive JPEGs on the PS2 R5900.
+    #   2. Raw embed (--skip-convert) — source file written as-is; original
+    #      extension kept in ext[]. NOT recommended for PS2 targets.
+    #   3. Raw embed (Pillow absent) — same as above but with a warning.
+    #      The .ps2a is valid but may fail to decode on PS2 hardware.
     if asset_type_str == "TEXTURE":
         if skip_convert:
             print(f"  SKIP CONVERT: {source_name} (raw embed)")
@@ -248,13 +258,13 @@ def pack_asset(json_path, src_dir, dst_dir, skip_convert=False):
 
     # Write the .ps2a file
     base_name = os.path.splitext(os.path.basename(json_path))[0]
-    out_path  = os.path.join(dst_dir, f"{base_name}.ps2a")
+    out_path = os.path.join(dst_dir, f"{base_name}.PS2A")
 
     with open(out_path, "wb") as fh:
         fh.write(header)
         fh.write(payload)
 
-    print(f"  OK:   {base_name}.ps2a ({len(payload)} bytes payload, {dep_count} deps)")
+    print(f"  OK:   {base_name}.PS2A ({len(payload)} bytes payload, {dep_count} deps)")
     return True
 
 

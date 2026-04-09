@@ -322,7 +322,11 @@ The `Level` struct (see `EngineLevel.h`) lists up to **16 required resource path
 
 1. Each required resource is loaded via `Engine_Resource_LoadAuto` — the type is inferred from each `.ps2a` header, so
    the list may freely mix textures, models, fonts, and sounds.
-2. Each is **pinned** so it cannot be evicted during gameplay.
+2. Each successfully loaded handle is **pinned** so it cannot be evicted during gameplay.
+3. If any required resource fails to load, the function **rolls back**: every handle that was already pinned in this
+   call
+   is unpinned and unloaded, `s_LoadedCount` is reset to `0`, and `false` is returned. The resource table and GS VRAM
+   budget are left in the same state as before the call — there are no partial or leaked pins.
 
 When `Engine_Level_Unload` is called:
 

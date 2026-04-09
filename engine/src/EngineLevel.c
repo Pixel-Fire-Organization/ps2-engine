@@ -39,9 +39,26 @@ bool Engine_Level_Load(Level* level)
         }
     }
 
+    if (s_LoadedCount != level->requiredCount)
+    {
+        // Partial failure — rollback every handle already pinned so we don't
+        // leak pinned resources or corrupt the GS VRAM / resource-table budget.
+        Engine_LogError("Level '%s': only %u/%u required resources loaded — rolling back", level->name, s_LoadedCount,
+                        level->requiredCount);
+
+        for (uint32_t i = 0; i < s_LoadedCount; i++)
+        {
+            Engine_Resource_Unpin(s_LoadedHandles[i]);
+            Engine_Resource_Unload(s_LoadedHandles[i]);
+        }
+
+        s_LoadedCount = 0;
+        return false;
+    }
+
     Engine_LogInfo("Level '%s' loaded: %u/%u required resources pinned", level->name, s_LoadedCount,
                    level->requiredCount);
-    return s_LoadedCount == level->requiredCount;
+    return true;
 }
 
 void Engine_Level_Unload(Level* level, bool keepPinned)

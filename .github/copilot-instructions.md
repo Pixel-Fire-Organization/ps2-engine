@@ -82,7 +82,7 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 
 ## Memory Management & Allocation Strategy
 
-- **Master Reference**: Always refer to `docs/MEMORY_MAP.md` for the current EE RAM (32MB) layout.
+- **Master Reference**: Always refer to `engine/include/Constants.h` for the current EE RAM (32MB) layout.
 - **GFX Resources**: Textures, models, sounds, and fonts are managed by **Raylib's allocator** via the **Resource
   Manager** (`EngineResource.h`). Never allocate GFX resources in engine arenas.
     - Use `Engine_Resource_Load(type, path)` to load, `Engine_Resource_Get(handle)` to access.
