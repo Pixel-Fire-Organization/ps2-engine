@@ -1,4 +1,4 @@
-﻿# gen_sym.cmake — Generates a PCSX2-compatible .sym file from an ELF.
+# gen_sym.cmake — Generates a PCSX2-compatible .sym file from an ELF.
 #
 # Called at build time via:
 #   cmake -D EE_NM=<path> -D ELF=<path> -D SYM=<path> -P gen_sym.cmake

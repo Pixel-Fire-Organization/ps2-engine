@@ -1,3 +1,4 @@
+#include <malloc.h>
 #include <raylib.h>
 #include <stdlib.h>
 #include "Engine.h"
@@ -25,8 +26,12 @@ bool Engine_Init(EngineConfig config)
         return false;
     }
 
-    // Allocate unified arena block and the pool block using standard malloc
-    s_UnifiedArenaBlock = malloc(totalArenaSize);
+    // Allocate unified arena block with 16KB alignment so that every arena slot
+    // starts on a Quadword-aligned boundary without any initial padding waste.
+    // memalign is used instead of malloc because malloc only guarantees 8-byte
+    // alignment, which would force Internal_InitSlots to shift the first slot
+    // forward and potentially overrun the allocated region.
+    s_UnifiedArenaBlock = memalign(MEM_ARENA_SLOT_ALIGNMENT, totalArenaSize);
     void* poolMem = malloc(MEM_POOL_MAIN_SIZE);
 
     if (!s_UnifiedArenaBlock || !poolMem)

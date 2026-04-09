@@ -227,7 +227,13 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         return;
     }
 
-    switch (ctx->type)
+    // Use the type declared in the .ps2a header as the authoritative decode type.
+    // ctx->type is the caller-supplied hint; the header's type is what the asset
+    // packer stamped and should always be preferred. Update entry->type so that
+    // later unload / get calls use the correct Raylib handle union member.
+    entry->type = (ResourceType)header.type;
+
+    switch ((ResourceType)header.type)
     {
     case RES_TEXTURE:
         {
@@ -310,30 +316,27 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         }
         break;
     case RES_SOUND:
-        {
 #if defined(SUPPORT_MODULE_RAUDIO)
+        {
             Wave wave = LoadWaveFromMemory(header.ext, payload, (int)header.dataSize);
-            if (wave.data != NULL)
-            {
-                entry->handle.sound = LoadSoundFromWave(wave);
-                UnloadWave(wave);
-                entry->state = RES_STATE_READY;
-            }
-            else
+            if (wave.data == NULL)
             {
                 Engine_LogError("Resource: failed to decode sound slot %d (%s)", idx, entry->key);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
             }
-#else
-            Engine_LogError("Resource: RES_SOUND not supported (raudio module disabled) for slot %d", idx);
-            Internal_UnloadEntry(idx);
-            Engine_PoolFreeMain(ctx);
-            return;
-#endif
+            entry->handle.sound = LoadSoundFromWave(wave);
+            UnloadWave(wave);
+            entry->state = RES_STATE_READY;
         }
         break;
+#else
+        Engine_LogError("Resource: RES_SOUND not supported (raudio module disabled) for slot %d", idx);
+        Internal_UnloadEntry(idx);
+        Engine_PoolFreeMain(ctx);
+        return;
+#endif
     case RES_FONT:
         {
             entry->handle.font = LoadFontFromMemory(header.ext, payload, (int)header.dataSize, 32, NULL, 0);

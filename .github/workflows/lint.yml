@@ -16,14 +16,12 @@ jobs:
       - name: Install clang-format
         run: sudo apt-get install -y clang-format
 
-      - name: Format code and show diff
+      - name: Check code formatting
         run: |
-          # 1. Find all .c and .h files and format them in-place
-          find . -type f \( -name '*.c' -o -name '*.h' \) -exec clang-format -i {} +
-          
-          # 2. Run git diff. The --exit-code flag will print the diff 
-          #    and fail the CI step if any files were changed.
-          git diff --color --exit-code
+          # Only check project-owned source files; thirdparty/ is excluded because
+          # the project rules forbid modifying submodule code, and formatting it
+          # would break submodule tracking or require unrelated commits.
+          find engine app -type f \( -name '*.c' -o -name '*.h' \) -exec clang-format --dry-run --Werror {} +
 
   analyze-cppcheck:
     name: Cppcheck Security Scan

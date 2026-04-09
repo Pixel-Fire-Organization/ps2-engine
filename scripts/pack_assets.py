@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 pack_assets.py — PS2 Engine Asset Packer
 

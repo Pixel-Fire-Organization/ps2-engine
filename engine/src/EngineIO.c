@@ -192,16 +192,31 @@ void Engine_IO_Update(void)
     {
         if (s_Requests[i].state == IO_STATE_COMPLETED)
         {
-            if (s_Requests[i].callback)
-            {
-                s_Requests[i].callback(s_Requests[i].loadedData, s_Requests[i].loadedSize, s_Requests[i].userData);
-            }
-            if (s_Requests[i].loadedData)
-            {
-                free(s_Requests[i].loadedData);
-                s_Requests[i].loadedData = NULL;
-            }
+            // Copy callback data to locals and mark the slot idle BEFORE releasing
+            // the mutex. The callback (e.g. Internal_OnAsyncLoadComplete) may itself
+            // call Engine_IO_ReadAsync for dependency loads, which tries to acquire
+            // s_IOMutex — invoking it while the lock is held would deadlock.
+            IO_Callback cb = s_Requests[i].callback;
+            void* data = s_Requests[i].loadedData;
+            size_t size = s_Requests[i].loadedSize;
+            void* userData = s_Requests[i].userData;
+
+            s_Requests[i].loadedData = NULL;
             s_Requests[i].state = IO_STATE_IDLE;
+
+            SignalSema(s_IOMutex);
+
+            if (cb)
+            {
+                cb(data, size, userData);
+            }
+            if (data)
+            {
+                free(data);
+            }
+
+            // Re-acquire for the next iteration
+            WaitSema(s_IOMutex);
         }
     }
 

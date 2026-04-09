@@ -57,6 +57,16 @@ endif()
 # to uppercase here so SYSTEM.CNF and the ISO directory entry always match.
 # When USERETAILNAME=ON the serial is already uppercase; this is idempotent.
 string(TOUPPER "${APP_SERIAL}" APP_SERIAL)
+
+# Ensure APP_SERIAL_LABEL is always defined.  When USERETAILNAME=ON it is
+# derived from the retail serial above.  When OFF derive a safe default from
+# APP_ISO_NAME (e.g. "engine.iso" -> "ENGINE") so mkisofs -V never receives an
+# empty string, which would produce an invalid ISO volume label.
+if(NOT DEFINED APP_SERIAL_LABEL)
+    string(REPLACE ".iso" "" _APP_ISO_STEM "${APP_ISO_NAME}")
+    string(TOUPPER "${_APP_ISO_STEM}" APP_SERIAL_LABEL)
+endif()
+
 file(WRITE "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "BOOT2 = cdrom0:\\${APP_SERIAL};1\r\nVER = 1.00\r\nVMODE = ${APP_REGION}\r\n")
 
 add_subdirectory(thirdparty)
