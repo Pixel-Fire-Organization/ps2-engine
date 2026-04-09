@@ -97,7 +97,7 @@ static int32_t Internal_EvictLRU(void)
 
     for (int32_t i = 0; i < RES_MAX_ENTRIES; i++)
     {
-        if (s_Entries[i].state == RES_STATE_EMPTY)
+        if (s_Entries[i].state == RES_STATE_EMPTY || s_Entries[i].state == RES_STATE_LOADING)
             continue;
         if (s_Entries[i].pinned)
             continue;
@@ -119,7 +119,7 @@ static int32_t Internal_EvictLRU(void)
     return bestIndex;
 }
 
-static void Internal_UnloadRaylibHandle(ResourceEntry* entry)
+static void Internal_UnloadRaylibHandle(const ResourceEntry* entry)
 {
     if (entry->state != RES_STATE_READY)
         return;
@@ -185,7 +185,7 @@ typedef struct
     ResourceType type;
 } ResourceLoadContext;
 
-static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData)
+static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* userData)
 {
     ResourceLoadContext* ctx = (ResourceLoadContext*)userData;
     if (!ctx)
@@ -206,7 +206,10 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
     AssetFileHeader header;
     if (!Internal_ParseHeaderAndLoadDeps(data, size, &header, idx))
     {
-        entry->state = RES_STATE_EMPTY;
+        // Internal_ParseHeaderAndLoadDeps only returns false before the dep-loading
+        // loop, so no refCounts can have been bumped yet. Internal_UnloadEntry is
+        // still used for a consistent cleanup path.
+        Internal_UnloadEntry(idx);
         Engine_PoolFreeMain(ctx);
         return;
     }
@@ -217,7 +220,9 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
     if (payloadSize <= 0 || (uint32_t)payloadSize < header.dataSize)
     {
         Engine_LogError("Resource payload mismatch for slot %d (%s)", idx, entry->key);
-        entry->state = RES_STATE_EMPTY;
+        // Deps were already loaded and their refCounts bumped; roll back via
+        // Internal_UnloadEntry so they are properly decremented.
+        Internal_UnloadEntry(idx);
         Engine_PoolFreeMain(ctx);
         return;
     }
@@ -244,7 +249,7 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
                                     img.width, img.height, pages, GFX_MAX_TEXTURE_GS_PAGES, GFX_MAX_TEXTURE_WIDTH,
                                     GFX_MAX_TEXTURE_HEIGHT, idx, entry->key);
                     UnloadImage(img);
-                    entry->state = RES_STATE_EMPTY;
+                    Internal_UnloadEntry(idx);
                     Engine_PoolFreeMain(ctx);
                     return;
                 }
@@ -266,7 +271,7 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
                                     img.width, img.height, pages, s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET,
                                     evictablePages, evictableCount);
                     UnloadImage(img);
-                    entry->state = RES_STATE_EMPTY;
+                    Internal_UnloadEntry(idx);
                     Engine_PoolFreeMain(ctx);
                     return;
                 }
@@ -280,20 +285,27 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
                 {
                     s_AllocatedGsPages += pages;
                     Engine_LogInfo("Texture loaded successfully. Remaining pages: %u",
-                                   (uint32_t)GFX_GS_TEXTURE_PAGE_BUDGET - (s_AllocatedGsPages + pages));
+                                   (uint32_t)GFX_GS_TEXTURE_PAGE_BUDGET - s_AllocatedGsPages);
                     entry->state = RES_STATE_READY;
                 }
                 else
                 {
+                    // entry->gsPages was written but s_AllocatedGsPages was NOT yet
+                    // incremented. Zero gsPages before Internal_UnloadEntry to prevent
+                    // the shadow counter from being incorrectly decremented.
                     entry->gsPages = 0;
                     Engine_LogError("Resource: GPU texture upload failed for slot %d (%s)", idx, entry->key);
-                    entry->state = RES_STATE_EMPTY;
+                    Internal_UnloadEntry(idx);
+                    Engine_PoolFreeMain(ctx);
+                    return;
                 }
             }
             else
             {
                 Engine_LogError("Resource: failed to decode texture slot %d (%s)", idx, entry->key);
-                entry->state = RES_STATE_EMPTY;
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
             }
         }
         break;
@@ -310,11 +322,15 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
             else
             {
                 Engine_LogError("Resource: failed to decode sound slot %d (%s)", idx, entry->key);
-                entry->state = RES_STATE_EMPTY;
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
             }
 #else
             Engine_LogError("Resource: RES_SOUND not supported (raudio module disabled) for slot %d", idx);
-            entry->state = RES_STATE_EMPTY;
+            Internal_UnloadEntry(idx);
+            Engine_PoolFreeMain(ctx);
+            return;
 #endif
         }
         break;
@@ -328,20 +344,42 @@ static void Internal_OnAsyncLoadComplete(void* data, size_t size, void* userData
             else
             {
                 Engine_LogError("Resource: failed to decode font slot %d (%s)", idx, entry->key);
-                entry->state = RES_STATE_EMPTY;
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
             }
         }
         break;
     case RES_MODEL:
         // Models should never arrive here — they are loaded synchronously
         Engine_LogError("Resource: unexpected async model load for slot %d", idx);
-        entry->state = RES_STATE_EMPTY;
+        Internal_UnloadEntry(idx);
         break;
     }
 
     Engine_PoolFreeMain(ctx);
 }
 
+
+// Read just the magic and type fields from a .ps2a file on disc without
+// loading its full payload. Returns false if the file can't be opened or the
+// magic is wrong.
+static bool Internal_PeekAssetType(const char* path, ResourceType* outType)
+{
+    FILE* f = fopen(path, "rb");
+    if (!f)
+        return false;
+
+    uint32_t peek[2]; // [0] = magic, [1] = type
+    size_t bytesRead = fread(peek, sizeof(uint32_t), 2, f);
+    fclose(f);
+
+    if (bytesRead < 2 || peek[0] != RES_ASSET_MAGIC)
+        return false;
+
+    *outType = (ResourceType)peek[1];
+    return true;
+}
 
 // Parse a .ps2a header from raw file data and load dependencies.
 // Returns true if the header is valid.
@@ -376,8 +414,18 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
         }
         else
         {
-            // Need to load the dependency first
-            int32_t newDep = Engine_Resource_Load((ResourceType)outHeader->type, outHeader->deps[d]);
+            // Need to load the dependency first.
+            // The dependency is its own .ps2a file with its own type field — peek
+            // just its header to get the correct type rather than inheriting the
+            // parent's type, which may be different.
+            ResourceType depType;
+            if (!Internal_PeekAssetType(outHeader->deps[d], &depType))
+            {
+                Engine_LogError("Resource: cannot determine type for dependency '%s'", outHeader->deps[d]);
+                entry->deps[d] = -1;
+                continue;
+            }
+            int32_t newDep = Engine_Resource_Load(depType, outHeader->deps[d]);
             if (newDep >= 0)
             {
                 s_Entries[newDep].refCount++;
@@ -492,6 +540,21 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
     }
 
     return slot;
+}
+
+int32_t Engine_Resource_LoadAuto(const char* path)
+{
+    if (!path)
+        return -1;
+
+    ResourceType type;
+    if (!Internal_PeekAssetType(path, &type))
+    {
+        Engine_LogError("Resource: cannot determine type for '%s' — bad magic or unreadable", path);
+        return -1;
+    }
+
+    return Engine_Resource_Load(type, path);
 }
 
 void* Engine_Resource_Get(int32_t handle)

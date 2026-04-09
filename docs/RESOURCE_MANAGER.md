@@ -320,7 +320,8 @@ This reads all `.json` files from `app/cd_files/RAYLIB/`, compiles each into a `
 
 The `Level` struct (see `EngineLevel.h`) lists up to **16 required resource paths**. When `Engine_Level_Load` is called:
 
-1. Each required resource is loaded via `Engine_Resource_Load`.
+1. Each required resource is loaded via `Engine_Resource_LoadAuto` — the type is inferred from each `.ps2a` header, so
+   the list may freely mix textures, models, fonts, and sounds.
 2. Each is **pinned** so it cannot be evicted during gameplay.
 
 When `Engine_Level_Unload` is called:

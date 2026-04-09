@@ -68,6 +68,16 @@ static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
     void* slotBase = Engine_GetSlot(ARENA_SCRIPT, unit->slotIndex);
     size_t slotCapacity = Engine_GetSlotCapacity(ARENA_SCRIPT, unit->slotIndex);
 
+    // Guard: if the slot base is NULL the arena was never initialised
+    // (e.g. malloc returned NULL and the failure path wasn't taken).
+    // Returning NULL here instead of (uint8_t*)0 + offset = 0x0 prevents
+    // Lua from writing its state to physical address 0, which would corrupt
+    // the PS2 exception-vector table and low-memory ISR code.
+    if (!slotBase || !slotCapacity)
+    {
+        return NULL;
+    }
+
     if (ptr == NULL)
     {
         // Linear allocation within the slot
@@ -83,7 +93,9 @@ static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
     }
     else
     {
-        // Realloc: Move to new offset within the same slot
+        // Realloc: Move to new offset within the same slot.
+        // Use memmove (not memcpy) because source and destination may overlap
+        // when the bump pointer is only a few bytes ahead of the old block.
         size_t alignedOffset = (unit->heapOffset + 7) & ~7;
         if (alignedOffset + nsize > slotCapacity)
         {
@@ -91,7 +103,7 @@ static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
         }
 
         void* newPtr = (uint8_t*)slotBase + alignedOffset;
-        memcpy(newPtr, ptr, (osize < nsize) ? osize : nsize);
+        memmove(newPtr, ptr, (osize < nsize) ? osize : nsize);
         unit->heapOffset = alignedOffset + nsize;
         return newPtr;
     }
@@ -575,7 +587,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     float sz = (float)luaL_checknumber(L, 4);
     int32_t handle = (int32_t)luaL_checkinteger(L, 5);
 
-    Texture2D* tex = (Texture2D*)Engine_Resource_Get(handle);
+    const Texture2D* tex = Engine_Resource_Get(handle);
     if (!tex || tex->id == 0)
     {
         // Resource not ready or GPU upload failed — fall back to a solid draw.

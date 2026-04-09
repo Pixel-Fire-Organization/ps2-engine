@@ -88,7 +88,7 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
     - Use `Engine_Resource_Load(type, path)` to load, `Engine_Resource_Get(handle)` to access.
     - See `docs/RESOURCE_MANAGER.md` for full API and `.ps2a` asset format.
 - **Engine Arenas** (for internal subsystems only):
-    - `ARENA_SCRIPT`: 2 MB, 16 slots — Lua VM heaps and bytecode.
+    - `ARENA_SCRIPT`: 4 MB, 16 slots — Lua VM heaps and bytecode.
     - `ARENA_CONFIG`: 1 MB, 4 slots — Configuration data, cached reads.
     - `ARENA_LEVEL_DATA`: 4 MB, 8 slots — Entity tables, nav data, spawn points.
     - Use `Engine_LoadToSlot(ARENA_TYPE, slot, data, size)` for slot replacement.

@@ -34,3 +34,4 @@ Thumbs.db
 
 # Engine assets (On ISO Generation)
 *.ps2a
+build_log.txt

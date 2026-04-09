@@ -52,6 +52,13 @@ void Engine_Resource_Shutdown(void);
 // Returns a handle >= 0 on success, or -1 on failure.
 int32_t Engine_Resource_Load(ResourceType type, const char* path);
 
+// Load a resource whose type is inferred from the .ps2a header's type field.
+// Use this instead of Engine_Resource_Load when the caller does not know the
+// type a priori (e.g. level required-resource lists that may contain any type).
+// Returns a handle >= 0 on success, or -1 if the file cannot be opened, the
+// header is invalid, or the underlying load fails.
+int32_t Engine_Resource_LoadAuto(const char* path);
+
 // Retrieve a pointer to the underlying Raylib resource.
 // Returns NULL if the resource is not yet ready or the handle is invalid.
 // Caller must cast to the appropriate Raylib type (Texture2D*, Model*, etc.).

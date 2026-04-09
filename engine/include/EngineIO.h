@@ -6,7 +6,7 @@
 
 #define ENGINE_IO_MAX_PATH 256
 
-typedef void (*IO_Callback)(void* data, size_t size, void* userData);
+typedef void (*IO_Callback)(const void* data, size_t size, void* userData);
 
 bool Engine_IO_Init(void);
 

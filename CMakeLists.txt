@@ -50,7 +50,13 @@ string(REPLACE "_" "-" APP_SERIAL_LABEL "${_APP_SERIAL_NODOT}")
 
 endif()
 
-string(TOUPPER ${APP_EXE_NAME} APP_EXE_NAME_UPPER)
+# PS2 cdvdman (IOP) performs case-sensitive UPPERCASE lookups in the ISO 9660
+# directory.  mkisofs -l preserves the case it is given, so a lowercase serial
+# (e.g. "main.elf") produces a lowercase directory entry that cdvdman cannot
+# find, causing "open fail" and a BIOS crash loop.  Always normalise APP_SERIAL
+# to uppercase here so SYSTEM.CNF and the ISO directory entry always match.
+# When USERETAILNAME=ON the serial is already uppercase; this is idempotent.
+string(TOUPPER "${APP_SERIAL}" APP_SERIAL)
 file(WRITE "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "BOOT2 = cdrom0:\\${APP_SERIAL};1\r\nVER = 1.00\r\nVMODE = ${APP_REGION}\r\n")
 
 add_subdirectory(thirdparty)

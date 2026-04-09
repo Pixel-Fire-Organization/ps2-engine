@@ -22,10 +22,11 @@ bool Engine_Level_Load(Level* level)
         if (path[0] == '\0')
             continue;
 
-        // Determine resource type from .ps2a extension prefix convention:
-        // The Resource Manager will read the header to get the actual type.
-        // We default to RES_TEXTURE here; the header's type field is authoritative.
-        int32_t handle = Engine_Resource_Load(RES_TEXTURE, path);
+        // Let the .ps2a header's type field drive the decode path.
+        // Passing a hardcoded RES_TEXTURE would silently misroute MODEL/FONT/SOUND
+        // assets through the wrong decoder and fail; Engine_Resource_LoadAuto peeks
+        // the header to get the real type before dispatching.
+        int32_t handle = Engine_Resource_LoadAuto(path);
         if (handle >= 0)
         {
             Engine_Resource_Pin(handle);

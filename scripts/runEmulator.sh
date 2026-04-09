@@ -32,7 +32,7 @@ if [[ -z "$PCSX2_PATH" ]]; then
     fi
 fi
 
-if [[ -z "$PCSX2_PATH" ]] || [[ ! -f "$PCSX2_PATH" && ! -x $(command -v "$PCSX2_PATH") ]]; then
+if [[ -z "$PCSX2_PATH" ]] || [[ ! -f "$PCSX2_PATH" && ! -x "$(command -v "$PCSX2_PATH")" ]]; then
     echo "Error: PCSX2 not found."
     echo "Usage: ./scripts/runEmulator.sh [FilePath] [Pcsx2Path]"
     exit 1

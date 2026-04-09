@@ -253,7 +253,7 @@ bool EngineStart(const char* mainScript)
     if (fd < 0)
     {
         char buff[LOG_STRING_MAX_SIZE];
-        sprintf(buff, "EngineStart: failed to open main script '%s'", scriptPath);
+        snprintf(buff, LOG_STRING_MAX_SIZE, "EngineStart: failed to open main script '%s'", scriptPath);
         Engine_Panic(buff);
         return false;
     }
