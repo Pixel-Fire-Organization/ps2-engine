@@ -259,7 +259,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
     // ctx->type is the caller-supplied hint; the header's type is what the asset
     // packer stamped and should always be preferred. Update entry->type so that
     // later unload / get calls use the correct Raylib handle union member.
-    
+
     // Validate header.type is within the supported ResourceType enum range.
     // A corrupt asset or out-of-date packer can produce invalid type values.
     if (header.type >= 4) // RES_TEXTURE=0, RES_MODEL=1, RES_SOUND=2, RES_FONT=3
@@ -269,7 +269,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         Engine_PoolFreeMain(ctx);
         return;
     }
-    
+
     entry->type = (ResourceType)header.type;
 
     switch ((ResourceType)header.type)
@@ -437,7 +437,7 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
         return false;
 
     memcpy(outHeader, data, sizeof(AssetFileHeader));
-    
+
     // Force null-termination of header strings to guard against malformed/corrupt
     // assets. Without this, missing terminators can cause LoadImageFromMemory and
     // dependency lookups to read past the header into the payload or other memory.

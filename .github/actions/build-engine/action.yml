@@ -21,7 +21,8 @@ runs:
     - name: Install build dependencies
       shell: sh
       run: |
-        apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison gettext gmp-dev mpfr-dev mpc1-dev zlib-dev python3
+        apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison \ 
+        gettext gmp-dev mpfr-dev mpc1-dev zlib-dev python3 python3-pil
         
         # Conditionally install gcompat if requested
         if [ "${{ inputs.install_gcompat }}" = "true" ]; then
