@@ -12,11 +12,19 @@ bool Engine_Level_Load(Level* level)
         return false;
 
     s_LoadedCount = 0;
-
-    for (uint32_t i = 0; i < level->requiredCount; i++)
+    
+    // Clamp requiredCount to LEVEL_MAX_RESOURCES_COUNT to prevent out-of-bounds
+    // access to s_LoadedHandles[] and to align the success check logic.
+    uint32_t effectiveCount = level->requiredCount;
+    if (effectiveCount > LEVEL_MAX_RESOURCES_COUNT)
     {
-        if (i >= LEVEL_MAX_RESOURCES_COUNT)
-            break;
+        Engine_LogError("Level '%s': requiredCount %u exceeds LEVEL_MAX_RESOURCES_COUNT (%d), clamping",
+                        level->name, level->requiredCount, LEVEL_MAX_RESOURCES_COUNT);
+        effectiveCount = LEVEL_MAX_RESOURCES_COUNT;
+    }
+
+    for (uint32_t i = 0; i < effectiveCount; i++)
+    {
 
         const char* path = level->requiredResources[i];
         if (path[0] == '\0')
@@ -39,12 +47,12 @@ bool Engine_Level_Load(Level* level)
         }
     }
 
-    if (s_LoadedCount != level->requiredCount)
+    if (s_LoadedCount != effectiveCount)
     {
         // Partial failure — rollback every handle already pinned so we don't
         // leak pinned resources or corrupt the GS VRAM / resource-table budget.
         Engine_LogError("Level '%s': only %u/%u required resources loaded — rolling back", level->name, s_LoadedCount,
-                        level->requiredCount);
+                        effectiveCount);
 
         for (uint32_t i = 0; i < s_LoadedCount; i++)
         {

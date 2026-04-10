@@ -223,7 +223,9 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
     if (!data || size == 0)
     {
         Engine_LogError("Resource async load failed for slot %d (%s)", idx, entry->key);
-        entry->state = RES_STATE_EMPTY;
+        // Unload the entry to clear metadata, decrement any partial dep refs, and
+        // bump generation so stale DepHandles won't point to a future occupant.
+        Internal_UnloadEntry(idx);
         Engine_PoolFreeMain(ctx);
         return;
     }
@@ -257,6 +259,17 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
     // ctx->type is the caller-supplied hint; the header's type is what the asset
     // packer stamped and should always be preferred. Update entry->type so that
     // later unload / get calls use the correct Raylib handle union member.
+    
+    // Validate header.type is within the supported ResourceType enum range.
+    // A corrupt asset or out-of-date packer can produce invalid type values.
+    if (header.type >= 4) // RES_TEXTURE=0, RES_MODEL=1, RES_SOUND=2, RES_FONT=3
+    {
+        Engine_LogError("Resource: invalid type %u in .ps2a header for slot %d (%s)", header.type, idx, entry->key);
+        Internal_UnloadEntry(idx);
+        Engine_PoolFreeMain(ctx);
+        return;
+    }
+    
     entry->type = (ResourceType)header.type;
 
     switch ((ResourceType)header.type)
@@ -384,6 +397,11 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         Engine_LogError("Resource: unexpected async model load for slot %d", idx);
         Internal_UnloadEntry(idx);
         break;
+    default:
+        // Should never reach here if validation above is correct, but defensive
+        Engine_LogError("Resource: unknown type %u for slot %d (%s)", header.type, idx, entry->key);
+        Internal_UnloadEntry(idx);
+        break;
     }
 
     Engine_PoolFreeMain(ctx);
@@ -419,6 +437,15 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
         return false;
 
     memcpy(outHeader, data, sizeof(AssetFileHeader));
+    
+    // Force null-termination of header strings to guard against malformed/corrupt
+    // assets. Without this, missing terminators can cause LoadImageFromMemory and
+    // dependency lookups to read past the header into the payload or other memory.
+    outHeader->ext[sizeof(outHeader->ext) - 1] = '\0';
+    for (uint8_t d = 0; d < RES_MAX_DEPENDENCIES; d++)
+    {
+        outHeader->deps[d][IO_FILE_MAX_PATH - 1] = '\0';
+    }
 
     if (outHeader->magic != RES_ASSET_MAGIC)
     {

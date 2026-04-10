@@ -108,26 +108,40 @@ static void IOThreadEntry(void* arg)
                 {
                     Engine_LogError("IO: File seek failed. File: %s", filepath);
                     fclose(f);
-                    return;
-                }
-                size = (size_t)sizeL;
-                fseek(f, 0, SEEK_SET);
-
-                if (size > IO_READ_BUFFER_SIZE)
-                {
-                    // File exceeds the static buffer cap. Reject rather than truncate
-                    // — a truncated asset would silently corrupt the decoded resource.
-                    Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath,
-                                    size, IO_READ_BUFFER_SIZE);
-                    fclose(f);
-                    size = 0;
-                    // data stays NULL; callback receives (NULL, 0, userData).
+                    // Treat as per-request failure: data=NULL, size=0.
+                    // Continue to dispatch path below so callback gets notified.
                 }
                 else
                 {
-                    fread(s_SharedReadBuffer, 1, size, f);
-                    fclose(f);
-                    data = s_SharedReadBuffer;
+                    size = (size_t)sizeL;
+                    fseek(f, 0, SEEK_SET);
+
+                    if (size > IO_READ_BUFFER_SIZE)
+                    {
+                        // File exceeds the static buffer cap. Reject rather than truncate
+                        // — a truncated asset would silently corrupt the decoded resource.
+                        Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath,
+                                        size, IO_READ_BUFFER_SIZE);
+                        fclose(f);
+                        size = 0;
+                        // data stays NULL; callback receives (NULL, 0, userData).
+                    }
+                    else
+                    {
+                        const size_t bytesRead = fread(s_SharedReadBuffer, 1, size, f);
+                        fclose(f);
+                        if (bytesRead != size)
+                        {
+                            Engine_LogError("IO: Short read for '%s': expected %zu, got %zu", filepath, size,
+                                            bytesRead);
+                            size = 0;
+                            // data stays NULL; downstream decoders would see truncated/garbage data.
+                        }
+                        else
+                        {
+                            data = s_SharedReadBuffer;
+                        }
+                    }
                 }
             }
             else
