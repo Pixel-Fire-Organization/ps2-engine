@@ -1,0 +1,86 @@
+name: Lint and Security Checks
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  check-style:
+    name: Clang-Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get install -y clang-format
+
+      - name: Check code formatting
+        run: |
+          find engine app -type f \( -name '*.c' -o -name '*.h' \) -exec clang-format --dry-run --Werror {} +
+
+  analyze-cppcheck:
+    name: Cppcheck Security Scan
+    needs: check-style
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Cppcheck Analysis
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ghcr.io/ps2dev/ps2sdk-ports:latest sh -c "
+            apk add --no-cache build-base cmake cppcheck
+          
+            cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          
+            # Added unmatchedSuppression to prevent locationless internal warnings
+            cppcheck --project=build/compile_commands.json \
+              --enable=all \
+              --inconclusive \
+              --xml --xml-version=2 \
+              --suppress=*:thirdparty/* \
+              --suppress=missingIncludeSystem \
+              --suppress=missingInclude \
+              --suppress=unmatchedSuppression \
+              2> cppcheck-report.xml
+          
+            chmod 666 cppcheck-report.xml
+          "
+
+      - name: Convert Cppcheck XML to SARIF
+        uses: Flast/cppcheck-sarif@v2
+        with:
+          input: 'cppcheck-report.xml'
+          output: 'cppcheck.sarif'
+
+      - name: Clean Invalid SARIF Results
+        run: |
+          # This filter now explicitly checks that:
+          # 1. The locations array exists and has at least 1 item.
+          # 2. A valid file path (uri) exists.
+          # 3. The starting line is >= 1.
+          jq '(.runs[].results) |= map(select(
+            .locations != null and 
+            (.locations | length > 0) and 
+            try (
+              .locations[0].physicalLocation.artifactLocation.uri != null and 
+              .locations[0].physicalLocation.artifactLocation.uri != "" and 
+              .locations[0].physicalLocation.region.startLine >= 1
+            ) catch false
+          ))' cppcheck.sarif > cppcheck-cleaned.sarif
+
+      - name: Upload Analysis to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'cppcheck-cleaned.sarif'
+          category: 'cppcheck'

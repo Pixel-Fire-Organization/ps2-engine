@@ -12,6 +12,7 @@ This guide configures CLion to build, run, and analyze the PS2 engine using the 
 | **WSL2 + Ubuntu** | With the PS2 toolchain installed at `/usr/local/ps2dev` (see [PS2SDK_SETUP.md](PS2SDK_SETUP.md)) |
 | **PCSX2**         | Installed on your platform (for the `run-emulator` target)                                       |
 | **genisoimage**   | Installed in WSL (`sudo apt install genisoimage`) for ISO generation                             |
+| **python3**       | Installed in WSL (`sudo apt install python3`) for asset packing (`pack_assets.py`)               |
 
 > `PS2DEV` does **not** need to be in your `~/.bashrc` for CLion — the default path `/usr/local/ps2dev` is hardcoded in `CMakePresets.json`. You only need it exported if you run builds from a terminal directly. If your toolchain is at a non-standard path, see the [Troubleshooting](#troubleshooting) section.
 

@@ -1,15 +1,15 @@
 # runEmulator.ps1
-# Usage: ./scripts/runEmulator.ps1 [[-IsoPath] <String>] [[-Pcsx2Path] <String>]
+# Usage: ./scripts/runEmulator.ps1 [[-FilePath] <String>] [[-Pcsx2Path] <String>]
+# FilePath can be an ISO or an ELF — PCSX2 auto-detects the format.
 # Example: ./scripts/runEmulator.ps1 -Pcsx2Path "D:\Tools\pcsx2.exe"
 
 param(
-    [string]$IsoPath,
+    [string]$FilePath,
     [string]$Pcsx2Path
 )
 
-# 1. Resolve PCSX2 Path
 if (-not $Pcsx2Path) {
-    # Common Windows locations
+
     $Pcsx2Paths = @(
         "C:\PCSX2\pcsx2-qt.exe",
         "C:\Program Files\PCSX2\pcsx2-qt.exe",
@@ -29,21 +29,21 @@ if (-not $Pcsx2Path -or -not (Test-Path $Pcsx2Path)) {
     exit 1
 }
 
-# 2. Resolve ISO Path
+
 $ProjectRoot = Get-Item -Path "$PSScriptRoot\.."
-if (-not $IsoPath) {
-    $IsoPath = Join-Path $ProjectRoot.FullName "exec\engine.iso"
+if (-not $FilePath) {
+    $FilePath = Join-Path $ProjectRoot.FullName "exec\engine.iso"
 } else {
-    $IsoPath = Resolve-Path $IsoPath -ErrorAction SilentlyContinue
+    $FilePath = Resolve-Path $FilePath -ErrorAction SilentlyContinue
 }
 
-if (-not $IsoPath -or -not (Test-Path $IsoPath)) {
-    Write-Error "ISO not found at '$IsoPath'. Please build the project first."
+if (-not $FilePath -or -not (Test-Path $FilePath)) {
+    Write-Error "Game file not found at '$FilePath'. Please build the project first."
     exit 1
 }
 
 Write-Host "=== Launching PCSX2 ===" -ForegroundColor Cyan
 Write-Host "PCSX2: $Pcsx2Path"
-Write-Host "ISO:   $IsoPath"
+Write-Host "File:  $FilePath"
 
-Start-Process -FilePath $Pcsx2Path -ArgumentList "-portable", "-batch", "`"$IsoPath`""
+Start-Process -FilePath $Pcsx2Path -ArgumentList "-portable", "-batch", "`"$FilePath`""

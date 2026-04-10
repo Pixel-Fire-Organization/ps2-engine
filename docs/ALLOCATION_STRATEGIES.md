@@ -1,65 +1,150 @@
 # PS2 Engine Allocation Strategies
 
-This document explains the architectural design behind our memory management system. Because the PlayStation 2 has a unified but limited **32 MB Main RAM** and no hardware memory protection, we rely on two distinct allocation models to eliminate fragmentation and maximize performance.
+This document explains the architectural design behind our memory management system. The PlayStation 2 has a unified but
+limited **32 MB Main RAM** and no hardware memory protection. We use three distinct allocation models to eliminate
+fragmentation and maximize performance.
 
 ---
 
 ## 1. Specialized Arenas (Segmented Slots)
-**Best For**: Large, long-lived, and immutable assets (Textures, Meshes, Audio).
+
+**Best For**: Engine-internal data — Lua VMs, configuration, level caches.
 
 ### The Model:
-Each major asset type is assigned a specialized "Segment" of the 30MB engine arena. These segments are intentionally partitioned into **Fixed-Capacity Slots** (Buckets) aligned to **16 KB**.
+
+Each internal subsystem is assigned a dedicated "Segment" of the 7MB engine arena. These segments are partitioned into *
+*Fixed-Capacity Slots** aligned to **16 KB**.
 
 - **Logic**: Linear Stack Allocation within a slot.
-- **Replacement**: Instant O(1) overwriting of a slot (e.g., swapping a character model).
-- **Freeing**: Individual assets cannot be "freed." You must `Engine_ClearSlot` to wipe a bucket or `Engine_ArenaReset` to wipe an entire segment.
-- **Hardware Optimization**: Every slot start is 16KB aligned, which is the hardware "sweet spot" for for PS2 DMAC and VIF transfers.
+- **Replacement**: Instant O(1) overwriting of a slot.
+- **Freeing**: Individual assets cannot be "freed." Use `Engine_ClearSlot` to wipe a bucket or `Engine_ArenaReset` to
+  wipe an entire segment (e.g., on level transition).
+- **Hardware Optimization**: Every slot start is 16KB aligned for PS2 DMAC and VIF transfers.
 
 **Usage Example**:
+
 ```c
-// Replacing the primary character mesh in Slot 0
-Engine_LoadToSlot(ARENA_MESH, 0, newMeshData, size);
+// Store config data in Config slot 0
+Engine_LoadToSlot(ARENA_CONFIG, 0, configData, size);
 ```
 
 ---
 
-## 2. Global Memory Pool (`g_MainPool`)
-**Best For**: Small, short-lived, and dynamic objects (Projectiles, Particles, UI Widgets, Entities).
+## 2. Resource Manager (Raylib Delegation)
+
+**Best For**: GFX and audio resources — textures, models, sounds, fonts.
 
 ### The Model:
-The Memory Pool is a **Fixed-Size Block Allocator** (Default: 256 bytes per chunk). It uses a "Free List" to manage available space.
+
+Raylib owns all GFX/audio allocation via `RL_MALLOC`/`RL_FREE`. The engine's **Resource Manager** (`EngineResource.h`)
+wraps this with a **64-entry handle table** that provides:
+
+- **Async Loading**: Files are streamed from disc via `Engine_IO_ReadAsync`, then decoded via Raylib's `*FromMemory`
+  APIs.
+- **Reference Counting**: Resources track dependencies. A texture referenced by a model has `refCount > 0` and cannot be
+  auto-evicted.
+- **LRU Eviction**: When the table is full, the least recently used unpinned resource with `refCount == 0` is evicted.
+- **Pinning**: Critical resources (UI fonts, HUD) can be pinned to prevent eviction.
+- **Sync Exception**: Models are loaded synchronously via `LoadModel()` (no `FromMemory` variant exists in Raylib).
+
+**Usage Example**:
+
+```c
+int32_t tex = Engine_Resource_Load(RES_TEXTURE, "cdrom0:\\RASSETS\\PLAYER_TEX.PS2A;1");
+// ... later in game loop ...
+if (Engine_Resource_IsReady(tex)) {
+    Texture2D *t = (Texture2D *)Engine_Resource_Get(tex);
+    DrawTexture(*t, 0, 0, WHITE);
+}
+```
+
+See [RESOURCE_MANAGER.md](RESOURCE_MANAGER.md) for full documentation.
+
+---
+
+## 3. Memory Pool (`g_MainPool`)
+
+**Best For**: Small, short-lived, temporary objects — IO metadata, decode contexts, particles, entities.
+
+### The Model:
+
+A **Fixed-Size Block Allocator** (256 bytes per chunk, 1 MB total). Uses a free-list for O(1) alloc/free.
 
 - **Logic**: Linked-list of free chunks.
 - **Replacement**: Frequent allocation and deallocation in arbitrary order.
-- **Freeing**: Full O(1) support for `Engine_PoolFree`.
-- **Fragmentation**: Zero. Because every chunk is identical in size, any "hole" left by a deleted object is always perfectly shaped for a new one.
+- **Freeing**: Full O(1) support via `Engine_PoolFreeMain`.
+- **Fragmentation**: Zero — every chunk is identical in size.
+- **Role**: Scratch allocator. Objects allocated from the pool are either moved into an arena or freed quickly. Never
+  used for long-lived storage.
 
 **Usage Example**:
+
 ```c
-// Creating a transient particle effect
-Particle* p = (Particle*)Engine_PoolAlloc(&g_MainPool);
-// ... simulate ...
-Engine_PoolFree(&g_MainPool, p);
+// Allocate a temporary context for an async load
+ResourceLoadContext *ctx = (ResourceLoadContext *)Engine_PoolAllocMain();
+// ... use it ...
+Engine_PoolFreeMain(ctx);
+```
+
+---
+
+## 4. Async IO Read Buffer (Static, Single Shared)
+
+**Best For**: The backing storage that the background IO thread reads raw file bytes into before the callback is
+invoked.
+
+### The Model:
+
+`EngineIO.c` maintains a single `static uint8_t s_SharedReadBuffer[IO_READ_BUFFER_SIZE]`, 16-byte aligned (512 KB). Only
+one request is ever reading into or decoding from this buffer at a time, enforced by a binary semaphore (
+`s_IOBufferSema`).
+
+- **No heap involvement**: `malloc`/`free` are never called for IO reads.
+- **Bounded**: Files larger than `IO_READ_BUFFER_SIZE` are rejected immediately with a logged error; the callback
+  receives `(NULL, 0, userData)` and handles the failure.
+- **Race-safe (two guards)**:
+    - `s_IOBufferSema` (binary, init=1): IO thread acquires it before reading; main thread releases it after the
+      callback returns and the slot is `IDLE`. Prevents the IO thread from overwriting the buffer while the callback
+      still holds a pointer to it.
+    - `IO_STATE_DISPATCHING`: slot remains in this state during the callback so it cannot be re-queued and so the
+      main-thread-held pointer stays unambiguously valid.
+- **Memory cost**: `IO_READ_BUFFER_SIZE` = **512 KB in BSS**. A per-slot design (`16 × 512 KB = 8 MB`) pushed `.bss` to
+  virtual address `0x30000000`, which has no TLB mapping on the PS2 EE, causing a store TLB miss cascade in the crt0
+  BSS-zero loop at startup.
+- **Throughput**: Reads are serialised through the single buffer (IO thread blocks on the sema until the previous
+  callback finishes). On PS2 the CD-ROM bottleneck dominates latency, so this has no measurable impact.
+
+**Constants (both in `Constants.h`)**:
+
+```c
+#define IO_ASYNC_MAX_REQUESTS 16    // max queued requests (metadata only — no per-slot buffer)
+#define IO_READ_BUFFER_SIZE (512 * 1024)  // single shared buffer size / max file size per async read
 ```
 
 ---
 
 ## Summary Comparison Table
 
-| Feature | **Specialized Arenas** | **Memory Pool (g_MainPool)** |
-| :--- | :--- | :--- |
-| **Data Structure** | Segmented Stack / Slot | Block-based Free-List |
-| **Asset Size** | Variable (up to slot capacity) | **Fixed** (Default: 256B) |
-| **Manual Freeing** | No (Reset/Clear only) | **Yes** (Instant O(1)) |
-| **Alignment** | **16 KB** (DMA Optimized) | 16 Byte (QW Aligned) |
-| **Primary Goal** | Storing the **World** | Storing the **Action** |
+| Feature            | **Specialized Arenas**         | **Resource Manager**      | **Memory Pool**       | **IO Read Buffers**    |
+|:-------------------|:-------------------------------|:--------------------------|:----------------------|:-----------------------|
+| **Data Structure** | Segmented Stack / Slot         | Handle Table + Raylib     | Block-based Free-List | Fixed 2-D static array |
+| **Asset Size**     | Variable (up to slot capacity) | Variable (Raylib-managed) | **Fixed** (256B)      | **Fixed** (512 KB max) |
+| **Manual Freeing** | No (Reset/Clear only)          | **Yes** (Unload)          | **Yes** (O(1))        | No (static lifetime)   |
+| **Auto Eviction**  | No                             | **Yes** (LRU)             | No                    | No                     |
+| **Alignment**      | **16 KB** (DMA Optimized)      | Raylib-managed            | 16 Byte (QW)          | **16 Byte** (GS DMA)   |
+| **Primary Goal**   | Storing **Engine State**       | Storing **Assets**        | Storing **Temp Data** | **Async file reads**   |
 
 ---
 
 ## Which one should I use?
 
-1. **"I'm loading a level background texture."** -> `ARENA_TEXTURE`
-2. **"I'm spawning 50 spark particles."** -> `g_MainPool`
-3. **"I'm loading a new enemy model."** -> `ARENA_MESH`
-4. **"I need a place to store the scoreboard's current string."** -> `ARENA_UI` or `ARENA_SYSTEM`
-5. **"I'm creating a temporary task for an async IO read."** -> `g_MainPool`
+1. **"I'm loading a level background texture."** → `Engine_Resource_Load(RES_TEXTURE, ...)`
+2. **"I'm spawning 50 spark particles."** → `Engine_PoolAllocMain()`
+3. **"I'm loading a new enemy model."** → `Engine_Resource_Load(RES_MODEL, ...)`
+4. **"I need a place to store the scoreboard config."** → `ARENA_CONFIG`
+5. **"I'm creating a temporary context for an async IO callback."** → `Engine_PoolAllocMain()`
+6. **"I'm caching level entity spawn points."** → `ARENA_LEVEL_DATA`
+7. **"I'm loading a Lua script for an NPC."** → `ARENA_SCRIPT` (via `Engine_Script_Load`)
+8. **"I need to read a raw file asynchronously."** → `Engine_IO_ReadAsync()` — data arrives in a static
+   `s_ReadBuffers[slot]` and is valid only for the duration of the callback. Files larger than `IO_READ_BUFFER_SIZE` (
+   512 KB) are rejected.

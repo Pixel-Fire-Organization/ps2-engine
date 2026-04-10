@@ -1,20 +1,18 @@
 #!/usr/bin/bash
 
 # runEmulator.sh
-# Usage: ./scripts/runEmulator.sh [[IsoPath]] [[Pcsx2Path]]
+# Usage: ./scripts/runEmulator.sh [[FilePath]] [[Pcsx2Path]]
+# FilePath can be an ISO or an ELF — PCSX2 auto-detects the format.
 
-# 1. Determine ISO Path
-ISO_IN=${1:-"./exec/engine.iso"}
-ISO_PATH=$(realpath "$ISO_IN")
+FILE_IN=${1:-"./exec/engine.iso"}
+FILE_PATH=$(realpath "$FILE_IN")
 
-# 2. Detect Operating System
 OS_TYPE=$(uname -s)
 IS_WSL=false
 if grep -qi microsoft /proc/version 2>/dev/null; then
     IS_WSL=true
 fi
 
-# 3. Determine PCSX2 Path (User override first)
 PCSX2_PATH=${2:-""}
 
 if [[ -z "$PCSX2_PATH" ]]; then
@@ -34,28 +32,25 @@ if [[ -z "$PCSX2_PATH" ]]; then
     fi
 fi
 
-if [[ -z "$PCSX2_PATH" ]] || [[ ! -f "$PCSX2_PATH" && ! -x $(command -v "$PCSX2_PATH") ]]; then
+if [[ -z "$PCSX2_PATH" ]] || [[ ! -f "$PCSX2_PATH" && ! -x "$(command -v "$PCSX2_PATH")" ]]; then
     echo "Error: PCSX2 not found."
-    echo "Usage: ./scripts/runEmulator.sh [IsoPath] [Pcsx2Path]"
+    echo "Usage: ./scripts/runEmulator.sh [FilePath] [Pcsx2Path]"
     exit 1
 fi
 
-# 4. Handle Path Conversions (WSL Specific)
-ISO_FINAL="$ISO_PATH"
+FILE_FINAL="$FILE_PATH"
 if [[ "$IS_WSL" == true ]]; then
     if command -v wslpath > /dev/null; then
-        ISO_FINAL=$(wslpath -w "$ISO_PATH" 2>/dev/null || echo "$ISO_PATH")
+        FILE_FINAL=$(wslpath -w "$FILE_PATH" 2>/dev/null || echo "$FILE_PATH")
     fi
 fi
 
 echo "=== Launching PCSX2 ($OS_TYPE) ==="
 echo "PCSX2: $PCSX2_PATH"
-echo "ISO:   $ISO_FINAL"
+echo "File:  $FILE_FINAL"
 
-# 5. Run PCSX2
 if [[ "$OS_TYPE" == "Darwin" ]]; then
-    # On macOS, we might need 'open' or just run it directly
-    "$PCSX2_PATH" -batch "$ISO_FINAL" &
+    "$PCSX2_PATH" -batch "$FILE_FINAL" &
 else
-    "$PCSX2_PATH" -portable -batch "$ISO_FINAL" &
+    "$PCSX2_PATH" -portable -batch "$FILE_FINAL" &
 fi

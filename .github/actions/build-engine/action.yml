@@ -1,0 +1,35 @@
+name: 'Build PS2 Engine'
+description: 'Installs dependencies and runs the engine build script'
+
+inputs:
+  build_type:
+    description: 'Type of build (debug, release)'
+    required: true
+    default: 'debug'
+  region:
+    description: 'Region (PAL, NTSC)'
+    required: true
+    default: 'PAL'
+  install_gcompat:
+    description: 'Install gcompat (Required for CodeQL on Alpine)'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install build dependencies
+      shell: sh
+      run: |
+        apk add --no-cache build-base bash cmake cdrkit p7zip zlib texinfo flex bison gettext gmp-dev mpfr-dev mpc1-dev zlib-dev python3 py3-pillow
+        
+        # Conditionally install gcompat if requested
+        if [ "${{ inputs.install_gcompat }}" = "true" ]; then
+          apk add --no-cache gcompat
+        fi
+
+    - name: Build engine via Script
+      shell: bash
+      run: |
+        chmod +x ./scripts/build.sh
+        bash ./scripts/build.sh ${{ inputs.build_type }} ${{ inputs.region }}
