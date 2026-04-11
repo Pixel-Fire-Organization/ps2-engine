@@ -7,6 +7,8 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include "EngineInput.h"
+
 
 #define MAX_SCRIPT_UNITS SCRIPTING_LUA_MAX_UNITS // (16 slots = 8 pairs)
 static ScriptUnit s_ScriptUnits[MAX_SCRIPT_UNITS];
@@ -343,10 +345,9 @@ static int Lua_Graphics_MakeCamera3D(lua_State* L)
     }
 
     Camera3D cam;
-    cam.position =
-        (Vector3){(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3)};
-    cam.target = (Vector3){(float)luaL_checknumber(L, 4), (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6)};
-    cam.up = (Vector3){(float)luaL_checknumber(L, 7), (float)luaL_checknumber(L, 8), (float)luaL_checknumber(L, 9)};
+    cam.position = Vector3{(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3)};
+    cam.target = Vector3{(float)luaL_checknumber(L, 4), (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6)};
+    cam.up = Vector3{(float)luaL_checknumber(L, 7), (float)luaL_checknumber(L, 8), (float)luaL_checknumber(L, 9)};
     cam.fovy = (float)luaL_checknumber(L, 10);
     cam.projection = (int)luaL_checkinteger(L, 11);
 
@@ -380,8 +381,8 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
     }
 
     Camera2D cam;
-    cam.offset = (Vector2){(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2)};
-    cam.target = (Vector2){(float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4)};
+    cam.offset = Vector2{(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2)};
+    cam.target = Vector2{(float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4)};
     cam.rotation = (float)luaL_checknumber(L, 5);
     cam.zoom = (float)luaL_checknumber(L, 6);
 
@@ -537,7 +538,7 @@ static int Lua_Graphics_Clear(lua_State* L)
         lua_geti(L, 1, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        ClearBackground((Color){r, g, b, a});
+        ClearBackground(Color{r, g, b, a});
     }
     return 0;
 }
@@ -560,7 +561,7 @@ static int Lua_Graphics_DrawRect(lua_State* L)
         lua_geti(L, 5, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        DrawRectangle((int)x, (int)y, (int)w, (int)h, (Color){r, g, b, a});
+        DrawRectangle((int)x, (int)y, (int)w, (int)h, Color{r, g, b, a});
     }
     return 0;
 }
@@ -583,7 +584,7 @@ static int Lua_Graphics_DrawCube(lua_State* L)
         lua_geti(L, 5, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        DrawCube((Vector3){px, py, pz}, sz, sz, sz, (Color){r, g, b, a});
+        DrawCube(Vector3{px, py, pz}, sz, sz, sz, Color{r, g, b, a});
     }
     return 0;
 }
@@ -619,7 +620,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     if (!tex || tex->id == 0)
     {
         // Resource not ready or GPU upload failed — fall back to a solid draw.
-        DrawCube((Vector3){px, py, pz}, sz, sz, sz, WHITE);
+        DrawCube(Vector3{px, py, pz}, sz, sz, sz, WHITE);
         return 0;
     }
 
@@ -635,7 +636,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
         lua_geti(L, 6, 4);
         unsigned char a = (unsigned char)lua_tointeger(L, -1);
         lua_pop(L, 4);
-        tint = (Color){r, g, b, a};
+        tint = Color{r, g, b, a};
     }
 
     float h = sz / 2.0f;
@@ -715,53 +716,95 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
 }
 
 // Input
+/// input.is_pad_pressed(port, btn)
 static int Lua_Input_IsPadPressed(lua_State* L)
 {
-    const char* btn = luaL_checkstring(L, 1);
+    const lua_Number port = luaL_checknumber(L, 1);
+    const char* btn = luaL_checkstring(L, 2);
     bool pressed = false;
+    GamePadButton button = GamePadButton::Unknown;
 
     // Face buttons
     if (strcmp(btn, "x") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+        button = GamePadButton::Cross;
     else if (strcmp(btn, "cir") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+        button = GamePadButton::Circle;
     else if (strcmp(btn, "squ") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+        button = GamePadButton::Square;
     else if (strcmp(btn, "tri") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_UP);
+        button = GamePadButton::Triangle;
     // D-pad
     else if (strcmp(btn, "dpad_up") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_UP);
+        button = GamePadButton::DPadUp;
     else if (strcmp(btn, "dpad_down") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
+        button = GamePadButton::DPadDown;
     else if (strcmp(btn, "dpad_left") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_LEFT);
+        button = GamePadButton::DPadLeft;
     else if (strcmp(btn, "dpad_right") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
+        button = GamePadButton::DPadRight;
     // Shoulder buttons
     else if (strcmp(btn, "l1") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
+        button = GamePadButton::L1;
     else if (strcmp(btn, "l2") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_TRIGGER_2);
+        button = GamePadButton::L2;
     else if (strcmp(btn, "r1") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
+        button = GamePadButton::R1;
     else if (strcmp(btn, "r2") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
+        button = GamePadButton::R2;
     // Stick clicks
     else if (strcmp(btn, "l3") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_LEFT_THUMB);
+        button = GamePadButton::L3;
     else if (strcmp(btn, "r3") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_THUMB);
+        button = GamePadButton::R3;
     // Menu
     else if (strcmp(btn, "start") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_MIDDLE_RIGHT);
+        button = GamePadButton::Start;
     else if (strcmp(btn, "select") == 0)
-        pressed = IsGamepadButtonDown(0, GAMEPAD_BUTTON_MIDDLE_LEFT);
+        button = GamePadButton::Select;
     else
         Engine_LogError("[Lua] input.is_pad_pressed: unknown button '%s'", btn);
 
+    pressed = IsGamePadButtonPressed(static_cast<uint8_t>(port), button);
+
     lua_pushboolean(L, pressed);
     return 1;
+}
+
+static int Lua_Input_GetJoyStatus(lua_State* L)
+{
+    const lua_Number port = luaL_checknumber(L, 1);
+    const char* joystick = luaL_checkstring(L, 2);
+    int positionX = 0;
+    int positionY = 0;
+    GamePadJoystick joy = GamePadJoystick::UnknownJoystick;
+
+    if (port < 0 || port >= MAX_GAME_PAD_PORTS)
+    {
+        Engine_LogError("[Lua] input.get_joy_status: invalid port specified '%d'", port);
+        lua_pushnumber(L, -1);
+        lua_pushnumber(L, -1);
+        return 2;
+    }
+
+    if (strncmp(joystick, "x", 1) == 0)
+        joy = GamePadJoystick::LeftJoystick;
+    else if (strncmp(joystick, "y", 1) == 0)
+        joy = GamePadJoystick::RightJoystick;
+    else
+    {
+        Engine_LogError("[Lua] input.get_joy_status: unknown joystick '%s'", joystick);
+        lua_pushnumber(L, -1);
+        lua_pushnumber(L, -1);
+        return 2;
+    }
+
+    const auto vec = GetGamePadAxis((uint8_t)port, joy);
+    positionX = (int)vec.x;
+    positionY = (int)vec.y;
+
+    lua_pushnumber(L, positionX);
+    lua_pushnumber(L, positionY);
+    return 2;
 }
 
 static void RegisterCoreBindings(lua_State* L)
@@ -809,6 +852,8 @@ static void RegisterInputBindings(lua_State* L)
     lua_newtable(L);
     lua_pushcfunction(L, Lua_Input_IsPadPressed);
     lua_setfield(L, -2, "is_pad_pressed");
+    lua_pushcfunction(L, Lua_Input_GetJoyStatus);
+    lua_setfield(L, -2, "get_joy_status");
     lua_setglobal(L, "input");
 }
 
