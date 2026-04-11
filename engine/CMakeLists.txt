@@ -5,14 +5,15 @@ OFF exposes the full engine include directory (dev/test mode)."
 )
 
 add_library(ps2_engine STATIC
-    src/EngineCore.c
-    src/EngineDebug.c
-    src/EngineMemory.c
-    src/EngineIO.c
-    src/EngineResource.c
-    src/EngineLevel.c
-    src/EngineScript.c
-    src/EngineApp.c
+        src/EngineCore.cpp
+        src/EngineDebug.cpp
+        src/EngineMemory.cpp
+        src/EngineIO.cpp
+        src/EngineResource.cpp
+        src/EngineLevel.cpp
+        src/EngineScript.cpp
+        src/EngineApp.cpp
+        src/EngineInput.cpp
 
     # Headers
     include/Engine.h
@@ -26,6 +27,7 @@ add_library(ps2_engine STATIC
     include/EngineResource.h
     include/EngineLevel.h
     include/EngineScript.h
+        include/EngineInput.h
 )
 
 # Internal engine code always sees the full include directory.
