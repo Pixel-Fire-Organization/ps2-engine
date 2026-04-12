@@ -2,6 +2,7 @@
 #include <raylib.h>
 #include <stdlib.h>
 #include "Engine.h"
+#include "build_engine_version.h"
 
 // ps2gl C API — needed for pglAddGsMemSlot() after InitWindow.
 // Must come after raylib.h (which sets up the PS2/GL include path).
@@ -13,6 +14,7 @@ static bool s_IsGFXInitialized = false;
 bool Engine_Init(EngineConfig config)
 {
     Engine_InitDebug();
+    Engine_LogInfo("Engine build version: %u", ENGINE_BUILD_VERSION);
 
     // Calculate total arena size from centralized constants
     size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE;
