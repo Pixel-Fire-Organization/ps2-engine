@@ -60,58 +60,127 @@ static void RegisterResourceBindings(lua_State* L);
 
 static void RegisterLevelBindings(lua_State* L);
 
+// ---------------------------------------------------------------------------
+// Minimal first-fit free-list heap — runs entirely within a pre-allocated
+// arena slot so Lua's GC can actually reclaim memory (the old bump allocator
+// returned NULL for free/realloc but never reclaimed space, causing OOM after
+// a few seconds of OnUpdate creating tables).
+// ---------------------------------------------------------------------------
+typedef struct
+{
+    uint32_t size; // Data region size (bytes), excluding this header
+    uint32_t free; // 1 = free, 0 = in-use
+} BlockHeader;
+
+// Header is always 8 bytes — keeps data 8-byte aligned on every alloc.
+#define HEAP_HEADER_SIZE ((size_t)sizeof(BlockHeader))
+// Minimum remainder to bother splitting a block (header + at least 8 bytes)
+#define HEAP_MIN_SPLIT (HEAP_HEADER_SIZE + 8u)
+
+static void Heap_Init(void* base, size_t capacity)
+{
+    BlockHeader* first = (BlockHeader*)base;
+    first->size = (uint32_t)(capacity - HEAP_HEADER_SIZE);
+    first->free = 1;
+}
+
+static void* Heap_Alloc(void* base, size_t capacity, size_t nsize)
+{
+    nsize = (nsize + 7u) & ~7u; // 8-byte align
+    uint8_t* cursor = (uint8_t*)base;
+    uint8_t* end = cursor + capacity;
+
+    while (cursor + HEAP_HEADER_SIZE <= end)
+    {
+        BlockHeader* block = (BlockHeader*)cursor;
+        if (block->free && (size_t)block->size >= nsize)
+        {
+            size_t remainder = (size_t)block->size - nsize;
+            if (remainder >= HEAP_MIN_SPLIT)
+            {
+                // Split: carve a new free block from the tail
+                BlockHeader* next = (BlockHeader*)(cursor + HEAP_HEADER_SIZE + nsize);
+                next->size = (uint32_t)(remainder - HEAP_HEADER_SIZE);
+                next->free = 1;
+                block->size = (uint32_t)nsize;
+            }
+            block->free = 0;
+            return cursor + HEAP_HEADER_SIZE;
+        }
+        cursor += HEAP_HEADER_SIZE + (size_t)block->size;
+    }
+    return NULL; // OOM
+}
+
+static void Heap_Free(void* base, size_t capacity, void* ptr)
+{
+    if (!ptr)
+        return;
+
+    BlockHeader* block = (BlockHeader*)((uint8_t*)ptr - HEAP_HEADER_SIZE);
+    block->free = 1;
+
+    // Forward coalescing: merge contiguous free blocks to reduce fragmentation
+    uint8_t* next = (uint8_t*)block + HEAP_HEADER_SIZE + (size_t)block->size;
+    uint8_t* end = (uint8_t*)base + capacity;
+    while (next + HEAP_HEADER_SIZE <= end)
+    {
+        BlockHeader* nextBlock = (BlockHeader*)next;
+        if (!nextBlock->free)
+            break;
+        block->size += (uint32_t)(HEAP_HEADER_SIZE + (size_t)nextBlock->size);
+        next = (uint8_t*)block + HEAP_HEADER_SIZE + (size_t)block->size;
+    }
+}
+
+static void* Heap_Realloc(void* base, size_t capacity, void* ptr, size_t osize, size_t nsize)
+{
+    BlockHeader* block = (BlockHeader*)((uint8_t*)ptr - HEAP_HEADER_SIZE);
+    size_t alignedN = (nsize + 7u) & ~7u;
+
+    if ((size_t)block->size >= alignedN)
+        return ptr; // Fits in place — no copy needed
+
+    void* newPtr = Heap_Alloc(base, capacity, nsize);
+    if (!newPtr)
+        return NULL;
+
+    memmove(newPtr, ptr, (osize < nsize) ? osize : nsize);
+    Heap_Free(base, capacity, ptr);
+    return newPtr;
+}
+
 // Custom allocator that restricts Lua to her assigned EVEN slot in ARENA_SCRIPT
 static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
 {
     ScriptUnit* unit = (ScriptUnit*)ud;
 
-    if (nsize == 0)
-    {
-        return NULL;
-    }
-
     void* slotBase = Engine_GetSlot(ARENA_SCRIPT, unit->slotIndex);
     size_t slotCapacity = Engine_GetSlotCapacity(ARENA_SCRIPT, unit->slotIndex);
 
-    // Guard: if the slot base is NULL the arena was never initialised
-    // (e.g. malloc returned NULL and the failure path wasn't taken).
-    // Returning NULL here instead of (uint8_t*)0 + offset = 0x0 prevents
-    // Lua from writing its state to physical address 0, which would corrupt
-    // the PS2 exception-vector table and low-memory ISR code.
+    // Guard: if the slot base is NULL the arena was never initialised.
+    // Returning NULL here prevents Lua from writing its state to address 0x0,
+    // which would corrupt the PS2 exception-vector table.
     if (!slotBase || !slotCapacity)
+        return NULL;
+
+    // Lazy-init: place one free block spanning the entire slot on first use.
+    if (!unit->heapReady)
     {
+        Heap_Init(slotBase, slotCapacity);
+        unit->heapReady = true;
+    }
+
+    if (nsize == 0)
+    {
+        Heap_Free(slotBase, slotCapacity, ptr);
         return NULL;
     }
 
     if (ptr == NULL)
-    {
-        // Linear allocation within the slot
-        size_t alignedOffset = (unit->heapOffset + 7) & ~7;
-        if (alignedOffset + nsize > slotCapacity)
-        {
-            return NULL;
-        }
+        return Heap_Alloc(slotBase, slotCapacity, nsize);
 
-        void* newPtr = (uint8_t*)slotBase + alignedOffset;
-        unit->heapOffset = alignedOffset + nsize;
-        return newPtr;
-    }
-    else
-    {
-        // Realloc: Move to new offset within the same slot.
-        // Use memmove (not memcpy) because source and destination may overlap
-        // when the bump pointer is only a few bytes ahead of the old block.
-        size_t alignedOffset = (unit->heapOffset + 7) & ~7;
-        if (alignedOffset + nsize > slotCapacity)
-        {
-            return NULL;
-        }
-
-        void* newPtr = (uint8_t*)slotBase + alignedOffset;
-        memmove(newPtr, ptr, (osize < nsize) ? osize : nsize);
-        unit->heapOffset = alignedOffset + nsize;
-        return newPtr;
-    }
+    return Heap_Realloc(slotBase, slotCapacity, ptr, osize, nsize);
 }
 
 static int Internal_Lua_Panic(lua_State* L)
@@ -128,7 +197,7 @@ bool Engine_Script_Init(void)
     for (int i = 0; i < MAX_SCRIPT_UNITS; i++)
     {
         s_ScriptUnits[i].slotIndex = i * 2;
-        s_ScriptUnits[i].heapOffset = 0;
+        s_ScriptUnits[i].heapReady = false;
         s_ScriptUnits[i].active = false;
 
         // Create the Lua State for this unit
@@ -718,6 +787,84 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Lua math type helpers — convert raylib math types to Lua tables
+// ---------------------------------------------------------------------------
+
+// Pushes {x, y} onto the Lua stack.
+static void Lua_PushVector2(lua_State* L, Vector2 v)
+{
+    lua_createtable(L, 0, 2);
+    lua_pushnumber(L, v.x);
+    lua_setfield(L, -2, "x");
+    lua_pushnumber(L, v.y);
+    lua_setfield(L, -2, "y");
+}
+
+// Pushes {x, y, z} onto the Lua stack.
+[[maybe_unused]] static void Lua_PushVector3(lua_State* L, Vector3 v)
+{
+    lua_createtable(L, 0, 3);
+    lua_pushnumber(L, v.x);
+    lua_setfield(L, -2, "x");
+    lua_pushnumber(L, v.y);
+    lua_setfield(L, -2, "y");
+    lua_pushnumber(L, v.z);
+    lua_setfield(L, -2, "z");
+}
+
+// Pushes {x, y, z, w} onto the Lua stack.
+[[maybe_unused]] static void Lua_PushVector4(lua_State* L, Vector4 v)
+{
+    lua_createtable(L, 0, 4);
+    lua_pushnumber(L, v.x);
+    lua_setfield(L, -2, "x");
+    lua_pushnumber(L, v.y);
+    lua_setfield(L, -2, "y");
+    lua_pushnumber(L, v.z);
+    lua_setfield(L, -2, "z");
+    lua_pushnumber(L, v.w);
+    lua_setfield(L, -2, "w");
+}
+
+// Pushes {m0..m15} onto the Lua stack (column-major, matching raylib's Matrix layout).
+[[maybe_unused]] static void Lua_PushMatrix(lua_State* L, Matrix m)
+{
+    lua_createtable(L, 0, 16);
+    lua_pushnumber(L, m.m0);
+    lua_setfield(L, -2, "m0");
+    lua_pushnumber(L, m.m1);
+    lua_setfield(L, -2, "m1");
+    lua_pushnumber(L, m.m2);
+    lua_setfield(L, -2, "m2");
+    lua_pushnumber(L, m.m3);
+    lua_setfield(L, -2, "m3");
+    lua_pushnumber(L, m.m4);
+    lua_setfield(L, -2, "m4");
+    lua_pushnumber(L, m.m5);
+    lua_setfield(L, -2, "m5");
+    lua_pushnumber(L, m.m6);
+    lua_setfield(L, -2, "m6");
+    lua_pushnumber(L, m.m7);
+    lua_setfield(L, -2, "m7");
+    lua_pushnumber(L, m.m8);
+    lua_setfield(L, -2, "m8");
+    lua_pushnumber(L, m.m9);
+    lua_setfield(L, -2, "m9");
+    lua_pushnumber(L, m.m10);
+    lua_setfield(L, -2, "m10");
+    lua_pushnumber(L, m.m11);
+    lua_setfield(L, -2, "m11");
+    lua_pushnumber(L, m.m12);
+    lua_setfield(L, -2, "m12");
+    lua_pushnumber(L, m.m13);
+    lua_setfield(L, -2, "m13");
+    lua_pushnumber(L, m.m14);
+    lua_setfield(L, -2, "m14");
+    lua_pushnumber(L, m.m15);
+    lua_setfield(L, -2, "m15");
+}
+
 // Input
 /// input.is_pad_pressed(port, btn)
 static int Lua_Input_IsPadPressed(lua_State* L)
@@ -773,41 +920,35 @@ static int Lua_Input_IsPadPressed(lua_State* L)
     return 1;
 }
 
+// input.get_joy_status(port, joystick) -> {x, y} or nil on error
+// joystick: "left" or "right"
 static int Lua_Input_GetJoyStatus(lua_State* L)
 {
     const lua_Number port = luaL_checknumber(L, 1);
     const char* joystick = luaL_checkstring(L, 2);
-    int positionX = 0;
-    int positionY = 0;
     GamePadJoystick joy = GamePadJoystick::UnknownJoystick;
 
     if (port < 0 || port >= MAX_GAME_PAD_PORTS)
     {
         Engine_LogError("[Lua] input.get_joy_status: invalid port specified '%d'", port);
-        lua_pushnumber(L, -1);
-        lua_pushnumber(L, -1);
-        return 2;
+        lua_pushnil(L);
+        return 1;
     }
 
-    if (strncmp(joystick, "x", 1) == 0)
+    if (strcmp(joystick, "left") == 0)
         joy = GamePadJoystick::LeftJoystick;
-    else if (strncmp(joystick, "y", 1) == 0)
+    else if (strcmp(joystick, "right") == 0)
         joy = GamePadJoystick::RightJoystick;
     else
     {
-        Engine_LogError("[Lua] input.get_joy_status: unknown joystick '%s'", joystick);
-        lua_pushnumber(L, -1);
-        lua_pushnumber(L, -1);
-        return 2;
+        Engine_LogError("[Lua] input.get_joy_status: unknown joystick '%s' (expected 'left' or 'right')", joystick);
+        lua_pushnil(L);
+        return 1;
     }
 
     const auto vec = GetGamePadAxis((uint8_t)port, joy);
-    positionX = (int)vec.x;
-    positionY = (int)vec.y;
-
-    lua_pushnumber(L, positionX);
-    lua_pushnumber(L, positionY);
-    return 2;
+    Lua_PushVector2(L, vec);
+    return 1;
 }
 
 static void RegisterCoreBindings(lua_State* L)

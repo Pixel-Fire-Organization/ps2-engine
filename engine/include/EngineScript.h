@@ -12,7 +12,7 @@ typedef struct
 {
     lua_State* L;
     uint32_t slotIndex; // Base index (EVEN: Heap, ODD: Bytecode)
-    size_t heapOffset;
+    bool heapReady; // True once the free-list heap has been initialised in the slot
     size_t codeSize; // Actual byte count of the loaded script (not slot capacity)
     bool active;
 } ScriptUnit;

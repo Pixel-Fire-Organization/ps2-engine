@@ -32,7 +32,7 @@ bool InitPad(uint8_t port, bool locked)
     if (!InitPadSystem())
         return false;
 
-    pad_t* pad = pad_open(port, 0, MODE_DIGITAL, locked);
+    pad_t* pad = pad_open(port, 0, MODE_ANALOG, locked);
     if (!pad)
     {
         Engine_LogError("pad_open failed for port %u", port);
@@ -105,7 +105,6 @@ Vector2* GetGamePadPosition(uint8_t port)
 
 uint8_t GetKeyboardButtonPressed() { return 0; }
 
-
 static void PollPad(uint8_t port)
 {
     if (!openedGamePads[port])
@@ -114,6 +113,7 @@ static void PollPad(uint8_t port)
     pad_wait(openedGamePads[port]);
     pad_get_buttons(openedGamePads[port]);
 }
+
 bool InitPadSystem()
 {
     if (s_PadSystemInitDone) // ← lazy-init guard: IOP already up, nothing to do

@@ -59,6 +59,8 @@ local cubeZ    = 0.0
 local SPEED    = 4.0 -- units per second
 
 local BG_COLOR = { 20, 20, 20, 255 }
+local joyX     = 0
+local joyY     = 0
 
 -- ---------------------------------------------------------------------------
 -- OnUpdate — called every frame inside BeginDrawing/EndDrawing
@@ -81,6 +83,12 @@ function OnUpdate(dt)
         engine.log("Square pressed — exiting")
         engine.exit()
     end
+
+    joyX = input.get_joy_status(0, "left")
+    joyY = input.get_joy_status(0, "right")
+
+    engine.log("Joy Left: " .. joyX["x"] .. " ; " .. joyX["y"]);
+    engine.log("Joy Right: " .. joyY["x"] .. " ; " .. joyY["y"]);
 
     -- Clear the background, then enter 3D projection.
     graphics.clear(BG_COLOR)
