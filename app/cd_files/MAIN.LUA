@@ -53,26 +53,42 @@ engine.log("Camera3D handle: " .. cam3d)
 -- ---------------------------------------------------------------------------
 -- Scene state
 -- ---------------------------------------------------------------------------
-local cubeX    = 0.0
-local cubeY    = 0.0
-local cubeZ    = 0.0
-local SPEED    = 4.0 -- units per second
+local cubeX     = 0.0
+local cubeY     = 0.0
+local cubeZ     = 0.0
+local SPEED     = 4.0 -- cube units per second
+
+-- Camera orbit state (spherical coords around the cube)
+local camYaw    = 0.0  -- horizontal angle in radians
+local camPitch  = 0.4  -- vertical angle in radians (clamped 0.05 – 1.45)
+local CAM_DIST  = 20.0 -- orbit radius
+local CAM_SPEED = 1.8  -- radians per second
+
+local DEAD_ZONE = 0.12 -- ignore stick values below this magnitude (normalised)
+
+-- Converts a raw PS2 joystick byte (0–255, centre≈128) to −1 … 0 … +1.
+local function joy_norm(raw) return (raw - 128) / 128.0 end
 
 local BG_COLOR = { 20, 20, 20, 255 }
-local joyX     = 0
-local joyY     = 0
 
 -- ---------------------------------------------------------------------------
 -- OnUpdate — called every frame inside BeginDrawing/EndDrawing
 -- ---------------------------------------------------------------------------
 function OnUpdate(dt)
-    -- D-pad movement
-    if input.is_pad_pressed(0, "dpad_left") then cubeX = cubeX - SPEED * dt end
-    if input.is_pad_pressed(0, "dpad_right") then cubeX = cubeX + SPEED * dt end
-    if input.is_pad_pressed(0, "dpad_up") then cubeZ = cubeZ - SPEED * dt end
-    if input.is_pad_pressed(0, "dpad_down") then cubeZ = cubeZ + SPEED * dt end
+    local lj = input.get_joy_status(0, "left")
+    if lj then
+        local lx = joy_norm(lj.x)
+        local ly = joy_norm(lj.y)
+        if math.abs(lx) > DEAD_ZONE then cubeX = cubeX + lx * SPEED * dt end
+        if math.abs(ly) > DEAD_ZONE then cubeZ = cubeZ + ly * SPEED * dt end
+    end
 
-    if input.is_pad_pressed(0, "x") then cubeY = cubeY + SPEED * dt end
+    --if input.is_pad_pressed(0, "dpad_left")  then cubeX = cubeX - SPEED * dt end
+    --if input.is_pad_pressed(0, "dpad_right") then cubeX = cubeX + SPEED * dt end
+    --if input.is_pad_pressed(0, "dpad_up")    then cubeZ = cubeZ - SPEED * dt end
+    --if input.is_pad_pressed(0, "dpad_down")  then cubeZ = cubeZ + SPEED * dt end
+
+    if input.is_pad_pressed(0, "x")   then cubeY = cubeY + SPEED * dt end
     if input.is_pad_pressed(0, "cir") then cubeY = cubeY - SPEED * dt end
     if input.is_pad_pressed(0, "tri") then
         cubeX = 0; cubeY = 0; cubeZ = 0;
@@ -84,11 +100,26 @@ function OnUpdate(dt)
         engine.exit()
     end
 
-    joyX = input.get_joy_status(0, "left")
-    joyY = input.get_joy_status(0, "right")
+    local rj = input.get_joy_status(0, "right")
+    if rj then
+        local rx = joy_norm(rj.x)
+        local ry = joy_norm(rj.y)
+        if math.abs(rx) > DEAD_ZONE then camYaw   = camYaw   + rx * CAM_SPEED * dt end
+        if math.abs(ry) > DEAD_ZONE then camPitch  = camPitch + ry * CAM_SPEED * dt end
+    end
 
-    engine.log("Joy Left: " .. joyX["x"] .. " ; " .. joyX["y"]);
-    engine.log("Joy Right: " .. joyY["x"] .. " ; " .. joyY["y"]);
+    -- Clamp pitch so the camera never flips over
+    if camPitch > 1.45 then camPitch = 1.45 end
+    if camPitch < 0.05 then camPitch = 0.05 end
+
+    -- Compute orbit position (spherical → cartesian)
+    local cosPitch = math.cos(camPitch)
+    local camX = cubeX + CAM_DIST * cosPitch * math.sin(camYaw)
+    local camPosY = cubeY + CAM_DIST * math.sin(camPitch)
+    local camZ = cubeZ + CAM_DIST * cosPitch * math.cos(camYaw)
+
+    -- Push updated position/target into the camera slot before BeginMode3D
+    graphics.update_camera_3d(cam3d, camX, camPosY, camZ, 0, 0, 0)
 
     -- Clear the background, then enter 3D projection.
     graphics.clear(BG_COLOR)
