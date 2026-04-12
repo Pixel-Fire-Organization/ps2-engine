@@ -11,6 +11,10 @@
 // managed internally and driven by Lua scripts.
 // ---------------------------------------------------------------------------
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Start the engine and run the entry-point Lua script.
 // If mainScript is NULL, the canonical SCRIPTING_MAIN_SCRIPT_PATH is used.
 // Returns false if the engine failed to initialise or the script could not be loaded.
@@ -25,6 +29,10 @@ bool EngineExited(void);
 
 // Shut down all engine subsystems and release resources. Call after the main loop.
 void EngineStop(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Logging & panic — forward declarations resolved by EngineDebug.c.

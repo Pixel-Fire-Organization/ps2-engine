@@ -66,6 +66,11 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
           buffer lives in BSS for the entire application lifetime, eliminating the race entirely. The two
           `UnloadImage(imFont)` calls inside `LoadFontDefault` are also guarded with
           `#if !defined(PLATFORM_PLAYSTATION2)` to prevent freeing static storage.
+      - `PGL_PATCHED_NO_GAMEPAD` — strips the `SIO2MAN`/`PADMAN` IOP module loads, `padInit`, `padPortOpen`, and
+        `initializePad` from `InitPlatform`, and removes the gamepad polling block from `PollInputEvents`.
+        `EngineInput` (`EngineInput.cpp`) is the sole owner of the full pad lifecycle. `SifInitRpc(0)` is preserved
+        in raylib for general IOP services. Running both raylib's and EngineInput's pad init on the same port caused
+        a double-open conflict and unpredictable button state.
 - `thirdparty/raylib`: Custom PS2 port (usually `work` branch). There is a script for injecting custom patches into raylib. Never modify raylib directly or commit the changes there.
 - `thirdparty/ps2gl`: Graphics abstraction layer. Depends on ps2stuff headers (`ps2s/`) at compile time.
 - `thirdparty/ps2stuff`: Low-level PS2 hardware utility library. Must be built and installed (`make install`) **before** ps2gl. Its install step copies `include/ps2s/` headers to `$(PS2SDK)/ports/include/ps2s/`. Never modify ps2stuff directly or commit the changes there.

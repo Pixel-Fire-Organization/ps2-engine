@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include "Engine.h"
+#include "EngineInput.h"
 
 static const char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
                                       "+,-./01234\n" /* 43-52  */
@@ -91,7 +92,7 @@ void Engine_Panic(const char* message)
         DrawText("HALTING EMOTION ENGINE...", PANIC_UI_PADDING, 200, PANIC_UI_FONT_SIZE_FOOTER, LIGHTGRAY);
         EndDrawing();
 
-        if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+        if (IsGamePadButtonPressed(0, GamePadButton::Cross))
         {
             // Reset PS2
         }

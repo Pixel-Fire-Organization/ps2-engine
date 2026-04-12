@@ -15,7 +15,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         lua
         ${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a
         ${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a
-        ps2stuff dma graph draw pad math3d gs png z m mc c -ldebug
+            ps2stuff dma graph draw input pad math3d gs png z m mc c -ldebug
     )
 else()
     target_link_libraries(${APP_EXE_NAME} PRIVATE ps2_engine)
