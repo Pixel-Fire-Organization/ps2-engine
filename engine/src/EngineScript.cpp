@@ -1,7 +1,7 @@
-#include "Engine.h"
-#include <rlgl.h>
 #include <malloc.h>
+#include <rlgl.h>
 #include <string.h>
+#include "Engine.h"
 
 #define LUA_USE_C89
 extern "C" {
@@ -79,35 +79,35 @@ typedef struct
 
 static void Heap_Init(void* base, size_t capacity)
 {
-    BlockHeader* first = (BlockHeader*)base;
-    first->size = (uint32_t)(capacity - HEAP_HEADER_SIZE);
+    BlockHeader* first = static_cast<BlockHeader*>(base);
+    first->size = static_cast<uint32_t>(capacity - HEAP_HEADER_SIZE);
     first->free = 1;
 }
 
 static void* Heap_Alloc(void* base, size_t capacity, size_t nsize)
 {
     nsize = (nsize + 7u) & ~7u; // 8-byte align
-    uint8_t* cursor = (uint8_t*)base;
+    uint8_t* cursor = static_cast<uint8_t*>(base);
     uint8_t* end = cursor + capacity;
 
     while (cursor + HEAP_HEADER_SIZE <= end)
     {
         BlockHeader* block = (BlockHeader*)cursor;
-        if (block->free && (size_t)block->size >= nsize)
+        if (block->free && static_cast<size_t>(block->size) >= nsize)
         {
-            size_t remainder = (size_t)block->size - nsize;
+            size_t remainder = static_cast<size_t>(block->size) - nsize;
             if (remainder >= HEAP_MIN_SPLIT)
             {
                 // Split: carve a new free block from the tail
                 BlockHeader* next = (BlockHeader*)(cursor + HEAP_HEADER_SIZE + nsize);
-                next->size = (uint32_t)(remainder - HEAP_HEADER_SIZE);
+                next->size = static_cast<uint32_t>(remainder - HEAP_HEADER_SIZE);
                 next->free = 1;
-                block->size = (uint32_t)nsize;
+                block->size = static_cast<uint32_t>(nsize);
             }
             block->free = 0;
             return cursor + HEAP_HEADER_SIZE;
         }
-        cursor += HEAP_HEADER_SIZE + (size_t)block->size;
+        cursor += HEAP_HEADER_SIZE + static_cast<size_t>(block->size);
     }
     return NULL; // OOM
 }
@@ -117,28 +117,28 @@ static void Heap_Free(void* base, size_t capacity, void* ptr)
     if (!ptr)
         return;
 
-    BlockHeader* block = (BlockHeader*)((uint8_t*)ptr - HEAP_HEADER_SIZE);
+    BlockHeader* block = (BlockHeader*)(static_cast<uint8_t*>(ptr) - HEAP_HEADER_SIZE);
     block->free = 1;
 
     // Forward coalescing: merge contiguous free blocks to reduce fragmentation
-    uint8_t* next = (uint8_t*)block + HEAP_HEADER_SIZE + (size_t)block->size;
-    uint8_t* end = (uint8_t*)base + capacity;
+    uint8_t* next = (uint8_t*)block + HEAP_HEADER_SIZE + static_cast<size_t>(block->size);
+    uint8_t* end = static_cast<uint8_t*>(base) + capacity;
     while (next + HEAP_HEADER_SIZE <= end)
     {
         BlockHeader* nextBlock = (BlockHeader*)next;
         if (!nextBlock->free)
             break;
-        block->size += (uint32_t)(HEAP_HEADER_SIZE + (size_t)nextBlock->size);
-        next = (uint8_t*)block + HEAP_HEADER_SIZE + (size_t)block->size;
+        block->size += static_cast<uint32_t>((HEAP_HEADER_SIZE + (size_t)nextBlock->size));
+        next = (uint8_t*)block + HEAP_HEADER_SIZE + static_cast<size_t>(block->size);
     }
 }
 
 static void* Heap_Realloc(void* base, size_t capacity, void* ptr, size_t osize, size_t nsize)
 {
-    BlockHeader* block = (BlockHeader*)((uint8_t*)ptr - HEAP_HEADER_SIZE);
+    BlockHeader* block = (BlockHeader*)(static_cast<uint8_t*>(ptr) - HEAP_HEADER_SIZE);
     size_t alignedN = (nsize + 7u) & ~7u;
 
-    if ((size_t)block->size >= alignedN)
+    if (static_cast<size_t>(block->size) >= alignedN)
         return ptr; // Fits in place — no copy needed
 
     void* newPtr = Heap_Alloc(base, capacity, nsize);
@@ -153,7 +153,7 @@ static void* Heap_Realloc(void* base, size_t capacity, void* ptr, size_t osize, 
 // Custom allocator that restricts Lua to her assigned EVEN slot in ARENA_SCRIPT
 static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
 {
-    ScriptUnit* unit = (ScriptUnit*)ud;
+    ScriptUnit* unit = static_cast<ScriptUnit*>(ud);
 
     void* slotBase = Engine_GetSlot(ARENA_SCRIPT, unit->slotIndex);
     size_t slotCapacity = Engine_GetSlotCapacity(ARENA_SCRIPT, unit->slotIndex);
@@ -291,13 +291,13 @@ bool Engine_Script_Run(int unitIndex)
 
     // Retrieve the bytecode from the ODD slot using the actual stored size
     uint32_t codeSlot = unit->slotIndex + 1;
-    const char* code = (const char*)Engine_GetSlot(ARENA_SCRIPT, codeSlot);
+    const char* code = static_cast<const char*>(Engine_GetSlot(ARENA_SCRIPT, codeSlot));
     size_t codeSize = unit->codeSize;
 
     // Strip UTF-8 BOM (0xEF 0xBB 0xBF) — Windows editors prepend this to text
     // files. Lua does not understand the BOM and returns LUA_ERRSYNTAX without it.
-    if (codeSize >= 3 && (unsigned char)code[0] == 0xEF && (unsigned char)code[1] == 0xBB &&
-        (unsigned char)code[2] == 0xBF)
+    if (codeSize >= 3 && static_cast<unsigned char>(code[0]) == 0xEF && static_cast<unsigned char>(code[1]) == 0xBB &&
+        static_cast<unsigned char>(code[2]) == 0xBF)
     {
         code += 3;
         codeSize -= 3;
@@ -417,11 +417,14 @@ static int Lua_Graphics_MakeCamera3D(lua_State* L)
     }
 
     Camera3D cam;
-    cam.position = Vector3{(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3)};
-    cam.target = Vector3{(float)luaL_checknumber(L, 4), (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6)};
-    cam.up = Vector3{(float)luaL_checknumber(L, 7), (float)luaL_checknumber(L, 8), (float)luaL_checknumber(L, 9)};
-    cam.fovy = (float)luaL_checknumber(L, 10);
-    cam.projection = (int)luaL_checkinteger(L, 11);
+    cam.position = Vector3{static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)),
+                           static_cast<float>(luaL_checknumber(L, 3))};
+    cam.target = Vector3{static_cast<float>(luaL_checknumber(L, 4)), static_cast<float>(luaL_checknumber(L, 5)),
+                         static_cast<float>(luaL_checknumber(L, 6))};
+    cam.up = Vector3{static_cast<float>(luaL_checknumber(L, 7)), static_cast<float>(luaL_checknumber(L, 8)),
+                     static_cast<float>(luaL_checknumber(L, 9))};
+    cam.fovy = static_cast<float>(luaL_checknumber(L, 10));
+    cam.projection = static_cast<int>(luaL_checkinteger(L, 11));
 
     s_Cameras3D[slot] = cam;
     s_Camera3DActive[slot] = true;
@@ -453,10 +456,10 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
     }
 
     Camera2D cam;
-    cam.offset = Vector2{(float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2)};
-    cam.target = Vector2{(float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4)};
-    cam.rotation = (float)luaL_checknumber(L, 5);
-    cam.zoom = (float)luaL_checknumber(L, 6);
+    cam.offset = Vector2{static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2))};
+    cam.target = Vector2{static_cast<float>(luaL_checknumber(L, 3)), static_cast<float>(luaL_checknumber(L, 4))};
+    cam.rotation = static_cast<float>(luaL_checknumber(L, 5));
+    cam.zoom = static_cast<float>(luaL_checknumber(L, 6));
 
     s_Cameras2D[slot] = cam;
     s_Camera2DActive[slot] = true;
@@ -469,6 +472,30 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
 // ---------------------------------------------------------------------------
 // Mode-switching bindings
 // ---------------------------------------------------------------------------
+
+// graphics.update_camera_3d(handle, pos_x, pos_y, pos_z, target_x, target_y, target_z)
+// Updates the position and look-at target of an existing 3D camera slot in-place.
+// The up vector and projection are preserved.  Call this every frame before begin_mode_3d
+// when driving the camera with analogue input.
+static int Lua_Graphics_UpdateCamera3D(lua_State* L)
+{
+    int32_t handle = (int32_t)luaL_checkinteger(L, 1);
+
+    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_3D || !s_Camera3DActive[handle])
+    {
+        Engine_LogError("[Script] update_camera_3d: invalid or evicted handle %d", handle);
+        return 0;
+    }
+
+    s_Cameras3D[handle].position =
+        Vector3{static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3)),
+                static_cast<float>(luaL_checknumber(L, 4))};
+    s_Cameras3D[handle].target =
+        Vector3{static_cast<float>(luaL_checknumber(L, 5)), static_cast<float>(luaL_checknumber(L, 6)),
+                static_cast<float>(luaL_checknumber(L, 7))};
+    s_Camera3DLastUsed[handle] = s_FrameCount;
+    return 0;
+}
 
 // graphics.begin_mode_3d(handle)
 // Re-entry guard: if already in 3D and < SCRIPTING_MODE_REENTRY_COOLDOWN_SEC
@@ -602,13 +629,13 @@ static int Lua_Graphics_Clear(lua_State* L)
     if (lua_istable(L, 1))
     {
         lua_geti(L, 1, 1);
-        unsigned char r = (unsigned char)lua_tointeger(L, -1);
+        unsigned char r = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 1, 2);
-        unsigned char g = (unsigned char)lua_tointeger(L, -1);
+        unsigned char g = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 1, 3);
-        unsigned char b = (unsigned char)lua_tointeger(L, -1);
+        unsigned char b = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 1, 4);
-        unsigned char a = (unsigned char)lua_tointeger(L, -1);
+        unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_pop(L, 4);
         ClearBackground(Color{r, g, b, a});
     }
@@ -617,44 +644,45 @@ static int Lua_Graphics_Clear(lua_State* L)
 
 static int Lua_Graphics_DrawRect(lua_State* L)
 {
-    float x = (float)luaL_checknumber(L, 1);
-    float y = (float)luaL_checknumber(L, 2);
-    float w = (float)luaL_checknumber(L, 3);
-    float h = (float)luaL_checknumber(L, 4);
+    float x = static_cast<float>(luaL_checknumber(L, 1));
+    float y = static_cast<float>(luaL_checknumber(L, 2));
+    float w = static_cast<float>(luaL_checknumber(L, 3));
+    float h = static_cast<float>(luaL_checknumber(L, 4));
 
     if (lua_istable(L, 5))
     {
         lua_geti(L, 5, 1);
-        unsigned char r = (unsigned char)lua_tointeger(L, -1);
+        unsigned char r = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 5, 2);
-        unsigned char g = (unsigned char)lua_tointeger(L, -1);
+        unsigned char g = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 5, 3);
-        unsigned char b = (unsigned char)lua_tointeger(L, -1);
+        unsigned char b = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 5, 4);
-        unsigned char a = (unsigned char)lua_tointeger(L, -1);
+        unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_pop(L, 4);
-        DrawRectangle((int)x, (int)y, (int)w, (int)h, Color{r, g, b, a});
+        DrawRectangle(static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h),
+                      Color{r, g, b, a});
     }
     return 0;
 }
 
 static int Lua_Graphics_DrawCube(lua_State* L)
 {
-    float px = (float)luaL_checknumber(L, 1);
-    float py = (float)luaL_checknumber(L, 2);
-    float pz = (float)luaL_checknumber(L, 3);
-    float sz = (float)luaL_checknumber(L, 4);
+    float px = static_cast<float>(luaL_checknumber(L, 1));
+    float py = static_cast<float>(luaL_checknumber(L, 2));
+    float pz = static_cast<float>(luaL_checknumber(L, 3));
+    float sz = static_cast<float>(luaL_checknumber(L, 4));
 
     if (lua_istable(L, 5))
     {
         lua_geti(L, 5, 1);
-        unsigned char r = (unsigned char)lua_tointeger(L, -1);
+        unsigned char r = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 5, 2);
-        unsigned char g = (unsigned char)lua_tointeger(L, -1);
+        unsigned char g = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 5, 3);
-        unsigned char b = (unsigned char)lua_tointeger(L, -1);
+        unsigned char b = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 5, 4);
-        unsigned char a = (unsigned char)lua_tointeger(L, -1);
+        unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_pop(L, 4);
         DrawCube(Vector3{px, py, pz}, sz, sz, sz, Color{r, g, b, a});
     }
@@ -663,8 +691,8 @@ static int Lua_Graphics_DrawCube(lua_State* L)
 
 static int Lua_Graphics_DrawGrid(lua_State* L)
 {
-    int slices = (int)luaL_checknumber(L, 1);
-    float spacing = (float)luaL_checknumber(L, 2);
+    int slices = static_cast<int>(luaL_checknumber(L, 1));
+    float spacing = static_cast<float>(luaL_checknumber(L, 2));
 
     DrawGrid(slices, spacing);
     return 0;
@@ -682,10 +710,10 @@ static int Lua_Graphics_DrawGrid(lua_State* L)
 //   was dropped in v4.0 — brought back here as an rlgl immediate-mode draw.
 static int Lua_Graphics_DrawCubeTextured(lua_State* L)
 {
-    float px = (float)luaL_checknumber(L, 1);
-    float py = (float)luaL_checknumber(L, 2);
-    float pz = (float)luaL_checknumber(L, 3);
-    float sz = (float)luaL_checknumber(L, 4);
+    float px = static_cast<float>(luaL_checknumber(L, 1));
+    float py = static_cast<float>(luaL_checknumber(L, 2));
+    float pz = static_cast<float>(luaL_checknumber(L, 3));
+    float sz = static_cast<float>(luaL_checknumber(L, 4));
     int32_t handle = (int32_t)luaL_checkinteger(L, 5);
 
     const Texture2D* tex = static_cast<const Texture2D*>(Engine_Resource_Get(handle));
@@ -700,13 +728,13 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     if (lua_istable(L, 6))
     {
         lua_geti(L, 6, 1);
-        unsigned char r = (unsigned char)lua_tointeger(L, -1);
+        unsigned char r = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 6, 2);
-        unsigned char g = (unsigned char)lua_tointeger(L, -1);
+        unsigned char g = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 6, 3);
-        unsigned char b = (unsigned char)lua_tointeger(L, -1);
+        unsigned char b = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_geti(L, 6, 4);
-        unsigned char a = (unsigned char)lua_tointeger(L, -1);
+        unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_pop(L, 4);
         tint = Color{r, g, b, a};
     }
@@ -946,7 +974,7 @@ static int Lua_Input_GetJoyStatus(lua_State* L)
         return 1;
     }
 
-    const auto vec = GetGamePadAxis((uint8_t)port, joy);
+    const auto vec = GetGamePadAxis(static_cast<uint8_t>(port), joy);
     Lua_PushVector2(L, vec);
     return 1;
 }
@@ -982,6 +1010,8 @@ static void RegisterGraphicsBindings(lua_State* L)
     lua_setfield(L, -2, "draw_cube_textured");
     lua_pushcfunction(L, Lua_Graphics_MakeCamera3D);
     lua_setfield(L, -2, "make_camera_3d");
+    lua_pushcfunction(L, Lua_Graphics_UpdateCamera3D);
+    lua_setfield(L, -2, "update_camera_3d");
     lua_pushcfunction(L, Lua_Graphics_MakeCamera2D);
     lua_setfield(L, -2, "make_camera_2d");
     lua_pushcfunction(L, Lua_Graphics_BeginMode3D);
@@ -1047,7 +1077,7 @@ static int Lua_IO_GetSize(lua_State* L)
 {
     int32_t fd = (int32_t)luaL_checkinteger(L, 1);
     size_t sz = EngineApp_FileGetSize(fd);
-    lua_pushinteger(L, (lua_Integer)sz);
+    lua_pushinteger(L, static_cast<lua_Integer>(sz));
     return 1;
 }
 
@@ -1065,8 +1095,8 @@ static int Lua_IO_Read(lua_State* L)
         lua_pushinteger(L, 0);
         return 2;
     }
-    lua_pushlstring(L, (const char*)data, bytesRead);
-    lua_pushinteger(L, (lua_Integer)bytesRead);
+    lua_pushlstring(L, static_cast<const char*>(data), bytesRead);
+    lua_pushinteger(L, static_cast<lua_Integer>(bytesRead));
     return 2;
 }
 
@@ -1077,7 +1107,7 @@ static int Lua_IO_Write(lua_State* L)
     size_t dataLen = 0;
     const char* data = luaL_checklstring(L, 2, &dataLen);
     size_t written = EngineApp_FileWrite(fd, data, dataLen);
-    lua_pushinteger(L, (lua_Integer)written);
+    lua_pushinteger(L, static_cast<lua_Integer>(written));
     return 1;
 }
 
