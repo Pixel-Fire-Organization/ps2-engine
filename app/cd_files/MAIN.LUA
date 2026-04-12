@@ -42,40 +42,42 @@ engine.log("Texture handle: " .. texHandle)
 -- projection: 0 = PERSPECTIVE, 1 = ORTHOGRAPHIC
 -- ---------------------------------------------------------------------------
 local cam3d = graphics.make_camera_3d(
-    0.0, 10.0, 20.0,   -- position
-    0.0,  0.0,  0.0,   -- target (look-at)
-    0.0,  1.0,  0.0,   -- up vector
-    45.0,              -- field of view (degrees)
-    0                  -- CAMERA_PERSPECTIVE
+    0.0, 10.0, 20.0, -- position
+    0.0, 0.0, 0.0,   -- target (look-at)
+    0.0, 1.0, 0.0,   -- up vector
+    45.0,            -- field of view (degrees)
+    0                -- CAMERA_PERSPECTIVE
 )
 engine.log("Camera3D handle: " .. cam3d)
 
 -- ---------------------------------------------------------------------------
 -- Scene state
 -- ---------------------------------------------------------------------------
-local cubeX  = 0.0
-local cubeY  = 0.0
-local cubeZ  = 0.0
-local SPEED  = 4.0  -- units per second
+local cubeX    = 0.0
+local cubeY    = 0.0
+local cubeZ    = 0.0
+local SPEED    = 4.0 -- units per second
 
-local BG_COLOR = {20, 20, 20, 255}
+local BG_COLOR = { 20, 20, 20, 255 }
 
 -- ---------------------------------------------------------------------------
 -- OnUpdate — called every frame inside BeginDrawing/EndDrawing
 -- ---------------------------------------------------------------------------
 function OnUpdate(dt)
     -- D-pad movement
-    if input.is_pad_pressed("dpad_left")  then cubeX = cubeX - SPEED * dt end
-    if input.is_pad_pressed("dpad_right") then cubeX = cubeX + SPEED * dt end
-    if input.is_pad_pressed("dpad_up")    then cubeZ = cubeZ - SPEED * dt end
-    if input.is_pad_pressed("dpad_down") then cubeZ = cubeZ + SPEED * dt end
+    if input.is_pad_pressed(0, "dpad_left") then cubeX = cubeX - SPEED * dt end
+    if input.is_pad_pressed(0, "dpad_right") then cubeX = cubeX + SPEED * dt end
+    if input.is_pad_pressed(0, "dpad_up") then cubeZ = cubeZ - SPEED * dt end
+    if input.is_pad_pressed(0, "dpad_down") then cubeZ = cubeZ + SPEED * dt end
 
-    if input.is_pad_pressed("x") then cubeY = cubeY + SPEED * dt end
-    if input.is_pad_pressed("cir") then cubeY = cubeY - SPEED * dt end
-    if input.is_pad_pressed("tri") then cubeX = 0; cubeY = 0; cubeZ = 0; end
+    if input.is_pad_pressed(0, "x") then cubeY = cubeY + SPEED * dt end
+    if input.is_pad_pressed(0, "cir") then cubeY = cubeY - SPEED * dt end
+    if input.is_pad_pressed(0, "tri") then
+        cubeX = 0; cubeY = 0; cubeZ = 0;
+    end
 
     -- Square: exit
-    if input.is_pad_pressed("squ") then
+    if input.is_pad_pressed(0, "squ") then
         engine.log("Square pressed — exiting")
         engine.exit()
     end
@@ -90,7 +92,7 @@ function OnUpdate(dt)
     if resources.is_ready(texHandle) then
         graphics.draw_cube_textured(cubeX, cubeY, cubeZ, 2.0, texHandle)
     else
-        graphics.draw_cube(cubeX, cubeY, cubeZ, 2.0, {220, 60, 60, 255})
+        graphics.draw_cube(cubeX, cubeY, cubeZ, 2.0, { 220, 60, 60, 255 })
     end
 end
 

@@ -1,11 +1,14 @@
-#include <malloc.h>
-#include <rlgl.h>
-#include <string.h>
 #include "Engine.h"
+#include <rlgl.h>
+#include <malloc.h>
+#include <string.h>
 
+#define LUA_USE_C89
+extern "C" {
 #include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
+}
 
 #include "EngineInput.h"
 
@@ -616,7 +619,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     float sz = (float)luaL_checknumber(L, 4);
     int32_t handle = (int32_t)luaL_checkinteger(L, 5);
 
-    const Texture2D* tex = Engine_Resource_Get(handle);
+    const Texture2D* tex = static_cast<const Texture2D*>(Engine_Resource_Get(handle));
     if (!tex || tex->id == 0)
     {
         // Resource not ready or GPU upload failed — fall back to a solid draw.

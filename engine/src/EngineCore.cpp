@@ -3,13 +3,14 @@
 #include <stdlib.h>
 #include "Engine.h"
 
+#include "EngineInput.h"
 // ps2gl C API — needed for pglAddGsMemSlot() after InitWindow.
 // Must come after raylib.h (which sets up the PS2/GL include path).
 #include <GL/ps2gl.h>
 #include <stdio.h>
 #include <string.h>
 
-static void* s_UnifiedArenaBlock = NULL;
+static void* s_UnifiedArenaBlock = nullptr;
 static bool s_IsGFXInitialized = false;
 static const char* s_ResourceLocationToken = NULL;
 
@@ -41,6 +42,8 @@ bool Engine_Init(EngineConfig config)
     if (!s_UnifiedArenaBlock || !poolMem)
     {
         Engine_Panic("Failed to allocate engine memory — out of EE RAM");
+        free(s_UnifiedArenaBlock);
+        free(poolMem);
         return false;
     }
 
@@ -53,8 +56,21 @@ bool Engine_Init(EngineConfig config)
     Engine_LogInfo("Segmented Arena Allocated: %zu bytes", totalArenaSize);
     Engine_LogInfo("Video Mode: %dx%d (%s)", GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GFX_SCREEN_REGION_STR);
 
+
     InitWindow(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, config.windowTitle);
+    Engine_LogInfo("Waiting for window ready!");
+    auto windowReadyBase = GetTime();
+    while (!IsWindowReady())
+        ;
     s_IsGFXInitialized = IsWindowReady();
+    Engine_LogInfo("Window Ready in %d ms", GetTime() - windowReadyBase);
+
+    Engine_LogInfo("Initializing Game pad at port 0");
+    if (!InitPad(0, true))
+    {
+        Engine_Panic("No gamepad at port 0!");
+        return false;
+    }
 
     // Initialize the specialized subsystems
     if (!Engine_Script_Init())

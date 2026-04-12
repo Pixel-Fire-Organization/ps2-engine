@@ -207,8 +207,8 @@ bool Engine_IO_Init(void)
     // is modified) and can corrupt the EE kernel's thread table, which then
     // manifests as a crash inside an unrelated ISR (typically libpad's DMA
     // handler in the pad polling interrupt).
-    ee_thread_t threadParam = {0};
-    threadParam.func = IOThreadEntry;
+    ee_thread_t threadParam = {};
+    threadParam.func = reinterpret_cast<void*>(IOThreadEntry);
     threadParam.stack = s_IOThreadStack;
     threadParam.stack_size = IO_THREAD_STACK_SIZE;
     threadParam.gp_reg = &_gp;
