@@ -1,12 +1,9 @@
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include "Engine.h"
 
 #include <delaythread.h>
 #include <kernel.h>
-#include <sifrpc.h>
-#include <stdbool.h>
-#include <stddef.h>
 
 #define MAX_IO_REQUESTS IO_ASYNC_MAX_REQUESTS
 
@@ -113,7 +110,7 @@ static void IOThreadEntry(void* arg)
                 }
                 else
                 {
-                    size = (size_t)sizeL;
+                    size = static_cast<size_t>(sizeL);
                     fseek(f, 0, SEEK_SET);
 
                     if (size > IO_READ_BUFFER_SIZE)
@@ -165,7 +162,7 @@ static void IOThreadEntry(void* arg)
     }
 }
 
-bool Engine_IO_Init(void)
+bool Engine_IO_Init()
 {
     memset(s_Requests, 0, sizeof(s_Requests));
     s_IOThreadActive = true;
@@ -258,7 +255,7 @@ bool Engine_IO_ReadAsync(const char* filepath, IO_Callback callback, void* userD
     return queued;
 }
 
-void Engine_IO_Update(void)
+void Engine_IO_Update()
 {
     if (s_IOMutex < 0)
         return;
@@ -308,7 +305,7 @@ void Engine_IO_Update(void)
     SignalSema(s_IOMutex);
 }
 
-void Engine_IO_Shutdown(void)
+void Engine_IO_Shutdown()
 {
     s_IOThreadActive = false;
     // Wake the IO thread if it is blocked on WaitSema(s_IOBufferSema).

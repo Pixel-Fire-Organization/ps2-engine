@@ -1,19 +1,19 @@
 #include <raylib.h>
-#include <stdarg.h>
-#include <stdio.h>
+#include <cstdarg>
+#include <cstdio>
 #include "Engine.h"
 #include "EngineInput.h"
 
-static const char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
-                                      "+,-./01234\n" /* 43-52  */
-                                      "56789:;<=>\n" /* 53-62  */
-                                      "?@ABCDEFGH\n" /* 63-72  */
-                                      "IJKLMNOPQR\n" /* 73-82  */
-                                      "STUVWXYZ[\\\n" /* 83-92  */
-                                      "]^_`abcdef\n" /* 93-102 */
-                                      "ghijklmnop\n" /* 103-112 */
-                                      "qrstuvwxyz\n" /* 113-122 */
-                                      "{|}~\x7f"; /* 123-127 */
+static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
+                                          "+,-./01234\n" /* 43-52  */
+                                          "56789:;<=>\n" /* 53-62  */
+                                          "?@ABCDEFGH\n" /* 63-72  */
+                                          "IJKLMNOPQR\n" /* 73-82  */
+                                          "STUVWXYZ[\\\n" /* 83-92  */
+                                          "]^_`abcdef\n" /* 93-102 */
+                                          "ghijklmnop\n" /* 103-112 */
+                                          "qrstuvwxyz\n" /* 113-122 */
+                                          "{|}~\x7f"; /* 123-127 */
 
 
 static void CustomLog(int logLevel, const char* text, va_list args)
@@ -32,7 +32,7 @@ static void CustomLog(int logLevel, const char* text, va_list args)
     printf("\n");
 }
 
-void Engine_InitDebug(void)
+void Engine_InitDebug()
 {
     SetTraceLogCallback(CustomLog);
     Engine_LogInfo("Engine Debug initialized.");
@@ -54,14 +54,14 @@ void Engine_LogError(const char* text, ...)
     va_end(args);
 }
 
-void Engine_DrawDebugOverlay(void)
+void Engine_DrawDebugOverlay()
 {
     DrawFPS(10, 10);
     DrawText("System: PS2 Raylib Engine", 10, 30, 20, GREEN);
     Engine_DrawAsciiTable();
 }
 
-void Engine_DrawAsciiTable(void) { DrawText(ASCII_TABLE_STR, 10, 60, 20, RED); }
+void Engine_DrawAsciiTable() { DrawText(ASCII_TABLE_STR, 10, 60, 20, RED); }
 
 void Engine_Panic(const char* message)
 {
@@ -73,7 +73,6 @@ void Engine_Panic(const char* message)
         // We should init a minimal environment here.
         // This can happen if the memory map is invalid, or CORE functionality
         // failed for some reason.
-
         InitWindow(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, "PS2 Engine");
     }
 

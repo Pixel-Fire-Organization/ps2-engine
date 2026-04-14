@@ -1,7 +1,6 @@
 ﻿#include <raylib.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include "Engine.h"
 
 // Stable per-dependency reference: packs a slot index and a generation counter
@@ -65,7 +64,7 @@ static int32_t Internal_FindByKey(const char* key)
     return -1;
 }
 
-static int32_t Internal_FindFreeSlot(void)
+static int32_t Internal_FindFreeSlot()
 {
     for (int32_t i = 0; i < RES_MAX_ENTRIES; i++)
     {
@@ -104,7 +103,7 @@ static void Internal_CalcEvictablePages(uint32_t* outPages, int32_t* outCount)
     }
 }
 
-static int32_t Internal_EvictLRU(void)
+static int32_t Internal_EvictLRU()
 {
     int32_t bestIndex = -1;
     uint32_t bestFrame = UINT32_MAX;
@@ -194,7 +193,7 @@ static void Internal_UnloadEntry(int32_t index)
 
     // Bump the generation BEFORE clearing the slot so any parent whose async
     // unload races with a new load into this slot will see the mismatch.
-    uint16_t nextGeneration = (uint16_t)(entry->generation + 1u);
+    uint16_t nextGeneration = static_cast<uint16_t>(entry->generation + 1u);
 
     // Clear the slot
     memset(entry, 0, sizeof(ResourceEntry));
@@ -213,7 +212,7 @@ typedef struct
 
 static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* userData)
 {
-    ResourceLoadContext* ctx = (ResourceLoadContext*)userData;
+    ResourceLoadContext* ctx = static_cast<ResourceLoadContext *>(userData);
     if (!ctx)
         return;
 
@@ -242,10 +241,10 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         return;
     }
 
-    const unsigned char* payload = (const unsigned char*)data + sizeof(AssetFileHeader);
-    int32_t payloadSize = (int32_t)(size - sizeof(AssetFileHeader));
+    const unsigned char* payload = static_cast<const unsigned char *>(data) + sizeof(AssetFileHeader);
+    int32_t payloadSize = static_cast<int32_t>(size - sizeof(AssetFileHeader));
 
-    if (payloadSize <= 0 || (uint32_t)payloadSize < header.dataSize)
+    if (payloadSize <= 0 || static_cast<uint32_t>(payloadSize) < header.dataSize)
     {
         Engine_LogError("Resource payload mismatch for slot %d (%s)", idx, entry->key);
         // Deps were already loaded and their refCounts bumped; roll back via
@@ -270,21 +269,21 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         return;
     }
 
-    entry->type = (ResourceType)header.type;
+    entry->type = static_cast<ResourceType>(header.type);
 
-    switch ((ResourceType)header.type)
+    switch (static_cast<ResourceType>(header.type))
     {
     case RES_TEXTURE:
         {
-            Image img = LoadImageFromMemory(header.ext, payload, (int)header.dataSize);
+            Image img = LoadImageFromMemory(header.ext, payload, static_cast<int>(header.dataSize));
             if (img.data != nullptr)
             {
                 // Hard-reject textures that exceed the GS VRAM slot budget.
                 // Raylib registers slots up to 64 pages (512×256 at PSM32); anything larger
                 // has no valid slot and LoadTextureFromImage would silently return id=0
                 // while aliasing GS VRAM (TBP field is 14-bit, page 512 wraps to page 0).
-                uint32_t pagesW = ((uint32_t)img.width + GFX_GS_PAGE_WIDTH_PSM32 - 1) / GFX_GS_PAGE_WIDTH_PSM32;
-                uint32_t pagesH = ((uint32_t)img.height + GFX_GS_PAGE_HEIGHT_PSM32 - 1) / GFX_GS_PAGE_HEIGHT_PSM32;
+                uint32_t pagesW = (static_cast<uint32_t>(img.width) + GFX_GS_PAGE_WIDTH_PSM32 - 1) / GFX_GS_PAGE_WIDTH_PSM32;
+                uint32_t pagesH = (static_cast<uint32_t>(img.height) + GFX_GS_PAGE_HEIGHT_PSM32 - 1) / GFX_GS_PAGE_HEIGHT_PSM32;
                 uint32_t pages = pagesW * pagesH;
                 if (img.width > GFX_MAX_TEXTURE_WIDTH || img.height > GFX_MAX_TEXTURE_HEIGHT ||
                     pages > GFX_MAX_TEXTURE_GS_PAGES)
@@ -424,7 +423,7 @@ static bool Internal_PeekAssetType(const char* path, ResourceType* outType)
     if (bytesRead < 2 || peek[0] != RES_ASSET_MAGIC)
         return false;
 
-    *outType = (ResourceType)peek[1];
+    *outType = static_cast<ResourceType>(peek[1]);
     return true;
 }
 
@@ -466,7 +465,7 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
         {
             // Already loaded — just bump refCount
             s_Entries[depHandle].refCount++;
-            entry->deps[d].index = (int16_t)depHandle;
+            entry->deps[d].index = static_cast<int16_t>(depHandle);
             entry->deps[d].generation = s_Entries[depHandle].generation;
         }
         else
@@ -487,7 +486,7 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
             if (newDep >= 0)
             {
                 s_Entries[newDep].refCount++;
-                entry->deps[d].index = (int16_t)newDep;
+                entry->deps[d].index = static_cast<int16_t>(newDep);
                 entry->deps[d].generation = s_Entries[newDep].generation;
             }
             else
@@ -504,7 +503,7 @@ static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, Asset
 
 // --- Public API ---
 
-bool Engine_Resource_Init(void)
+bool Engine_Resource_Init()
 {
     memset(s_Entries, 0, sizeof(s_Entries));
     for (int32_t i = 0; i < RES_MAX_ENTRIES; i++)
@@ -517,7 +516,7 @@ bool Engine_Resource_Init(void)
     return true;
 }
 
-void Engine_Resource_Shutdown(void) { Engine_Resource_UnloadAll(); }
+void Engine_Resource_Shutdown() { Engine_Resource_UnloadAll(); }
 
 int32_t Engine_Resource_Load(ResourceType type, const char* path)
 {
@@ -585,7 +584,7 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
     }
 
     // Async path: allocate a context from the pool, then stream
-    ResourceLoadContext* ctx = (ResourceLoadContext*)Engine_PoolAllocMain();
+    ResourceLoadContext* ctx = static_cast<ResourceLoadContext *>(Engine_PoolAllocMain());
     if (!ctx)
     {
         Engine_LogError("Resource: pool exhausted, cannot create load context");
@@ -680,7 +679,7 @@ void Engine_Resource_Unload(int32_t handle)
     Internal_UnloadEntry(handle);
 }
 
-void Engine_Resource_UnloadAll(void)
+void Engine_Resource_UnloadAll()
 {
     s_AllocatedGsPages = 0;
     for (int32_t i = 0; i < RES_MAX_ENTRIES; i++)
@@ -694,7 +693,7 @@ void Engine_Resource_UnloadAll(void)
     }
 }
 
-void Engine_Resource_Update(void) { s_CurrentFrame++; }
+void Engine_Resource_Update() { s_CurrentFrame++; }
 
-uint32_t Engine_Resource_GetAllocatedGsPages(void) { return s_AllocatedGsPages; }
-uint32_t Engine_Resource_GetGsPageBudget(void) { return GFX_GS_TEXTURE_PAGE_BUDGET; }
+uint32_t Engine_Resource_GetAllocatedGsPages() { return s_AllocatedGsPages; }
+uint32_t Engine_Resource_GetGsPageBudget() { return GFX_GS_TEXTURE_PAGE_BUDGET; }

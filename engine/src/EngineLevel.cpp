@@ -1,4 +1,4 @@
-﻿#include <string.h>
+﻿#include <cstring>
 #include "Engine.h"
 
 // Tracks the handles loaded by Engine_Level_Load so we can unpin them later.
