@@ -1,6 +1,6 @@
 #include <malloc.h>
 #include <raylib.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include "Engine.h"
 
 #include "EngineInput.h"
@@ -98,14 +98,14 @@ bool Engine_Init(EngineConfig config)
 
 bool Engine_Is_GFX_Initialized() { return s_IsGFXInitialized; }
 
-void Engine_Update(void)
+void Engine_Update()
 {
     Engine_IO_Update();
     Engine_Resource_Update();
     // Engine specific per-frame updates
 }
 
-void Engine_Close(void)
+void Engine_Close()
 {
     Engine_Resource_Shutdown();
     Engine_IO_Shutdown();

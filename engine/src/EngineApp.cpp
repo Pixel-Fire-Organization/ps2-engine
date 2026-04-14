@@ -1,8 +1,8 @@
 ﻿#include "EngineApp.h"
 #include "Engine.h"
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 
 // ---------------------------------------------------------------------------
 // Internal exit flag — set by EngineApp_OnExitRequested (called from Lua via
@@ -16,7 +16,7 @@ static const char* s_hostResourceLocationToken = "host:";
 
 const char* FormatResourceLocationToken(const char* locationToken);
 
-void EngineApp_OnExitRequested(void) { s_ExitRequested = true; }
+void EngineApp_OnExitRequested() { s_ExitRequested = true; }
 
 // ---------------------------------------------------------------------------
 // File Descriptor Table
@@ -41,7 +41,7 @@ typedef struct
 
 static FileDescriptor s_Files[APP_MAX_FILE_SLOTS];
 
-static int32_t Internal_FindFreeDescriptor(void)
+static int32_t Internal_FindFreeDescriptor()
 {
     for (int32_t i = 0; i < APP_MAX_FILE_SLOTS; i++)
     {
@@ -93,21 +93,21 @@ int32_t EngineApp_FileOpen(const char* path)
     }
 
     // Use the descriptor index as the config arena slot index.
-    if (!Engine_LoadToSlot(ARENA_CONFIG, (uint32_t)fd, nullptr, fileSize))
+    if (!Engine_LoadToSlot(ARENA_CONFIG, static_cast<uint32_t>(fd), nullptr, fileSize))
     {
         Engine_LogError("EngineApp: failed to reserve config slot %d for '%s'", fd, path);
         fclose(f);
         return -1;
     }
 
-    void* slotPtr = Engine_GetSlot(ARENA_CONFIG, (uint32_t)fd);
+    void* slotPtr = Engine_GetSlot(ARENA_CONFIG, static_cast<uint32_t>(fd));
     size_t bytesRead = fread(slotPtr, 1, fileSize, f);
     fclose(f);
 
     if (bytesRead != fileSize)
     {
         Engine_LogError("EngineApp: partial read for '%s' (%zu / %zu bytes)", path, bytesRead, fileSize);
-        Engine_ClearSlot(ARENA_CONFIG, (uint32_t)fd);
+        Engine_ClearSlot(ARENA_CONFIG, static_cast<uint32_t>(fd));
         return -1;
     }
 
@@ -170,7 +170,7 @@ size_t EngineApp_FileRead(int32_t fileId, const void** outData)
 
     if (outData)
     {
-        *outData = Engine_GetSlot(ARENA_CONFIG, (uint32_t)s_Files[fileId].slotIndex);
+        *outData = Engine_GetSlot(ARENA_CONFIG, static_cast<uint32_t>(s_Files[fileId].slotIndex));
     }
     return s_Files[fileId].size;
 }
@@ -220,7 +220,7 @@ bool EngineApp_FileClose(int32_t fileId)
 
     if (s_Files[fileId].mode == FILE_MODE_READ)
     {
-        Engine_ClearSlot(ARENA_CONFIG, (uint32_t)s_Files[fileId].slotIndex);
+        Engine_ClearSlot(ARENA_CONFIG, static_cast<uint32_t>(s_Files[fileId].slotIndex));
     }
 
     memset(&s_Files[fileId], 0, sizeof(FileDescriptor));
@@ -316,7 +316,7 @@ bool EngineStart(const char* resourceLocationToken, const char* mainScript)
     return true;
 }
 
-void EngineUpdate(void)
+void EngineUpdate()
 {
     float dt = GetFrameTime();
 
@@ -333,9 +333,9 @@ void EngineUpdate(void)
     Engine_Script_FrameTick();
 }
 
-bool EngineExited(void) { return WindowShouldClose() || s_ExitRequested; }
+bool EngineExited() { return WindowShouldClose() || s_ExitRequested; }
 
-void EngineStop(void) { Engine_Close(); }
+void EngineStop() { Engine_Close(); }
 
 const char* FormatResourceLocationToken(const char* locationToken)
 {

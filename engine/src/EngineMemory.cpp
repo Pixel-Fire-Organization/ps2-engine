@@ -1,4 +1,4 @@
-#include <string.h>
+#include <cstring>
 #include "Engine.h"
 
 // Round ptr up to the next multiple of alignment.
@@ -8,7 +8,7 @@ static inline uintptr_t AlignForward(uintptr_t ptr, size_t alignment)
 {
     if (alignment == 0)
         return ptr;
-    uintptr_t a = (uintptr_t)alignment;
+    uintptr_t a = alignment;
     // Safe only for power-of-two alignment: (ptr & (a-1)) gives the remainder.
     uintptr_t modulo = ptr & (a - 1u);
     if (modulo != 0)
@@ -32,11 +32,11 @@ void Engine_PoolInitMain(void* buffer, size_t capacity, size_t chunk_size)
     Engine_PoolInit(&g_MainPool, buffer, capacity, chunk_size);
 }
 
-void* Engine_PoolAllocMain(void) { return Engine_PoolAlloc(&g_MainPool); }
+void* Engine_PoolAllocMain() { return Engine_PoolAlloc(&g_MainPool); }
 
 void Engine_PoolFreeMain(void* ptr) { Engine_PoolFree(&g_MainPool, ptr); }
 
-void* Engine_PoolGetBufferMain(void) { return g_MainPool.buffer; }
+void* Engine_PoolGetBufferMain() { return g_MainPool.buffer; }
 
 // Max slots supported per arena type for metadata arrays
 #define MAX_ARENA_SLOTS MEM_ARENA_MAX_SLOTS
@@ -67,9 +67,9 @@ static void Internal_InitSlots(ArenaType type, MemoryArena* arena, uint32_t coun
     for (uint32_t i = 0; i < count; i++)
     {
         // Align the start of this specific slot
-        uintptr_t aligned_start = AlignForward((uintptr_t)ptr, alignment);
+        uintptr_t aligned_start = AlignForward(reinterpret_cast<uintptr_t>(ptr), alignment);
 
-        s_Slots[type][i].ptr = (void*)aligned_start;
+        s_Slots[type][i].ptr = reinterpret_cast<void *>(aligned_start);
         s_Slots[type][i].capacity = slot_capacity;
         s_Slots[type][i].usedSize = 0;
         s_Slots[type][i].locked = false;
@@ -80,7 +80,7 @@ static void Internal_InitSlots(ArenaType type, MemoryArena* arena, uint32_t coun
 
 void Engine_ArenasInitSegmented(void* base_ptr)
 {
-    uint8_t* ptr = (uint8_t*)base_ptr;
+    uint8_t* ptr = static_cast<uint8_t *>(base_ptr);
 
     Engine_ArenaInit(&g_ScriptArena, ptr, MEM_BLOCK_SCRIPT_SIZE);
     Internal_InitSlots(ARENA_SCRIPT, &g_ScriptArena, MEM_BLOCK_SCRIPT_SLOTS);
@@ -170,7 +170,7 @@ void* Engine_AddToArena(ArenaType type, size_t size, size_t alignment)
 
 void Engine_ArenaInit(MemoryArena* arena, void* backing_buffer, size_t capacity)
 {
-    arena->buffer = (uint8_t*)backing_buffer;
+    arena->buffer = static_cast<uint8_t *>(backing_buffer);
     arena->capacity = capacity;
     arena->offset = 0;
 }
@@ -187,9 +187,9 @@ void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
         return nullptr;
     }
 
-    uintptr_t current_ptr = (uintptr_t)arena->buffer + arena->offset;
+    uintptr_t current_ptr = reinterpret_cast<uintptr_t>(arena->buffer) + arena->offset;
     uintptr_t aligned_ptr = AlignForward(current_ptr, alignment);
-    size_t shift = (size_t)(aligned_ptr - (uintptr_t)arena->buffer);
+    size_t shift = aligned_ptr - reinterpret_cast<uintptr_t>(arena->buffer);
 
     if (shift + size > arena->capacity)
     {
@@ -197,7 +197,7 @@ void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
     }
 
     arena->offset = shift + size;
-    return (void*)aligned_ptr;
+    return reinterpret_cast<void *>(aligned_ptr);
 }
 
 void Engine_ArenaReset(MemoryArena* arena) { arena->offset = 0; }
@@ -232,12 +232,12 @@ void Engine_PoolReset(MemoryPool* pool)
     }
 
     size_t num_chunks = pool->capacity / pool->chunk_size;
-    pool->head = (PoolFreeNode*)pool->buffer;
+    pool->head = reinterpret_cast<PoolFreeNode *>(pool->buffer);
     PoolFreeNode* curr = pool->head;
 
     for (size_t i = 1; i < num_chunks; ++i)
     {
-        PoolFreeNode* next_node = (PoolFreeNode*)(pool->buffer + i * pool->chunk_size);
+        PoolFreeNode* next_node = reinterpret_cast<PoolFreeNode *>(pool->buffer + i * pool->chunk_size);
         curr->next = next_node;
         curr = next_node;
     }
@@ -266,7 +266,7 @@ void Engine_PoolFree(MemoryPool* pool, void* ptr)
 
     // In a robust pool allocator, you'd verify ptr is within bounds and aligned.
     // For speed we assume it is.
-    PoolFreeNode* node = (PoolFreeNode*)ptr;
+    PoolFreeNode* node = static_cast<PoolFreeNode *>(ptr);
     node->next = pool->head;
     pool->head = node;
 }
