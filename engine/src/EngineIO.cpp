@@ -98,7 +98,7 @@ static void IOThreadEntry(void* arg)
                 break;
 
             FILE* f = fopen(filepath, "rb");
-            void* data = NULL;
+            void* data = nullptr;
             size_t size = 0;
             if (f)
             {
@@ -221,7 +221,7 @@ bool Engine_IO_Init(void)
         return false;
     }
 
-    StartThread(s_IOThreadID, NULL);
+    StartThread(s_IOThreadID, nullptr);
 
     Engine_LogInfo("Async IO system initialized.");
     return true;
@@ -294,7 +294,7 @@ void Engine_IO_Update(void)
 
             // Re-acquire to mark the slot idle and continue the scan.
             WaitSema(s_IOMutex);
-            s_Requests[i].loadedData = NULL;
+            s_Requests[i].loadedData = nullptr;
             s_Requests[i].state = IO_STATE_IDLE;
 
             // Release the shared read buffer AFTER setting the slot to IDLE, so

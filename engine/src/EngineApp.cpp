@@ -93,7 +93,7 @@ int32_t EngineApp_FileOpen(const char* path)
     }
 
     // Use the descriptor index as the config arena slot index.
-    if (!Engine_LoadToSlot(ARENA_CONFIG, (uint32_t)fd, NULL, fileSize))
+    if (!Engine_LoadToSlot(ARENA_CONFIG, (uint32_t)fd, nullptr, fileSize))
     {
         Engine_LogError("EngineApp: failed to reserve config slot %d for '%s'", fd, path);
         fclose(f);
@@ -157,14 +157,14 @@ size_t EngineApp_FileRead(int32_t fileId, const void** outData)
     {
         Engine_LogError("EngineApp: FileRead called with invalid fileId %d", fileId);
         if (outData)
-            *outData = NULL;
+            *outData = nullptr;
         return 0;
     }
     if (s_Files[fileId].mode != FILE_MODE_READ)
     {
         Engine_LogError("EngineApp: FileRead called on WRITE descriptor (fileId %d)", fileId);
         if (outData)
-            *outData = NULL;
+            *outData = nullptr;
         return 0;
     }
 
@@ -289,7 +289,7 @@ bool EngineStart(const char* resourceLocationToken, const char* mainScript)
         return false;
     }
 
-    const void* scriptData = NULL;
+    const void* scriptData = nullptr;
     size_t scriptSize = EngineApp_FileRead(fd, &scriptData);
     if (scriptSize == 0 || !scriptData)
     {

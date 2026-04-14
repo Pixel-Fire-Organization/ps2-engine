@@ -1,7 +1,5 @@
-﻿#ifndef ENGINE_LEVEL_H
-#define ENGINE_LEVEL_H
+﻿#pragma once
 
-#include <stdbool.h>
 #include <stdint.h>
 
 #include "Constants.h"
@@ -32,5 +30,3 @@ bool Engine_Level_Load(Level* level);
 // Unload a level: unpins required resources and resets ARENA_LEVEL_DATA.
 // If keepPinned is true, required resources remain pinned (e.g. shared UI/fonts).
 void Engine_Level_Unload(Level* level, bool keepPinned);
-
-#endif // ENGINE_LEVEL_H

@@ -1,8 +1,5 @@
-﻿#ifndef ENGINE_RESOURCE_H
-#define ENGINE_RESOURCE_H
+﻿#pragma once
 
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 #include "Constants.h"
@@ -41,10 +38,10 @@ typedef struct
 } AssetFileHeader;
 
 // Initialize the resource manager (call once during Engine_Init)
-bool Engine_Resource_Init(void);
+bool Engine_Resource_Init();
 
 // Shut down and release all resources
-void Engine_Resource_Shutdown(void);
+void Engine_Resource_Shutdown();
 
 // Load a resource from a .ps2a file on disc.
 // For RES_MODEL: loads synchronously via Raylib's LoadModel.
@@ -77,18 +74,16 @@ void Engine_Resource_Unpin(int32_t handle);
 void Engine_Resource_Unload(int32_t handle);
 
 // Force-unload all resources (including pinned). Used during shutdown.
-void Engine_Resource_UnloadAll(void);
+void Engine_Resource_UnloadAll();
 
 // Called once per frame (from Engine_Update) to advance the current frame counter.
-void Engine_Resource_Update(void);
+void Engine_Resource_Update();
 
 // Returns the number of GS VRAM pages currently occupied by loaded textures.
 // Compared against GFX_GS_TEXTURE_PAGE_BUDGET (264) to detect VRAM pressure.
 // When over budget ps2gl performs silent LRU eviction — textures are re-uploaded
 // from CPU RAM on next use at a performance cost.
-uint32_t Engine_Resource_GetAllocatedGsPages(void);
+uint32_t Engine_Resource_GetAllocatedGsPages();
 
 // Returns the compile-time GS VRAM texture page budget (GFX_GS_TEXTURE_PAGE_BUDGET).
-uint32_t Engine_Resource_GetGsPageBudget(void);
-
-#endif // ENGINE_RESOURCE_H
+uint32_t Engine_Resource_GetGsPageBudget();

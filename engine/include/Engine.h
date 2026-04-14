@@ -1,7 +1,5 @@
-#ifndef ENGINE_H
-#define ENGINE_H
+#pragma once
 
-// Core definitions
 #include "Constants.h"
 #include "EngineCore.h"
 #include "EngineDebug.h"
@@ -12,8 +10,3 @@
 #include "EngineResource.h"
 #include "EngineScript.h"
 #include "Macros.h"
-
-// Raylib wrapper for Graphics / Input
-#include <raylib.h>
-
-#endif // ENGINE_H

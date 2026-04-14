@@ -1,7 +1,12 @@
-#include <malloc.h>
+#include "EngineScript.h"
+#include "EngineInput.h"
 #include <rlgl.h>
-#include <string.h>
-#include "Engine.h"
+#include <malloc.h>
+#include <cstring>
+#include "EngineApp.h"
+#include "EngineMemory.h"
+#include "EngineResource.h"
+#include "Macros.h"
 
 #define LUA_USE_C89
 extern "C" {
@@ -10,14 +15,12 @@ extern "C" {
 #include <lualib.h>
 }
 
-#include "EngineInput.h"
-
 
 #define MAX_SCRIPT_UNITS SCRIPTING_LUA_MAX_UNITS // (16 slots = 8 pairs)
 static ScriptUnit s_ScriptUnits[MAX_SCRIPT_UNITS];
 
 // Exit callback registered by EngineApp — called when Lua invokes engine.exit().
-static void (*s_OnExit)(void) = NULL;
+static ExitCallback s_OnExit = nullptr;
 
 
 // ---------------------------------------------------------------------------
@@ -92,14 +95,14 @@ static void* Heap_Alloc(void* base, size_t capacity, size_t nsize)
 
     while (cursor + HEAP_HEADER_SIZE <= end)
     {
-        BlockHeader* block = (BlockHeader*)cursor;
+        BlockHeader* block = reinterpret_cast<BlockHeader *>(cursor);
         if (block->free && static_cast<size_t>(block->size) >= nsize)
         {
             size_t remainder = static_cast<size_t>(block->size) - nsize;
             if (remainder >= HEAP_MIN_SPLIT)
             {
                 // Split: carve a new free block from the tail
-                BlockHeader* next = (BlockHeader*)(cursor + HEAP_HEADER_SIZE + nsize);
+                BlockHeader* next = reinterpret_cast<BlockHeader *>(cursor + HEAP_HEADER_SIZE + nsize);
                 next->size = static_cast<uint32_t>(remainder - HEAP_HEADER_SIZE);
                 next->free = 1;
                 block->size = static_cast<uint32_t>(nsize);
@@ -109,7 +112,7 @@ static void* Heap_Alloc(void* base, size_t capacity, size_t nsize)
         }
         cursor += HEAP_HEADER_SIZE + static_cast<size_t>(block->size);
     }
-    return NULL; // OOM
+    return nullptr; // OOM
 }
 
 static void Heap_Free(void* base, size_t capacity, void* ptr)
@@ -117,7 +120,7 @@ static void Heap_Free(void* base, size_t capacity, void* ptr)
     if (!ptr)
         return;
 
-    BlockHeader* block = (BlockHeader*)(static_cast<uint8_t*>(ptr) - HEAP_HEADER_SIZE);
+    BlockHeader* block = reinterpret_cast<BlockHeader *>(static_cast<uint8_t *>(ptr) - HEAP_HEADER_SIZE);
     block->free = 1;
 
     // Forward coalescing: merge contiguous free blocks to reduce fragmentation
@@ -125,17 +128,17 @@ static void Heap_Free(void* base, size_t capacity, void* ptr)
     uint8_t* end = static_cast<uint8_t*>(base) + capacity;
     while (next + HEAP_HEADER_SIZE <= end)
     {
-        BlockHeader* nextBlock = (BlockHeader*)next;
+        BlockHeader* nextBlock = reinterpret_cast<BlockHeader *>(next);
         if (!nextBlock->free)
             break;
-        block->size += static_cast<uint32_t>((HEAP_HEADER_SIZE + (size_t)nextBlock->size));
+        block->size += static_cast<uint32_t>((HEAP_HEADER_SIZE + static_cast<size_t>(nextBlock->size)));
         next = (uint8_t*)block + HEAP_HEADER_SIZE + static_cast<size_t>(block->size);
     }
 }
 
 static void* Heap_Realloc(void* base, size_t capacity, void* ptr, size_t osize, size_t nsize)
 {
-    BlockHeader* block = (BlockHeader*)(static_cast<uint8_t*>(ptr) - HEAP_HEADER_SIZE);
+    BlockHeader* block = reinterpret_cast<BlockHeader *>(static_cast<uint8_t *>(ptr) - HEAP_HEADER_SIZE);
     size_t alignedN = (nsize + 7u) & ~7u;
 
     if (static_cast<size_t>(block->size) >= alignedN)
@@ -143,7 +146,7 @@ static void* Heap_Realloc(void* base, size_t capacity, void* ptr, size_t osize, 
 
     void* newPtr = Heap_Alloc(base, capacity, nsize);
     if (!newPtr)
-        return NULL;
+        return nullptr;
 
     memmove(newPtr, ptr, (osize < nsize) ? osize : nsize);
     Heap_Free(base, capacity, ptr);
@@ -162,7 +165,7 @@ static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
     // Returning NULL here prevents Lua from writing its state to address 0x0,
     // which would corrupt the PS2 exception-vector table.
     if (!slotBase || !slotCapacity)
-        return NULL;
+        return nullptr;
 
     // Lazy-init: place one free block spanning the entire slot on first use.
     if (!unit->heapReady)
@@ -174,10 +177,10 @@ static void* Engine_Lua_Alloc(void* ud, void* ptr, size_t osize, size_t nsize)
     if (nsize == 0)
     {
         Heap_Free(slotBase, slotCapacity, ptr);
-        return NULL;
+        return nullptr;
     }
 
-    if (ptr == NULL)
+    if (ptr == nullptr)
         return Heap_Alloc(slotBase, slotCapacity, nsize);
 
     return Heap_Realloc(slotBase, slotCapacity, ptr, osize, nsize);
@@ -190,9 +193,9 @@ static int Internal_Lua_Panic(lua_State* L)
     return 0;
 }
 
-void Engine_Script_SetExitCallback(void (*onExit)(void)) { s_OnExit = onExit; }
+void Engine_Script_SetExitCallback(ExitCallback onExit) { s_OnExit = onExit; }
 
-bool Engine_Script_Init(void)
+bool Engine_Script_Init()
 {
     for (int i = 0; i < MAX_SCRIPT_UNITS; i++)
     {
@@ -215,7 +218,7 @@ bool Engine_Script_Init(void)
                                               {"math", luaopen_math}, // math.sin, math.sqrt, etc.
                                               {"string", luaopen_string}, // string.format, string.find, etc.
                                               {"table", luaopen_table}, // table.insert, table.remove, etc.
-                                              {NULL, NULL}};
+                                              {nullptr, nullptr}};
             for (const luaL_Reg* lib = s_Libs; lib->func; lib++)
             {
                 luaL_requiref(s_ScriptUnits[i].L, lib->name, lib->func, 1);
@@ -242,14 +245,14 @@ bool Engine_Script_Init(void)
     return true;
 }
 
-void Engine_Script_Close(void)
+void Engine_Script_Close()
 {
     for (int i = 0; i < MAX_SCRIPT_UNITS; i++)
     {
         if (s_ScriptUnits[i].L)
         {
             lua_close(s_ScriptUnits[i].L);
-            s_ScriptUnits[i].L = NULL;
+            s_ScriptUnits[i].L = nullptr;
         }
     }
 
@@ -346,7 +349,7 @@ void Engine_Script_UpdateAll(float dt)
     }
 }
 
-void Engine_Script_EndCurrentMode(void)
+void Engine_Script_EndCurrentMode()
 {
     if (s_CurrentRenderMode == RENDER_MODE_3D)
     {
@@ -359,7 +362,7 @@ void Engine_Script_EndCurrentMode(void)
     s_CurrentRenderMode = RENDER_MODE_NONE;
 }
 
-void Engine_Script_FrameTick(void)
+void Engine_Script_FrameTick()
 {
     s_FrameCount++;
 
@@ -479,7 +482,7 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
 // when driving the camera with analogue input.
 static int Lua_Graphics_UpdateCamera3D(lua_State* L)
 {
-    int32_t handle = (int32_t)luaL_checkinteger(L, 1);
+    int32_t handle = luaL_checkinteger(L, 1);
 
     if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_3D || !s_Camera3DActive[handle])
     {
@@ -538,7 +541,7 @@ static int Lua_Graphics_BeginMode3D(lua_State* L)
 // Symmetric re-entry guard matching begin_mode_3d.
 static int Lua_Graphics_BeginMode2D(lua_State* L)
 {
-    int32_t handle = (int32_t)luaL_checkinteger(L, 1);
+    int32_t handle = luaL_checkinteger(L, 1);
 
     if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_2D || !s_Camera2DActive[handle])
     {
@@ -1053,7 +1056,7 @@ static int Lua_IO_Open(lua_State* L)
 {
     const char* path = luaL_checkstring(L, 1);
     int32_t fd = EngineApp_FileOpen(path);
-    lua_pushinteger(L, (lua_Integer)fd);
+    lua_pushinteger(L, fd);
     return 1;
 }
 
@@ -1061,13 +1064,13 @@ static int Lua_IO_OpenWrite(lua_State* L)
 {
     const char* path = luaL_checkstring(L, 1);
     int32_t fd = EngineApp_FileOpenWrite(path);
-    lua_pushinteger(L, (lua_Integer)fd);
+    lua_pushinteger(L, fd);
     return 1;
 }
 
 static int Lua_IO_Close(lua_State* L)
 {
-    int32_t fd = (int32_t)luaL_checkinteger(L, 1);
+    int32_t fd = luaL_checkinteger(L, 1);
     bool ok = EngineApp_FileClose(fd);
     lua_pushboolean(L, ok);
     return 1;
@@ -1075,7 +1078,7 @@ static int Lua_IO_Close(lua_State* L)
 
 static int Lua_IO_GetSize(lua_State* L)
 {
-    int32_t fd = (int32_t)luaL_checkinteger(L, 1);
+    int32_t fd = luaL_checkinteger(L, 1);
     size_t sz = EngineApp_FileGetSize(fd);
     lua_pushinteger(L, static_cast<lua_Integer>(sz));
     return 1;
@@ -1086,8 +1089,8 @@ static int Lua_IO_GetSize(lua_State* L)
 // Intended for small text files only (config, dialogue).
 static int Lua_IO_Read(lua_State* L)
 {
-    int32_t fd = (int32_t)luaL_checkinteger(L, 1);
-    const void* data = NULL;
+    int32_t fd = luaL_checkinteger(L, 1);
+    const void* data = nullptr;
     size_t bytesRead = EngineApp_FileRead(fd, &data);
     if (bytesRead == 0 || !data)
     {
@@ -1103,7 +1106,7 @@ static int Lua_IO_Read(lua_State* L)
 // io.write(fileId, content) -> number (bytes written; 0 on error)
 static int Lua_IO_Write(lua_State* L)
 {
-    int32_t fd = (int32_t)luaL_checkinteger(L, 1);
+    int32_t fd = luaL_checkinteger(L, 1);
     size_t dataLen = 0;
     const char* data = luaL_checklstring(L, 2, &dataLen);
     size_t written = EngineApp_FileWrite(fd, data, dataLen);
@@ -1150,20 +1153,20 @@ static int Lua_Resources_Load(lua_State* L)
         Engine_LogError("[Lua] resources.load: unknown type '%s'", typeStr);
 
     int32_t handle = Engine_Resource_Load(type, path);
-    lua_pushinteger(L, (lua_Integer)handle);
+    lua_pushinteger(L, handle);
     return 1;
 }
 
 static int Lua_Resources_Unload(lua_State* L)
 {
-    int32_t handle = (int32_t)luaL_checkinteger(L, 1);
+    int32_t handle = luaL_checkinteger(L, 1);
     Engine_Resource_Unload(handle);
     return 0;
 }
 
 static int Lua_Resources_IsReady(lua_State* L)
 {
-    int32_t handle = (int32_t)luaL_checkinteger(L, 1);
+    int32_t handle = luaL_checkinteger(L, 1);
     lua_pushboolean(L, Engine_Resource_IsReady(handle));
     return 1;
 }

@@ -1,5 +1,4 @@
-#ifndef ENGINE_INPUT_H
-#define ENGINE_INPUT_H
+#pragma once
 
 #include <cstdint>
 #include <raylib.h>
@@ -53,6 +52,4 @@ uint8_t GetKeyboardButtonPressed();
 
 #ifdef __cplusplus
 };
-#endif
-
 #endif

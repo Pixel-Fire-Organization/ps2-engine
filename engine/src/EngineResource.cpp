@@ -277,7 +277,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
     case RES_TEXTURE:
         {
             Image img = LoadImageFromMemory(header.ext, payload, (int)header.dataSize);
-            if (img.data != NULL)
+            if (img.data != nullptr)
             {
                 // Hard-reject textures that exceed the GS VRAM slot budget.
                 // Raylib registers slots up to 64 pages (512×256 at PSM32); anything larger
@@ -378,7 +378,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
 #endif
     case RES_FONT:
         {
-            entry->handle.font = LoadFontFromMemory(header.ext, payload, (int)header.dataSize, 32, NULL, 0);
+            entry->handle.font = LoadFontFromMemory(header.ext, payload, (int)header.dataSize, 32, nullptr, 0);
             if (entry->handle.font.texture.id > 0)
             {
                 entry->state = RES_STATE_READY;
@@ -626,11 +626,11 @@ int32_t Engine_Resource_LoadAuto(const char* path)
 void* Engine_Resource_Get(int32_t handle)
 {
     if (handle < 0 || handle >= RES_MAX_ENTRIES)
-        return NULL;
+        return nullptr;
 
     ResourceEntry* entry = &s_Entries[handle];
     if (entry->state != RES_STATE_READY)
-        return NULL;
+        return nullptr;
 
     entry->lastUsedFrame = s_CurrentFrame;
 
@@ -644,12 +644,12 @@ void* Engine_Resource_Get(int32_t handle)
 #if defined(SUPPORT_MODULE_RAUDIO)
         return &entry->handle.sound;
 #else
-        return NULL;
+        return nullptr;
 #endif
     case RES_FONT:
         return &entry->handle.font;
     }
-    return NULL;
+    return nullptr;
 }
 
 bool Engine_Resource_IsReady(int32_t handle)

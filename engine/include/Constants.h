@@ -1,5 +1,4 @@
-#ifndef CONSTANTS_H
-#define CONSTANTS_H
+#pragma once
 
 // --- GFX (Graphics) ---
 #define GFX_SCREEN_REGION_PAL 0
@@ -148,5 +147,3 @@
 #define MAX_JOYSTICKS 2
 
 #define LOG_STRING_MAX_SIZE 256
-
-#endif // CONSTANTS_H
