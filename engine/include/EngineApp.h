@@ -1,7 +1,5 @@
-﻿#ifndef ENGINE_APP_H
-#define ENGINE_APP_H
+﻿#pragma once
 
-#include <stdbool.h>
 #include <stdint.h>
 
 // ---------------------------------------------------------------------------
@@ -43,5 +41,3 @@ extern void Engine_LogInfo(const char* text, ...);
 extern void Engine_LogError(const char* text, ...);
 
 extern void Engine_Panic(const char* message);
-
-#endif // ENGINE_APP_H

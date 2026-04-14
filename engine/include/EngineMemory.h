@@ -1,9 +1,7 @@
-#ifndef ENGINE_MEMORY_H
-#define ENGINE_MEMORY_H
+#pragma once
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 typedef struct
 {
@@ -72,11 +70,11 @@ typedef struct
 
 void Engine_PoolInitMain(void* buffer, size_t capacity, size_t chunk_size);
 
-void* Engine_PoolAllocMain(void);
+void* Engine_PoolAllocMain();
 
 void Engine_PoolFreeMain(void* ptr);
 
-void* Engine_PoolGetBufferMain(void);
+void* Engine_PoolGetBufferMain();
 
 void Engine_PoolInit(MemoryPool* pool, void* backing_buffer, size_t capacity, size_t chunk_size);
 
@@ -85,5 +83,3 @@ void* Engine_PoolAlloc(MemoryPool* pool);
 void Engine_PoolFree(MemoryPool* pool, void* ptr);
 
 void Engine_PoolReset(MemoryPool* pool);
-
-#endif // ENGINE_MEMORY_H

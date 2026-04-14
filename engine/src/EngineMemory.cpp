@@ -97,7 +97,7 @@ void Engine_ArenasInitSegmented(void* base_ptr)
 void* Engine_GetSlot(ArenaType type, uint32_t slotIndex)
 {
     if (type >= ARENA_COUNT || slotIndex >= s_SlotCounts[type])
-        return NULL;
+        return nullptr;
     return s_Slots[type][slotIndex].ptr;
 }
 
@@ -164,7 +164,7 @@ void* Engine_AddToArena(ArenaType type, size_t size, size_t alignment)
     case ARENA_LEVEL_DATA:
         return Engine_ArenaAlloc(&g_LevelDataArena, size, alignment);
     default:
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -184,7 +184,7 @@ void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
     if (alignment != 0 && !IS_POWER_OF_TWO(alignment))
     {
         Engine_LogError("Engine_ArenaAlloc: alignment %zu is not a power of two", alignment);
-        return NULL;
+        return nullptr;
     }
 
     uintptr_t current_ptr = (uintptr_t)arena->buffer + arena->offset;
@@ -193,7 +193,7 @@ void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
 
     if (shift + size > arena->capacity)
     {
-        return NULL; // Out of memory
+        return nullptr; // Out of memory
     }
 
     arena->offset = shift + size;
@@ -227,7 +227,7 @@ void Engine_PoolReset(MemoryPool* pool)
 {
     if (pool->capacity < pool->chunk_size || !pool->buffer)
     {
-        pool->head = NULL;
+        pool->head = nullptr;
         return;
     }
 
@@ -241,14 +241,14 @@ void Engine_PoolReset(MemoryPool* pool)
         curr->next = next_node;
         curr = next_node;
     }
-    curr->next = NULL;
+    curr->next = nullptr;
 }
 
 void* Engine_PoolAlloc(MemoryPool* pool)
 {
-    if (pool->head == NULL)
+    if (pool->head == nullptr)
     {
-        return NULL;
+        return nullptr;
     }
     PoolFreeNode* node = pool->head;
     pool->head = pool->head->next;
@@ -261,7 +261,7 @@ void* Engine_PoolAlloc(MemoryPool* pool)
 
 void Engine_PoolFree(MemoryPool* pool, void* ptr)
 {
-    if (ptr == NULL)
+    if (ptr == nullptr)
         return;
 
     // In a robust pool allocator, you'd verify ptr is within bounds and aligned.

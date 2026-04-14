@@ -1,9 +1,7 @@
-#ifndef ENGINE_SCRIPT_H
-#define ENGINE_SCRIPT_H
+#pragma once
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 // Forward declaration of lua_State to keep header clean
 typedef struct lua_State lua_State;
@@ -18,13 +16,15 @@ typedef struct
 } ScriptUnit;
 
 // Initializer for the Lua subsystem
-bool Engine_Script_Init(void);
+bool Engine_Script_Init();
 
-void Engine_Script_Close(void);
+void Engine_Script_Close();
+
+using ExitCallback = void(*)();
 
 // Register a callback invoked when Lua calls engine.exit().
 // Must be called after Engine_Script_Init and before Engine_Script_Run.
-void Engine_Script_SetExitCallback(void (*onExit)(void));
+void Engine_Script_SetExitCallback(ExitCallback onExit);
 
 // Script Loading and Execution
 // loads a script into a free slot pair (even/odd)
@@ -38,10 +38,8 @@ void Engine_Script_UpdateAll(float dt);
 // Closes any open BeginMode3D / BeginMode2D block.
 // Called by EngineApp between UpdateAll and DrawDebugOverlay so the
 // debug overlay is always drawn in flat 2D, outside of any 3D projection.
-void Engine_Script_EndCurrentMode(void);
+void Engine_Script_EndCurrentMode();
 
 // Advances the internal frame counter and runs the camera LFU eviction pass.
 // Must be called once per frame (after EndDrawing).
-void Engine_Script_FrameTick(void);
-
-#endif // ENGINE_SCRIPT_H
+void Engine_Script_FrameTick();

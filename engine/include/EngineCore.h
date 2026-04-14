@@ -1,8 +1,4 @@
-#ifndef ENGINE_CORE_H
-#define ENGINE_CORE_H
-
-#include <stdbool.h>
-#include <stddef.h>
+#pragma once
 
 typedef struct
 {
@@ -14,8 +10,9 @@ bool Engine_Init(EngineConfig config);
 
 bool Engine_Is_GFX_Initialized();
 
-void Engine_Update(void);
+void Engine_Update();
 
+void Engine_Close();
 void Engine_Close(void);
 
 const char* Engine_GetResourceLocationToken(void);
@@ -25,5 +22,3 @@ const char* Engine_GetResourceLocationToken(void);
 // suffix for the device type (e.g. cdrom0:\\FOLDER\\FILE;1, host:FILE).
 // Returns false if any argument is NULL or bufSize is 0.
 bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf, size_t bufSize);
-
-#endif // ENGINE_CORE_H
