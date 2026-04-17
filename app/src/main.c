@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include "EngineApp.h"
-#include "build_app_version.h"
+#include "BuildAppVersion.h"
 
 static const uint32_t AppVersion = APP_BUILD_VERSION;
 

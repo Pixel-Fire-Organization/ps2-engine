@@ -5,24 +5,44 @@ OFF exposes the full engine include directory (dev/test mode)."
 )
 
 # ---------------------------------------------------------------------------
-# Engine build version — increments the counter in build_engine_version.h
-# on every build. The header is both the persistent counter (committed to
-# git) and the C include consumed by the compiler.
+# Engine build version — increments the counter in BuildEngineVersion.h only
+# when at least one engine source file has changed since the last build.
+# The header is both the persistent counter (committed to git) and the C
+# include consumed by the compiler.
 #
-# The custom target has no OUTPUT so Make always runs it unconditionally.
+# add_custom_command with OUTPUT (the stamp file) and DEPENDS (source files):
+# Make re-runs the command only when a source is newer than the stamp,
+# preventing unnecessary version bumps on builds with no code changes.
 # OBJECT_DEPENDS forces EngineCore.c to recompile after regeneration.
 # ---------------------------------------------------------------------------
-set(_ENGINE_VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/build_engine_version.h")
+set(_ENGINE_VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/BuildEngineVersion.h")
+set(_ENGINE_VERSION_STAMP  "${CMAKE_BINARY_DIR}/engine_version.stamp")
 
-add_custom_target(increment_engine_version
+set(_ENGINE_C_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineCore.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineDebug.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineMemory.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineIO.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineResource.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineLevel.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineScript.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineApp.c"
+)
+
+add_custom_command(
+    OUTPUT  "${_ENGINE_VERSION_STAMP}"
     COMMAND ${CMAKE_COMMAND}
         -D "HEADER_FILE=${_ENGINE_VERSION_HEADER}"
         -D "DEFINE_NAME=ENGINE_BUILD_VERSION"
         -D "GUARD_NAME=BUILD_ENGINE_VERSION_H"
         -P "${CMAKE_SOURCE_DIR}/scripts/increment_version.cmake"
+    COMMAND ${CMAKE_COMMAND} -E touch "${_ENGINE_VERSION_STAMP}"
+    DEPENDS ${_ENGINE_C_SOURCES}
     COMMENT "Incrementing engine build version..."
     VERBATIM
 )
+
+add_custom_target(increment_engine_version DEPENDS "${_ENGINE_VERSION_STAMP}")
 
 add_library(ps2_engine STATIC
     src/EngineCore.c

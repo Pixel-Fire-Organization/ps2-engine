@@ -4,28 +4,35 @@ set_target_properties(${APP_EXE_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/exec"
 )
 target_compile_options(${APP_EXE_NAME} PRIVATE -Wall -Wextra -Werror)
+target_include_directories(${APP_EXE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # ---------------------------------------------------------------------------
-# App build version — increments the counter in build_app_version.h on every
-# build. The header is both the persistent counter (committed to git) and the
-# C include consumed by the compiler.
+# App build version — increments the counter in BuildAppVersion.h only when
+# app source files have changed since the last build.
+# The header is both the persistent counter (committed to git) and the C
+# include consumed by the compiler.
 #
-# The custom target has no OUTPUT, so Make always considers it out-of-date
-# and runs it unconditionally.  This guarantees a unique version on every
-# build even when no source files have changed.
+# add_custom_command with OUTPUT (the stamp file) and DEPENDS (main.c):
+# Make re-runs the command only when main.c is newer than the stamp,
+# preventing unnecessary version bumps on builds with no code changes.
 # OBJECT_DEPENDS forces main.c to recompile after the header is regenerated.
 # ---------------------------------------------------------------------------
-set(_APP_VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/build_app_version.h")
+set(_APP_VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/BuildAppVersion.h")
+set(_APP_VERSION_STAMP  "${CMAKE_BINARY_DIR}/app_version.stamp")
 
-add_custom_target(increment_app_version
+add_custom_command(
+    OUTPUT  "${_APP_VERSION_STAMP}"
     COMMAND ${CMAKE_COMMAND}
         -D "HEADER_FILE=${_APP_VERSION_HEADER}"
         -D "DEFINE_NAME=APP_BUILD_VERSION"
         -D "GUARD_NAME=BUILD_APP_VERSION_H"
         -P "${CMAKE_SOURCE_DIR}/scripts/increment_version.cmake"
+    COMMAND ${CMAKE_COMMAND} -E touch "${_APP_VERSION_STAMP}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.c"
     COMMENT "Incrementing app build version..."
     VERBATIM
 )
+add_custom_target(increment_app_version DEPENDS "${_APP_VERSION_STAMP}")
 add_dependencies(${APP_EXE_NAME} increment_app_version)
 set_source_files_properties(src/main.c PROPERTIES OBJECT_DEPENDS "${_APP_VERSION_HEADER}")
 
