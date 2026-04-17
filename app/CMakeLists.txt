@@ -49,6 +49,29 @@ else()
     message(WARNING "python3 not found. Asset packing (pack_assets.py) will be skipped.")
 endif()
 
+find_program(LUAC_BIN luac)
+if(PYTHON3_BIN)
+    # Pass the resolved luac path when available so the script does not have to
+    # search PATH again at build time.
+    if(LUAC_BIN)
+        set(_COMPILE_LUA_LUAC_ARG --luac "${LUAC_BIN}")
+        message(STATUS "luac found (${LUAC_BIN}) — Lua pre-compilation enabled.")
+    else()
+        set(_COMPILE_LUA_LUAC_ARG)
+        message(WARNING "luac not found — Lua scripts will not be pre-compiled. "
+            ".LUC bytecode is required at runtime; install luac to enable pre-compilation.")
+    endif()
+    add_custom_target(compile-lua
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/compile_lua.py"
+            --src "${CMAKE_CURRENT_SOURCE_DIR}/cd_files"
+            ${_COMPILE_LUA_LUAC_ARG}
+        COMMENT "Pre-compiling Lua scripts in cd_files/..."
+        VERBATIM
+    )
+else()
+    message(WARNING "python3 not found. Lua pre-compilation (compile_lua.py) will be skipped.")
+endif()
+
 if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
     get_filename_component(_TOOLCHAIN_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     find_program(EE_NM_BIN
@@ -77,6 +100,8 @@ set(ISO_STAGING_DIR "${CMAKE_BINARY_DIR}/iso_root")
 
 set(ISO_CONTENT_BLACKLIST
     "RAYLIB"   # Raw asset sources; packed output lives in rassets/
+    "*.LUA"    # Lua source files; pre-compiled .LUC bytecode is used on disc instead
+    "*.lua"    # Match lower-case variants on case-preserving filesystems
 )
 
 find_program(MKISOFS_BIN mkisofs)
@@ -131,9 +156,10 @@ else()
     message(WARNING "mkisofs not found in environment. Skipping ISO bundle generation.")
 endif()
 
-# ELF and asset packing must finish before the ISO is assembled.
+# ELF, asset packing and Lua pre-compilation must finish before the ISO is assembled.
 add_dependencies(generate-iso ${APP_EXE_NAME})
 if(PYTHON3_BIN)
     add_dependencies(generate-iso pack-assets)
+    add_dependencies(generate-iso compile-lua)
 endif()
 

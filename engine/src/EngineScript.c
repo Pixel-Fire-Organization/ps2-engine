@@ -215,25 +215,36 @@ bool Engine_Script_Run(int unitIndex)
     if (!unit->L || !unit->active)
         return false;
 
-    // Retrieve the bytecode from the ODD slot using the actual stored size
+    // Retrieve the code from the ODD slot using the actual stored size
     uint32_t codeSlot = unit->slotIndex + 1;
     const char* code = (const char*)Engine_GetSlot(ARENA_SCRIPT, codeSlot);
     size_t codeSize = unit->codeSize;
 
-    // Strip UTF-8 BOM (0xEF 0xBB 0xBF) — Windows editors prepend this to text
-    // files. Lua does not understand the BOM and returns LUA_ERRSYNTAX without it.
-    if (codeSize >= 3 && (unsigned char)code[0] == 0xEF && (unsigned char)code[1] == 0xBB &&
-        (unsigned char)code[2] == 0xBF)
+    // Detect pre-compiled Lua bytecode: the Lua signature starts with 0x1B (the
+    // ESC byte). Source text never begins with this byte, so the check is
+    // unambiguous.
+    bool isBytecode = (codeSize >= 1 && (unsigned char)code[0] == 0x1B);
+
+    if (!isBytecode)
     {
-        code += 3;
-        codeSize -= 3;
+        // Strip UTF-8 BOM (0xEF 0xBB 0xBF) — Windows editors prepend this to text
+        // files. Lua does not understand the BOM and returns LUA_ERRSYNTAX without it.
+        if (codeSize >= 3 && (unsigned char)code[0] == 0xEF && (unsigned char)code[1] == 0xBB &&
+            (unsigned char)code[2] == 0xBF)
+        {
+            code += 3;
+            codeSize -= 3;
+        }
     }
+
+    Engine_LogInfo("Engine_Script_Run: loading %s (slot %d, %zu bytes)",
+                   isBytecode ? "bytecode" : "source", codeSlot, codeSize);
 
     if (luaL_loadbuffer(unit->L, code, codeSize, "PS2_Script") != LUA_OK)
     {
         const char* err = lua_tostring(unit->L, -1);
-        Engine_LogError("Lua compile error in slot %d: %s", codeSlot, err ? err : "(unknown)");
-        Engine_Panic("Lua script failed to compile");
+        Engine_LogError("Lua script load error in slot %d: %s", codeSlot, err ? err : "(unknown)");
+        Engine_Panic("Lua script failed to load");
         return false;
     }
 

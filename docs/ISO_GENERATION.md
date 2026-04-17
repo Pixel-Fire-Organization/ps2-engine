@@ -10,11 +10,13 @@ contents of `app/cd_files/` — minus any entries on the **ISO content blacklist
 The `generate-iso` CMake target performs the following steps in order:
 
 1. **Wipe** the staging directory (`<build>/iso_root/`) to eliminate stale files from previous builds.
-2. **Copy** `app/cd_files/` into the staging directory, honouring the [ISO Content Blacklist](#iso-content-blacklist).
-3. **Copy** the compiled ELF into the staging directory as `${APP_SERIAL}` (see [USERETAILNAME](#useretailname-option)
+2. **Pre-compile** Lua scripts — `compile-lua` runs `scripts/compile_lua.py`, which compiles every `.lua` file in
+   `app/cd_files/` to a `.LUC` bytecode file in the same directory (see [Lua Pre-compilation](#lua-pre-compilation)).
+3. **Copy** `app/cd_files/` into the staging directory, honouring the [ISO Content Blacklist](#iso-content-blacklist).
+4. **Copy** the compiled ELF into the staging directory as `${APP_SERIAL}` (see [USERETAILNAME](#useretailname-option)
    below).
-4. **Copy** the auto-generated `SYSTEM.CNF` into the staging directory.
-5. **Run** `mkisofs` / `genisoimage` to produce `exec/<APP_ISO_NAME>.iso`.
+5. **Copy** the auto-generated `SYSTEM.CNF` into the staging directory.
+6. **Run** `mkisofs` / `genisoimage` to produce `exec/<APP_ISO_NAME>.iso`.
 
 > **Requirement**: `genisoimage` (which provides `mkisofs`) must be installed and on `PATH`.  
 > If it is not found, `generate-iso` still exists as a no-op target so `build.sh --target generate-iso` does not fail.
@@ -71,6 +73,53 @@ the [ISO Content Blacklist](#iso-content-blacklist).
 
 ---
 
+## Lua Pre-compilation
+
+Lua scripts (`.lua`) placed in `app/cd_files/` are **pre-compiled** to bytecode (`.LUC`) by the `compile-lua` CMake
+target before the ISO is assembled.  This step is handled by `scripts/compile_lua.py`.
+
+### Why pre-compile?
+
+| Benefit          | Detail                                                                               |
+|:-----------------|:-------------------------------------------------------------------------------------|
+| **Performance**  | The PS2 Lua VM loads bytecode directly without parsing or compiling source text.    |
+| **Smaller disc** | Debug symbols (line numbers, variable names) are stripped via `luac -s`.            |
+| **Fail-fast**    | Syntax errors are caught at build time, not at runtime on the PS2.                  |
+
+### How it works
+
+1. `scripts/compile_lua.py` scans `app/cd_files/` recursively for `.lua` files.
+2. Each file is compiled to a `.LUC` sibling using `luac -s -o <name>.LUC <name>.lua`.
+3. The `.lua` source files are excluded from the ISO by the blacklist (`*.LUA`, `*.lua`).
+4. Only `.LUC` bytecode files reach the disc image and are read by the engine.
+
+The engine entry point (`SCRIPTING_MAIN_SCRIPT_PATH` in `engine/include/Constants.h`) points to
+`cdrom0:\MAIN.LUC;1`.
+
+### Requirements
+
+`luac` must be installed and on `PATH` (or the path passed to CMake via `-DLUAC_BIN`).  
+It is provided by the standard Lua package on most distributions:
+
+```sh
+# Debian / Ubuntu
+sudo apt install lua5.4
+
+# macOS (Homebrew)
+brew install lua
+```
+
+> **Compatibility**: The `luac` binary must produce bytecode compatible with the Lua version and word size used by the
+> engine.  The PS2 EE processor is 32-bit little-endian.  A 64-bit host `luac` encodes `sizeof(size_t) = 8`, which the
+> PS2 Lua VM will reject with *"size_t size mismatch"*.  Use a 32-bit `luac` build or a cross-compiled `luac` matching
+> the engine's embedded Lua version to ensure runtime compatibility.
+
+If `luac` is not found, `compile_lua.py` prints a warning and exits successfully so the rest of the build is not
+blocked; however, the disc image will contain neither `.lua` source (excluded by blacklist) nor `.LUC` bytecode, and
+the engine will fail to load the entry-point script at runtime.
+
+---
+
 ## ISO Content Blacklist
 
 The blacklist prevents specific files or directories inside `app/cd_files/` from being included in the disc image. It is
@@ -86,6 +135,8 @@ defined near the top of `app/CMakeLists.txt`:
 # ─────────────────────────────────────────────────────────────────────────────
 set(ISO_CONTENT_BLACKLIST
         "RAYLIB"   # Raw asset sources; packed output lives in rassets/
+        "*.LUA"    # Lua source files; pre-compiled .LUC bytecode is used on disc instead
+        "*.lua"    # Match lower-case variants on case-preserving filesystems
 )
 ```
 
