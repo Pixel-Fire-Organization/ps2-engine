@@ -6,15 +6,17 @@ any two builds to be unambiguously distinguished during debugging.
 
 ---
 
-## Version files
+## Version headers
 
-| File | Tracks |
-|---|---|
-| `last_app_version.txt` | App (`main.elf`) build counter |
-| `last_engine_version.txt` | Engine (`ps2_engine`) build counter |
+| File | Tracks | Macro |
+|---|---|---|
+| `engine/include/build_engine_version.h` | Engine (`ps2_engine`) build counter | `ENGINE_BUILD_VERSION` |
+| `app/src/build_app_version.h` | App (`main.elf`) build counter | `APP_BUILD_VERSION` |
 
-Both files live in the repository root and are committed to Git. They contain
-a single plain decimal integer. The value starts at `0` and is incremented
+Both headers live in the repository and are committed to git. They serve
+double duty as the **persistent counter** (git history) *and* the **C include**
+consumed directly by the compiler — no separate plain-text file is needed.
+Each contains a single `uint32_t` macro that starts at `0` and is incremented
 by `1` on every build.
 
 ---
@@ -23,18 +25,17 @@ by `1` on every build.
 
 `scripts/increment_version.cmake` is a reusable CMake script that:
 
-1. Reads the integer from the given version file.
-2. Increments it by 1 and writes the new value back to the file.
-3. Generates a C header in the CMake binary directory (`build/`) containing
-   the `uint32_t` macro.
+1. Reads the committed header file.
+2. Extracts the current integer value from the `#define` line via regex.
+3. Increments it by 1 and writes the updated header back in place.
 
 Two unconditional CMake custom targets (one per component) invoke this script
 before the corresponding compilation unit is compiled:
 
-| Custom target | Runs before | Version file | Generated header | Macro |
-|---|---|---|---|---|
-| `increment_engine_version` | `ps2_engine` library | `last_engine_version.txt` | `build/build_engine_version.h` | `ENGINE_BUILD_VERSION` |
-| `increment_app_version` | `main.elf` executable | `last_app_version.txt` | `build/build_app_version.h` | `APP_BUILD_VERSION` |
+| Custom target | Runs before | Header (read & written in place) | Macro |
+|---|---|---|---|
+| `increment_engine_version` | `ps2_engine` library | `engine/include/build_engine_version.h` | `ENGINE_BUILD_VERSION` |
+| `increment_app_version` | `main.elf` executable | `app/src/build_app_version.h` | `APP_BUILD_VERSION` |
 
 Because the custom targets have no declared output, Make considers them
 always out-of-date and runs them unconditionally — even when no source files
@@ -74,13 +75,6 @@ placed in the ELF's `.rodata` section and is visible in the PCSX2 `.sym` file.
 
 The counter advances automatically on every `cmake --build` invocation. No
 manual edits are required. After a successful build, commit the updated
-`last_app_version.txt` and/or `last_engine_version.txt` so the repository
-always reflects the highest build number that has been produced.
-
----
-
-## Generated files (not committed)
-
-`build/build_app_version.h` and `build/build_engine_version.h` are written to
-the CMake binary directory and are excluded from Git via `.gitignore` (`build/`
-is already ignored). They are recreated automatically on every build.
+`engine/include/build_engine_version.h` and/or `app/src/build_app_version.h`
+so the repository always reflects the highest build number that has been
+produced and the incremented versions are preserved in the repository history.

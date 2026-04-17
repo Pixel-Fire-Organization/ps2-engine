@@ -6,43 +6,20 @@ set_target_properties(${APP_EXE_NAME} PROPERTIES
 target_compile_options(${APP_EXE_NAME} PRIVATE -Wall -Wextra -Werror)
 
 # ---------------------------------------------------------------------------
-# App build version — reads last_app_version.txt, increments it on every
-# build, and writes build_app_version.h into the binary directory so that
-# main.c can embed the counter as a uint32_t.
+# App build version — increments the counter in build_app_version.h on every
+# build. The header is both the persistent counter (committed to git) and the
+# C include consumed by the compiler.
 #
 # The custom target has no OUTPUT, so Make always considers it out-of-date
 # and runs it unconditionally.  This guarantees a unique version on every
 # build even when no source files have changed.
 # OBJECT_DEPENDS forces main.c to recompile after the header is regenerated.
 # ---------------------------------------------------------------------------
-set(_APP_VERSION_HEADER "${CMAKE_BINARY_DIR}/build_app_version.h")
-set(_APP_VERSION_FILE   "${CMAKE_SOURCE_DIR}/last_app_version.txt")
-
-# Bootstrap: write the header at configure time (with the current value,
-# without incrementing) so that the compiler never sees a missing include.
-if(NOT EXISTS "${_APP_VERSION_HEADER}")
-    if(EXISTS "${_APP_VERSION_FILE}")
-        file(READ "${_APP_VERSION_FILE}" _init_app_ver)
-        string(STRIP "${_init_app_ver}" _init_app_ver)
-    else()
-        set(_init_app_ver "0")
-    endif()
-    file(WRITE "${_APP_VERSION_HEADER}"
-        "#ifndef BUILD_APP_VERSION_H\n"
-        "#define BUILD_APP_VERSION_H\n"
-        "\n"
-        "#include <stdint.h>\n"
-        "\n"
-        "#define APP_BUILD_VERSION ((uint32_t)${_init_app_ver}u)\n"
-        "\n"
-        "#endif /* BUILD_APP_VERSION_H */\n"
-    )
-endif()
+set(_APP_VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/build_app_version.h")
 
 add_custom_target(increment_app_version
     COMMAND ${CMAKE_COMMAND}
-        -D "VERSION_FILE=${_APP_VERSION_FILE}"
-        -D "OUTPUT_HEADER=${_APP_VERSION_HEADER}"
+        -D "HEADER_FILE=${_APP_VERSION_HEADER}"
         -D "DEFINE_NAME=APP_BUILD_VERSION"
         -D "GUARD_NAME=BUILD_APP_VERSION_H"
         -P "${CMAKE_SOURCE_DIR}/scripts/increment_version.cmake"
@@ -50,7 +27,6 @@ add_custom_target(increment_app_version
     VERBATIM
 )
 add_dependencies(${APP_EXE_NAME} increment_app_version)
-target_include_directories(${APP_EXE_NAME} PRIVATE "${CMAKE_BINARY_DIR}")
 set_source_files_properties(src/main.c PROPERTIES OBJECT_DEPENDS "${_APP_VERSION_HEADER}")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
