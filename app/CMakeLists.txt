@@ -49,7 +49,7 @@ else()
     message(WARNING "python3 not found. Asset packing (pack_assets.py) will be skipped.")
 endif()
 
-find_program(LUAC_BIN luac)
+find_program(LUAC_BIN NAMES luac luac5.4 luac5.3)
 if(PYTHON3_BIN)
     # Pass the resolved luac path when available so the script does not have to
     # search PATH again at build time.
