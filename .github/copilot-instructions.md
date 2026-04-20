@@ -102,52 +102,9 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 - **Asset Authoring**: Raw assets go in `app/cd_files/RAYLIB/` as JSON+source pairs. `scripts/pack_assets.py` compiles
   them to `.ps2a` in `app/cd_files/rassets/`.
 
-## C Coding Standards
+## Coding Standards
 
-### 1. General Principles
-
-- **Standard**: C99 (`-std=c99`).
-- **Design**: Encapsulation (hide state in `.c`), Abstraction, DRY, and KISS.
-- **Comments**: Only when necessary. Comment the **"why"**, not the **"what"**.
-- **Error Handling**: Use **enums** for descriptive error codes or `bool` for simple success/fail. Avoid raw integers.
-  Use `Engine_Panic` only for unrecoverable hardware/memory states.
-
-### 2. Naming Conventions
-
-| Element                 | Convention             | Example                    |
-|:------------------------|:-----------------------|:---------------------------|
-| **Files**               | `PascalCase.c`         | `EngineMemory.c`           |
-| **Functions**           | `PascalCase_SnakeCase` | `Engine_LoadToSlot()`      |
-| **Function Variables**  | `camelCase`            | `uint32_t slotIndex;`      |
-| **Static/Globals**      | `PascalCase`           | `static int SlotCount;`    |
-| **Macros/Consts**       | `UPPER_SNAKE_CASE`     | `MAX_SLOT_COUNT`           |
-| **Types (Struct/Enum)** | `PascalCase`           | `MemoryArena`, `ArenaType` |
-| **Members**             | `camelCase`            | `arena->usedSize`          |
-
-### 3. Types & Constants
-
-- **Fixed-width**: **ALWAYS** use `<stdint.h>` types (`uint32_t`, `int16_t`, `uint8_t`, etc.).
-- **Booleans**: Use `<stdbool.h>` (`bool`, `true`, `false`).
-- **Constants**: Place all engine-wide constants in `engine/include/Constants.h`.
-- **Magic Numbers**: Prohibited. Use descriptive macros or enums.
-- **Bitwise**: Use enums or macros for bitmasks.
-
-### 4. Memory & Performance (Embedded PS2)
-
-- **No Dynamic Allocation**: `malloc`, `free`, `realloc`, `calloc` are **FORBIDDEN**. Use the Engine's Arena or Pool
-  systems.
-- **Alignment**: PS2 DMA requires **16-byte alignment** (Quadwords).
-    - Use `__attribute__((aligned(16)))` for buffers sent to GS/VIF.
-    - Slots in `EngineMemory.c` are 16KB aligned for safety.
-- **Pointers**: Avoid raw pointer arithmetic where possible. Use `Engine_GetSlot` or `Engine_LoadToSlot`.
-- **Volatile**: Use `volatile` when accessing hardware registers or memory shared with DMA/Interrupts.
-
-- **Packing**: Arrange struct members from largest to smallest to minimize padding. Use `__attribute__((packed))` for
-  hardware-mapped structures (GS/VIF packets) — this is fully supported by the PS2 `ee-gcc` toolchain.
-- **Unions**: Use sparingly for type-punning or memory optimization.
-- **Strings**: Use safe versions: `strncpy`, `snprintf`, `strncat`. **NEVER** use `strcpy` or `sprintf`.
-- **Functions**: Use `static` for internal helper functions to keep them local to the translation unit.
-- **Header Guards**: Use `#ifndef HEADER_NAME_H` / `#define HEADER_NAME_H` style.
+See `.github/c-expert.instructions.md` for C rules and `.github/cpp-expert.instructions.md` for C++ rules.
 
 ## IDE & IntelliSense Rules
 
