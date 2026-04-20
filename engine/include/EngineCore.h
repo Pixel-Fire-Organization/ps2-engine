@@ -1,5 +1,7 @@
 #pragma once
 
+#include "graphics/Renderer.h"
+
 typedef struct
 {
     const char* windowTitle;
@@ -7,8 +9,8 @@ typedef struct
 } EngineConfig;
 
 bool Engine_Init(EngineConfig config);
-
 bool Engine_Is_GFX_Initialized();
+Renderer* Engine_GetRenderer();
 
 void Engine_Update();
 

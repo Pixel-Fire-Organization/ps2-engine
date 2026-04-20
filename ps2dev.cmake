@@ -21,8 +21,8 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
 # Compile Flags
 set(_PS2_COMMON_FLAGS "-I${PS2SDK}/ee/include -I${PS2SDK}/common/include -I${PS2SDK}/ports/include -D_EE -G0 -O2 -Wall -gdwarf-2 -gz")
-set(CMAKE_C_FLAGS "${_PS2_COMMON_FLAGS} -Wno-int-conversion" CACHE STRING "C Flags" FORCE)
-set(CMAKE_CXX_FLAGS "${_PS2_COMMON_FLAGS} -fno-exceptions -fno-rtti" CACHE STRING "CXX Flags" FORCE)
+set(CMAKE_C_FLAGS "${_PS2_COMMON_FLAGS} -std=c99 -Wno-int-conversion" CACHE STRING "C Flags" FORCE)
+set(CMAKE_CXX_FLAGS "${_PS2_COMMON_FLAGS} -std=c++11 -fno-exceptions -fno-rtti" CACHE STRING "CXX Flags" FORCE)
 
 # Startup linker file and LDFLAGS for Executables
 set(CMAKE_EXE_LINKER_FLAGS "-L${PS2SDK}/ee/lib -L${PS2SDK}/ports/lib -Wl,-zmax-page-size=128 -T${PS2SDK}/ee/startup/linkfile" CACHE STRING "Exec Link Flags" FORCE)

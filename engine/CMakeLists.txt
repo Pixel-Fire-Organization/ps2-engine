@@ -14,6 +14,9 @@ add_library(ps2_engine STATIC
         src/EngineScript.cpp
         src/EngineApp.cpp
         src/EngineInput.cpp
+        src/graphics/RaylibRenderer.cpp
+        src/graphics/Transform3D.cpp
+        src/graphics/DrawList.cpp
 
         # Headers
         include/Engine.h
@@ -29,11 +32,11 @@ add_library(ps2_engine STATIC
         include/EngineScript.h
         include/EngineInput.h
         include/graphics/EngineGraphics.h
-        src/graphics/EngineGraphics.cpp
         include/graphics/Renderer.h
         include/graphics/Primitives.h
         include/graphics/UI.h
         include/graphics/RaylibRenderer.h
+        include/graphics/DrawList.h
 )
 
 # Internal engine code always sees the full include directory.
