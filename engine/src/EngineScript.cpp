@@ -1,6 +1,6 @@
 #include "EngineScript.h"
+#include "EngineCore.h"
 #include "EngineInput.h"
-#include <rlgl.h>
 #include <malloc.h>
 #include <cstring>
 #include "EngineApp.h"
@@ -351,14 +351,6 @@ void Engine_Script_UpdateAll(float dt)
 
 void Engine_Script_EndCurrentMode()
 {
-    if (s_CurrentRenderMode == RENDER_MODE_3D)
-    {
-        EndMode3D();
-    }
-    else if (s_CurrentRenderMode == RENDER_MODE_2D)
-    {
-        EndMode2D();
-    }
     s_CurrentRenderMode = RENDER_MODE_NONE;
 }
 
@@ -497,6 +489,14 @@ static int Lua_Graphics_UpdateCamera3D(lua_State* L)
         Vector3{static_cast<float>(luaL_checknumber(L, 5)), static_cast<float>(luaL_checknumber(L, 6)),
                 static_cast<float>(luaL_checknumber(L, 7))};
     s_Camera3DLastUsed[handle] = s_FrameCount;
+
+    // Push updated camera to the renderer so Render() uses the latest state
+    if (s_CurrentRenderMode == RENDER_MODE_3D)
+    {
+        Renderer* r = Engine_GetRenderer();
+        if (r)
+            r->SetActiveCamera3D(handle, s_Cameras3D[handle]);
+    }
     return 0;
 }
 
@@ -518,27 +518,23 @@ static int Lua_Graphics_BeginMode3D(lua_State* L)
     {
         double elapsed = GetTime() - s_LastMode3DEnterTime;
         if (elapsed < SCRIPTING_MODE_REENTRY_COOLDOWN_SEC)
-        {
-            // No-op: too soon to re-enter.
             return 0;
-        }
-        // Re-enter: close current block first.
-        EndMode3D();
     }
     else if (s_CurrentRenderMode == RENDER_MODE_2D)
     {
-        EndMode2D();
+        s_CurrentRenderMode = RENDER_MODE_NONE;
     }
 
-    BeginMode3D(s_Cameras3D[handle]);
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->SetActiveCamera3D(handle, s_Cameras3D[handle]);
+
     s_CurrentRenderMode = RENDER_MODE_3D;
     s_LastMode3DEnterTime = GetTime();
     s_Camera3DLastUsed[handle] = s_FrameCount;
     return 0;
 }
 
-// graphics.begin_mode_2d(handle)
-// Symmetric re-entry guard matching begin_mode_3d.
 static int Lua_Graphics_BeginMode2D(lua_State* L)
 {
     int32_t handle = luaL_checkinteger(L, 1);
@@ -553,17 +549,17 @@ static int Lua_Graphics_BeginMode2D(lua_State* L)
     {
         double elapsed = GetTime() - s_LastMode2DEnterTime;
         if (elapsed < SCRIPTING_MODE_REENTRY_COOLDOWN_SEC)
-        {
             return 0;
-        }
-        EndMode2D();
     }
     else if (s_CurrentRenderMode == RENDER_MODE_3D)
     {
-        EndMode3D();
+        s_CurrentRenderMode = RENDER_MODE_NONE;
     }
 
-    BeginMode2D(s_Cameras2D[handle]);
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->SetActiveCamera2D(handle, s_Cameras2D[handle]);
+
     s_CurrentRenderMode = RENDER_MODE_2D;
     s_LastMode2DEnterTime = GetTime();
     s_Camera2DLastUsed[handle] = s_FrameCount;
@@ -676,19 +672,24 @@ static int Lua_Graphics_DrawCube(lua_State* L)
     float pz = static_cast<float>(luaL_checknumber(L, 3));
     float sz = static_cast<float>(luaL_checknumber(L, 4));
 
+    Color3 color = {1.f, 1.f, 1.f};
     if (lua_istable(L, 5))
     {
-        lua_geti(L, 5, 1);
-        unsigned char r = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_geti(L, 5, 2);
-        unsigned char g = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_geti(L, 5, 3);
-        unsigned char b = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_geti(L, 5, 4);
-        unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_pop(L, 4);
-        DrawCube(Vector3{px, py, pz}, sz, sz, sz, Color{r, g, b, a});
+        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_pop(L, 3);
+        // alpha is ignored — Color3 has no alpha channel
+        if (lua_geti(L, 5, 4)) lua_pop(L, 1);
     }
+
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->AddPrimitiveToDrawList(Primitive3D::Cube,
+                                  Vector3{px, py, pz},
+                                  Vector3{0.f, 0.f, 0.f},
+                                  Vector3{sz, sz, sz},
+                                  color);
     return 0;
 }
 
@@ -701,120 +702,33 @@ static int Lua_Graphics_DrawGrid(lua_State* L)
     return 0;
 }
 
-// graphics.draw_cube_textured(x, y, z, size, handle, {r,g,b,a})
-// Draws a textured cube using rlgl immediate mode (glBegin/glVertex3f/glTexCoord2f).
-//
-// rlgl vs DrawModel:
-//   Raylib is built for PS2 with GRAPHICS_API_OPENGL_11, and DrawModel/DrawMesh uses
-//   glEnableClientState + glVertexPointer + glDrawElements (the vertex-array pipeline).
-//   ps2gl does NOT implement those functions. It only supports the immediate mode pipeline
-//   (glBegin/glEnd/glVertex3f/glTexCoord2f/etc.), which is the same path used by DrawCube
-//   and DrawGrid. This is a reimplementation of Raylib's removed DrawCubeTextured() that
-//   was dropped in v4.0 — brought back here as an rlgl immediate-mode draw.
+// graphics.draw_cube_textured(x, y, z, size, handle [, {r,g,b,a}])
+// Submits a textured cube to the renderer draw list.
 static int Lua_Graphics_DrawCubeTextured(lua_State* L)
 {
-    float px = static_cast<float>(luaL_checknumber(L, 1));
-    float py = static_cast<float>(luaL_checknumber(L, 2));
-    float pz = static_cast<float>(luaL_checknumber(L, 3));
-    float sz = static_cast<float>(luaL_checknumber(L, 4));
-    int32_t handle = (int32_t)luaL_checkinteger(L, 5);
+    float px       = static_cast<float>(luaL_checknumber(L, 1));
+    float py       = static_cast<float>(luaL_checknumber(L, 2));
+    float pz       = static_cast<float>(luaL_checknumber(L, 3));
+    float sz       = static_cast<float>(luaL_checknumber(L, 4));
+    int32_t handle = static_cast<int32_t>(luaL_checkinteger(L, 5));
 
-    const Texture2D* tex = static_cast<const Texture2D*>(Engine_Resource_Get(handle));
-    if (!tex || tex->id == 0)
-    {
-        // Resource not ready or GPU upload failed — fall back to a solid draw.
-        DrawCube(Vector3{px, py, pz}, sz, sz, sz, WHITE);
-        return 0;
-    }
-
-    Color tint = WHITE;
+    Color3 tint = {1.f, 1.f, 1.f};
     if (lua_istable(L, 6))
     {
-        lua_geti(L, 6, 1);
-        unsigned char r = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_geti(L, 6, 2);
-        unsigned char g = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_geti(L, 6, 3);
-        unsigned char b = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_geti(L, 6, 4);
-        unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
-        lua_pop(L, 4);
-        tint = Color{r, g, b, a};
+        lua_geti(L, 6, 1); tint.r = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_geti(L, 6, 2); tint.g = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_geti(L, 6, 3); tint.b = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_pop(L, 3);
+        if (lua_geti(L, 6, 4)) lua_pop(L, 1);
     }
 
-    float h = sz / 2.0f;
-
-    rlSetTexture(tex->id);
-    rlBegin(RL_QUADS);
-    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
-
-    // Front face (+Z)
-    rlNormal3f(0.0f, 0.0f, 1.0f);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(px - h, py - h, pz + h);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(px + h, py - h, pz + h);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(px + h, py + h, pz + h);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(px - h, py + h, pz + h);
-
-    // Back face (-Z)
-    rlNormal3f(0.0f, 0.0f, -1.0f);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(px - h, py - h, pz - h);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(px - h, py + h, pz - h);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(px + h, py + h, pz - h);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(px + h, py - h, pz - h);
-
-    // Top face (+Y)
-    rlNormal3f(0.0f, 1.0f, 0.0f);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(px - h, py + h, pz - h);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(px - h, py + h, pz + h);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(px + h, py + h, pz + h);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(px + h, py + h, pz - h);
-
-    // Bottom face (-Y)
-    rlNormal3f(0.0f, -1.0f, 0.0f);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(px - h, py - h, pz - h);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(px + h, py - h, pz - h);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(px + h, py - h, pz + h);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(px - h, py - h, pz + h);
-
-    // Right face (+X)
-    rlNormal3f(1.0f, 0.0f, 0.0f);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(px + h, py - h, pz - h);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(px + h, py + h, pz - h);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(px + h, py + h, pz + h);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(px + h, py - h, pz + h);
-
-    // Left face (-X)
-    rlNormal3f(-1.0f, 0.0f, 0.0f);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(px - h, py - h, pz - h);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(px - h, py - h, pz + h);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(px - h, py + h, pz + h);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(px - h, py + h, pz - h);
-    rlEnd();
-    rlSetTexture(0);
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->AddPrimitiveToDrawList(Primitive3D::Cube,
+                                  Vector3{px, py, pz},
+                                  Vector3{0.f, 0.f, 0.f},
+                                  Vector3{sz, sz, sz},
+                                  tint, handle);
     return 0;
 }
 

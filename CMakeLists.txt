@@ -16,6 +16,9 @@ endif()
 set(REGION "PAL" CACHE STRING "Target region (PAL or NTSC)")
 set_property(CACHE REGION PROPERTY STRINGS "PAL" "NTSC")
 
+# Use Raylib as graphics pipeline
+add_definitions(-DUSE_RAYLIB)
+
 if(NOT REGION STREQUAL "PAL" AND NOT REGION STREQUAL "NTSC")
     message(FATAL_ERROR "REGION must be PAL or NTSC, but found: '${REGION}'")
 endif()

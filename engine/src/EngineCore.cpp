@@ -1,17 +1,15 @@
+#include <cstdlib>
 #include <malloc.h>
 #include <raylib.h>
-#include <cstdlib>
 #include "Engine.h"
 
 #include "EngineInput.h"
-// ps2gl C API — needed for pglAddGsMemSlot() after InitWindow.
-// Must come after raylib.h (which sets up the PS2/GL include path).
-#include <GL/ps2gl.h>
-#include <stdio.h>
-#include <string.h>
+#include "graphics/RaylibRenderer.h"
+#include "graphics/Renderer.h"
+#include <cstring>
 
 static void* s_UnifiedArenaBlock = nullptr;
-static bool s_IsGFXInitialized = false;
+static Renderer* g_Renderer = nullptr;
 static const char* s_ResourceLocationToken = NULL;
 
 bool Engine_Init(EngineConfig config)
@@ -20,9 +18,8 @@ bool Engine_Init(EngineConfig config)
     s_ResourceLocationToken = config.resourceLocationToken;
 
     // Calculate total arena size from centralized constants
-    size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE;
-
-    size_t totalRequiredMemory = totalArenaSize + MEM_POOL_MAIN_SIZE;
+    constexpr size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE;
+    constexpr size_t totalRequiredMemory = totalArenaSize + MEM_POOL_MAIN_SIZE;
 
     // Safety Threshold Check (PS2 Hardware Limit)
     if (totalRequiredMemory > MEM_LIMIT_MAX_EE_RAM)
@@ -52,18 +49,9 @@ bool Engine_Init(EngineConfig config)
 
     // Initialize the main memory pool
     Engine_PoolInitMain(poolMem, MEM_POOL_MAIN_SIZE, MEM_POOL_CHUNK_SIZE);
-
     Engine_LogInfo("Segmented Arena Allocated: %zu bytes", totalArenaSize);
-    Engine_LogInfo("Video Mode: %dx%d (%s)", GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GFX_SCREEN_REGION_STR);
 
-
-    InitWindow(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, config.windowTitle);
-    Engine_LogInfo("Waiting for window ready!");
-    auto windowReadyBase = GetTime();
-    while (!IsWindowReady())
-        ;
-    s_IsGFXInitialized = IsWindowReady();
-    Engine_LogInfo("Window Ready in %d ms", GetTime() - windowReadyBase);
+    g_Renderer = new RaylibRenderer(config);
 
     Engine_LogInfo("Initializing Game pad at port 0");
     if (!InitPad(0, true))
@@ -96,13 +84,14 @@ bool Engine_Init(EngineConfig config)
     return true;
 }
 
-bool Engine_Is_GFX_Initialized() { return s_IsGFXInitialized; }
+bool Engine_Is_GFX_Initialized() { return !g_Renderer ? false : g_Renderer->IsInitialized(); }
+
+Renderer* Engine_GetRenderer() { return g_Renderer; }
 
 void Engine_Update()
 {
     Engine_IO_Update();
     Engine_Resource_Update();
-    // Engine specific per-frame updates
 }
 
 void Engine_Close()
@@ -111,7 +100,7 @@ void Engine_Close()
     Engine_IO_Shutdown();
     Engine_Script_Close();
     // CloseAudioDevice();
-    CloseWindow();
+    g_Renderer->Shutdown();
     free(s_UnifiedArenaBlock);
     if (Engine_PoolGetBufferMain())
     {

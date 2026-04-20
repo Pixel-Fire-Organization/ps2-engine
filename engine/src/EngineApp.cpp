@@ -1,5 +1,6 @@
 ﻿#include "EngineApp.h"
 #include "Engine.h"
+#include "EngineCore.h"
 
 #include <cstdio>
 #include <cstring>
@@ -263,7 +264,9 @@ bool EngineStart(const char* resourceLocationToken, const char* mainScript)
         scriptPath = scriptPathBuf;
     }
 
-    EngineConfig config = {.windowTitle = "PS2 Engine", .resourceLocationToken = resourceLocationToken};
+    EngineConfig config;
+    config.windowTitle = "PS2 Engine";
+    config.resourceLocationToken = resourceLocationToken;
 
     if (!Engine_Init(config))
     {
@@ -323,7 +326,12 @@ void EngineUpdate()
     BeginDrawing();
     {
         Engine_Script_UpdateAll(dt);
-        Engine_Script_EndCurrentMode(); // If any modes have started end them.
+        Engine_Script_EndCurrentMode();
+
+        Renderer* r = Engine_GetRenderer();
+        if (r && r->IsInitialized())
+            r->Render();
+
         Engine_DrawDebugOverlay();
     }
     EndDrawing();
