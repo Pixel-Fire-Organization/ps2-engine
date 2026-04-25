@@ -21,6 +21,20 @@
             }
         },
         {
+            "name": "ps2-base-linux",
+            "hidden": true,
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/ps2dev.cmake",
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            }
+        },
+        {
             "name": "ps2-debug-pal",
             "displayName": "PS2 Debug (PAL)",
             "description": "Debug build, PAL region",
@@ -58,6 +72,50 @@
             "displayName": "PS2 Release (NTSC)",
             "description": "Release build, NTSC region",
             "inherits": "ps2-base",
+            "binaryDir": "${sourceDir}/build/release-ntsc",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "REGION": "NTSC"
+            }
+        },
+        {
+            "name": "ps2-debug-pal-linux",
+            "displayName": "PS2 Debug (PAL) [Linux]",
+            "description": "Debug build, PAL region — native Linux toolchain",
+            "inherits": "ps2-base-linux",
+            "binaryDir": "${sourceDir}/build/debug-pal",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "REGION": "PAL"
+            }
+        },
+        {
+            "name": "ps2-debug-ntsc-linux",
+            "displayName": "PS2 Debug (NTSC) [Linux]",
+            "description": "Debug build, NTSC region — native Linux toolchain",
+            "inherits": "ps2-base-linux",
+            "binaryDir": "${sourceDir}/build/debug-ntsc",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "REGION": "NTSC"
+            }
+        },
+        {
+            "name": "ps2-release-pal-linux",
+            "displayName": "PS2 Release (PAL) [Linux]",
+            "description": "Release build, PAL region — native Linux toolchain",
+            "inherits": "ps2-base-linux",
+            "binaryDir": "${sourceDir}/build/release-pal",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "REGION": "PAL"
+            }
+        },
+        {
+            "name": "ps2-release-ntsc-linux",
+            "displayName": "PS2 Release (NTSC) [Linux]",
+            "description": "Release build, NTSC region — native Linux toolchain",
+            "inherits": "ps2-base-linux",
             "binaryDir": "${sourceDir}/build/release-ntsc",
             "cacheVariables": {
                 "DEBUG": "OFF",
