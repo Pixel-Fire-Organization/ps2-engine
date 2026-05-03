@@ -7,7 +7,7 @@ engine.log("MAIN.LUA starting...")
 -- ---------------------------------------------------------------------------
 -- Startup: read a config file (small text, READ mode)
 -- ---------------------------------------------------------------------------
-local cfgFd = io.open("cdrom0:\\CONFIG.TXT;1")
+local cfgFd = io.open(engine.make_path("CONFIG.TXT"))
 if cfgFd >= 0 then
     local content, bytesRead = io.read(cfgFd)
     if bytesRead > 0 then
@@ -23,7 +23,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Startup: write a save-state marker (WRITE mode demo)
 -- ---------------------------------------------------------------------------
-local saveFd = io.open_write("host0:SAVE.TXT")
+local saveFd = io.open_write(engine.make_path("SAVE.TXT"))
 if saveFd >= 0 then
     local written = io.write(saveFd, "PS2 Engine boot OK\n")
     engine.log("Save marker written (" .. written .. " bytes)")
@@ -33,7 +33,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Startup: request a texture resource (async — check is_ready each frame)
 -- ---------------------------------------------------------------------------
-local texHandle = resources.load("TEXTURE", "cdrom0:\\RASSETS\\BOX.PS2A;1")
+local texHandle = resources.load("TEXTURE", engine.make_path("RASSETS\\BOX.PS2A"))
 engine.log("Texture handle: " .. texHandle)
 
 -- ---------------------------------------------------------------------------

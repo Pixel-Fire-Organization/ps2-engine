@@ -9,6 +9,12 @@
 // the engine.exit() binding, which receives this as a function pointer).
 // ---------------------------------------------------------------------------
 static bool s_ExitRequested = false;
+static const char* s_cdRomResourceLocationToken = "cdrom0:";
+static const char* s_massResourceLocationToken = "mass0:";
+static const char* s_hddResourceLocationToken = "hdd0:";
+static const char* s_hostResourceLocationToken = "host:";
+
+const char* FormatResourceLocationToken(const char* locationToken);
 
 void EngineApp_OnExitRequested(void) { s_ExitRequested = true; }
 
@@ -237,11 +243,27 @@ size_t EngineApp_FileGetSize(int32_t fileId)
 // Public shell API
 // ---------------------------------------------------------------------------
 
-bool EngineStart(const char* mainScript)
+bool EngineStart(const char* resourceLocationToken, const char* mainScript)
 {
-    const char* scriptPath = mainScript ? mainScript : SCRIPTING_MAIN_SCRIPT_PATH;
+    if (resourceLocationToken == NULL)
+        resourceLocationToken = s_cdRomResourceLocationToken;
+    else
+        resourceLocationToken = FormatResourceLocationToken(resourceLocationToken);
 
-    EngineConfig config = {.windowTitle = "PS2 Engine"};
+    // Build the main script path from the active token so it works on any device.
+    char scriptPathBuf[IO_FILE_MAX_PATH];
+    const char* scriptPath;
+    if (mainScript)
+    {
+        scriptPath = mainScript;
+    }
+    else
+    {
+        Engine_BuildPath(resourceLocationToken, SCRIPTING_MAIN_SCRIPT_FILENAME, scriptPathBuf, IO_FILE_MAX_PATH);
+        scriptPath = scriptPathBuf;
+    }
+
+    EngineConfig config = {.windowTitle = "PS2 Engine", .resourceLocationToken = resourceLocationToken};
 
     if (!Engine_Init(config))
     {
@@ -259,9 +281,8 @@ bool EngineStart(const char* mainScript)
     int32_t fd = EngineApp_FileOpen(scriptPath);
     if (fd < 0)
     {
-        char buff[LOG_STRING_MAX_SIZE];
-        snprintf(buff, LOG_STRING_MAX_SIZE, "EngineStart: failed to open main script '%s'", scriptPath);
-        Engine_Panic(buff);
+        Engine_LogError("EngineStart: failed to open main script '%s'", scriptPath);
+        Engine_Panic("EngineStart: failed to open main script — check path and storage device");
         return false;
     }
 
@@ -312,3 +333,37 @@ void EngineUpdate(void)
 bool EngineExited(void) { return WindowShouldClose() || s_ExitRequested; }
 
 void EngineStop(void) { Engine_Close(); }
+
+const char* FormatResourceLocationToken(const char* locationToken)
+{
+    /**
+     *  Normalise an argv[0]-style path to the appropriate storage token.
+     *  argv[0] on PS2 typically looks like "cdrom0:\MAIN.ELF;1" or "host:MAIN.ELF".
+     *  We match only the leading device name, not the full path.
+     *
+     *  Supported storage locations:
+     *  ---
+     *  cdrom  → "cdrom0:"
+     *  mass   → "mass0:"
+     *  hdd    → "hdd0:"
+     *  host   → "host:"
+     */
+
+    if (locationToken[0] == 'c') // cdrom
+        return s_cdRomResourceLocationToken;
+
+    if (locationToken[0] == 'm' && locationToken[1] == 'a') // mass
+        return s_massResourceLocationToken;
+
+    if (locationToken[0] == 'h' && locationToken[1] == 'd') // hdd
+        return s_hddResourceLocationToken;
+
+    if (locationToken[0] == 'h' && locationToken[1] == 'o') // host
+        return s_hostResourceLocationToken;
+
+    char buff[LOG_STRING_MAX_SIZE] = {0};
+    snprintf(buff, LOG_STRING_MAX_SIZE, "Invalid resource location! `%s`", locationToken);
+    Engine_Panic(buff);
+
+    return NULL; // This won't be hit.
+}

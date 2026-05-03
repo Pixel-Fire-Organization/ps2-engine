@@ -495,6 +495,34 @@ static int Lua_Engine_Exit(lua_State* L)
     return 0;
 }
 
+// engine.get_resource_token() → string
+// Returns the active resource location token (e.g. "cdrom0:", "host:") so
+// Lua scripts can construct paths without hardcoding a device prefix.
+static int Lua_Engine_GetResourceToken(lua_State* L)
+{
+    const char* token = Engine_GetResourceLocationToken();
+    lua_pushstring(L, token ? token : "");
+    return 1;
+}
+
+// engine.make_path(relativePath) → string
+// Constructs a full device path from a relative path using the active token.
+// relativePath uses backslash separators; e.g. "RASSETS\\BOX.PS2A".
+// Result format per device:
+//   cdrom0:  → "cdrom0:\\<PATH>;1"
+//   mass0:   → "mass0:\\<PATH>"
+//   hdd0:    → "hdd0:\\<PATH>"
+//   host:    → "host:<PATH>"
+static int Lua_Engine_MakePath(lua_State* L)
+{
+    const char* relativePath = luaL_checkstring(L, 1);
+    const char* token = Engine_GetResourceLocationToken();
+    char pathBuf[IO_FILE_MAX_PATH];
+    Engine_BuildPath(token ? token : "cdrom0:", relativePath, pathBuf, IO_FILE_MAX_PATH);
+    lua_pushstring(L, pathBuf);
+    return 1;
+}
+
 // Graphics
 static int Lua_Graphics_Clear(lua_State* L)
 {
@@ -745,6 +773,10 @@ static void RegisterCoreBindings(lua_State* L)
     lua_setfield(L, -2, "get_time");
     lua_pushcfunction(L, Lua_Engine_Exit);
     lua_setfield(L, -2, "exit");
+    lua_pushcfunction(L, Lua_Engine_GetResourceToken);
+    lua_setfield(L, -2, "get_resource_token");
+    lua_pushcfunction(L, Lua_Engine_MakePath);
+    lua_setfield(L, -2, "make_path");
     lua_setglobal(L, "engine");
 }
 

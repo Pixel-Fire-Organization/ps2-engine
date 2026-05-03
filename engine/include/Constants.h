@@ -108,9 +108,10 @@
 #define SCRIPTING_LUA_MAX_UNITS 8
 #define SCRIPTING_LUA_CODE_SLOT_SIZE (256 * 1024)
 
-// Canonical path for the entry-point Lua script on disc.
-// Passed to EngineStart(NULL) as the default.
-#define SCRIPTING_MAIN_SCRIPT_PATH "cdrom0:\\MAIN.LUA;1"
+// Relative filename of the entry-point Lua script.
+// The full path is constructed at runtime using Engine_BuildPath() with the
+// active resource location token so it works across cdrom, host, and mass devices.
+#define SCRIPTING_MAIN_SCRIPT_FILENAME "MAIN.LUA"
 
 // Camera slot limits for the scripting camera registry.
 #define SCRIPTING_MAX_CAMERAS_3D 4

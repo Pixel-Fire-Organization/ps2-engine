@@ -4,18 +4,31 @@ The `io` table provides file I/O to Lua scripts. All file data is managed C-side
 
 ---
 
-## PS2 Path Format Rules
+## Path Construction
 
-The PS2 filesystem drivers process paths differently per device. Using the wrong separator causes silent open failures.
+Never hardcode device prefixes like `cdrom0:` or `host:` in Lua scripts.  
+Always use `engine.make_path(relativePath)` to construct a full path from the active resource location token (set at
+startup from `argv[0]`).
 
-| Device | Separator | Correct example |
-| :--- | :--- | :--- |
-| `cdrom0:` | `\` (backslash), ISO 9660 version suffix `;1` | `"cdrom0:\\RASSETS\\BOX.PS2A;1"` |
-| `host0:` | **none** — no separator after the colon | `"host0:SAVE.TXT"` |
-| `mc0:` | `\` (backslash) | `"mc0:\\SAVE.BIN"` |
+```lua
+-- Correct: device-agnostic path construction
+local fd = io.open(engine.make_path("CONFIG.TXT"))
+local wfd = io.open_write(engine.make_path("SAVE.TXT"))
+```
 
-> **Note**: In Lua strings, `\\` is a single backslash character.  
-> `host0:\SAVE.TXT` is **wrong** — the PS2 host filesystem driver converts `\` to `/`, producing `host0:/SAVE.TXT` which fails to open.
+`engine.make_path` inserts the correct separator and version suffix for each device type automatically:
+
+| Device token | Result format       |
+|:-------------|:--------------------|
+| `cdrom0:`    | `cdrom0:\\<PATH>;1` |
+| `mass0:`     | `mass0:\\<PATH>`    |
+| `hdd0:`      | `hdd0:\\<PATH>`     |
+| `host:`      | `host:<PATH>`       |
+
+> **Device-specific rules** (for reference only — handled automatically by `engine.make_path`):  
+> On `cdrom0:`, the path separator is `\` (backslash) and ISO 9660 version suffix `;1` is required.  
+> On `host:`, no separator follows the colon — `host:\SAVE.TXT` is wrong; the driver converts `\` to `/`, producing a
+> path that fails to open.
 
 ---
 
@@ -38,7 +51,7 @@ Opens a file for reading. Synchronously reads the entire file into an `ARENA_CON
 - **Intended for small files only**: config, dialogue, scripts. Binary assets must go through `resources.load`.
 
 ```lua
-local fd = io.open("cdrom0:\\CONFIG.TXT;1")
+local fd = io.open(engine.make_path("CONFIG.TXT"))
 if fd >= 0 then
     -- use fd ...
     io.close(fd)
@@ -52,7 +65,7 @@ Registers a path for writing. No disc read or arena allocation occurs.
 - Returns a `fileId >= 0` on success, `-1` if no descriptor slots are available.
 
 ```lua
-local fd = io.open_write("host0:SAVE.TXT")
+local fd = io.open_write(engine.make_path("SAVE.TXT"))
 ```
 
 ### `io.close(fileId) → bool`
@@ -100,7 +113,7 @@ end
 
 ```lua
 -- Read a config file
-local rfd = io.open("cdrom0:\\CONFIG.TXT;1")
+local rfd = io.open(engine.make_path("CONFIG.TXT"))
 if rfd >= 0 then
     local text, bytes = io.read(rfd)
     if bytes > 0 then engine.log(text) end
@@ -108,7 +121,7 @@ if rfd >= 0 then
 end
 
 -- Write a save marker
-local wfd = io.open_write("host0:SAVE.TXT")
+local wfd = io.open_write(engine.make_path("SAVE.TXT"))
 if wfd >= 0 then
     local n = io.write(wfd, "progress=1\n")
     engine.log("Wrote " .. n .. " bytes")
