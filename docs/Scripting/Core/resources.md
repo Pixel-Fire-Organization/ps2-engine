@@ -22,7 +22,7 @@ Requests a resource from disc. Loading is **asynchronous** for textures, sounds,
 - The resource file must be a compiled `.ps2a` asset (see `RESOURCE_MANAGER.md`).
 
 ```lua
-local texHandle = resources.load("TEXTURE", "cdrom0:\\RASSETS\\PLAYER.PS2A;1")
+local texHandle = resources.load("TEXTURE", engine.make_path("RASSETS\\PLAYER.PS2A"))
 ```
 
 ### `resources.is_ready(handle) → bool`
@@ -49,7 +49,7 @@ resources.unload(texHandle)
 
 ```lua
 -- Module-level: request load (may not be ready immediately)
-local texHandle = resources.load("TEXTURE", "cdrom0:\\RASSETS\\HUD.PS2A;1")
+local texHandle = resources.load("TEXTURE", engine.make_path("RASSETS\\HUD.PS2A"))
 
 function OnUpdate(dt)
     if resources.is_ready(texHandle) then

@@ -1,9 +1,18 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include "EngineApp.h"
 
-int main(void)
+int main(int argv, char** argc)
 {
-    if (!EngineStart(NULL))
+    const char* locationToken = NULL;
+    for (int i = 0; i < argv; i++)
+    {
+        printf("%u: %s\n", i, argc[i]);
+    }
+    if (argv >= 1)
+        locationToken = argc[0];
+
+    if (!EngineStart(locationToken, NULL))
     {
         return -1;
     }

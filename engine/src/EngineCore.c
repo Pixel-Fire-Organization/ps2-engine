@@ -6,13 +6,16 @@
 // ps2gl C API — needed for pglAddGsMemSlot() after InitWindow.
 // Must come after raylib.h (which sets up the PS2/GL include path).
 #include <GL/ps2gl.h>
+#include <stdio.h>
 
 static void* s_UnifiedArenaBlock = NULL;
 static bool s_IsGFXInitialized = false;
+static const char* s_ResourceLocationToken = NULL;
 
 bool Engine_Init(EngineConfig config)
 {
     Engine_InitDebug();
+    s_ResourceLocationToken = config.resourceLocationToken;
 
     // Calculate total arena size from centralized constants
     size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE;
@@ -97,4 +100,23 @@ void Engine_Close(void)
     {
         free(Engine_PoolGetBufferMain());
     }
+}
+
+const char* Engine_GetResourceLocationToken(void) { return s_ResourceLocationToken; }
+
+bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf, size_t bufSize)
+{
+    if (!token || !relativePath || !outBuf || bufSize == 0)
+        return false;
+
+    if (token[0] == 'c') // cdrom0: → "cdrom0:\\<PATH>;1"
+        snprintf(outBuf, bufSize, "cdrom0:\\%s;1", relativePath);
+    else if (token[0] == 'm') // mass0: → "mass0:\\<PATH>"
+        snprintf(outBuf, bufSize, "mass0:\\%s", relativePath);
+    else if (token[0] == 'h' && token[1] == 'd') // hdd0: → "hdd0:\\<PATH>"
+        snprintf(outBuf, bufSize, "hdd0:\\%s", relativePath);
+    else // host: → "host:<PATH>"  (no separator — PS2 host driver requirement)
+        snprintf(outBuf, bufSize, "%s%s", token, relativePath);
+
+    return true;
 }

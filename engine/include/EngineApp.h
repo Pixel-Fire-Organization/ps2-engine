@@ -14,7 +14,7 @@
 // Start the engine and run the entry-point Lua script.
 // If mainScript is NULL, the canonical SCRIPTING_MAIN_SCRIPT_PATH is used.
 // Returns false if the engine failed to initialise or the script could not be loaded.
-bool EngineStart(const char* mainScript);
+bool EngineStart(const char* resourceLocationToken, const char* mainScript);
 
 // Advance one frame: runs Lua OnUpdate, renders, pumps IO and resource systems.
 // Must be called inside the main loop while !EngineExited().

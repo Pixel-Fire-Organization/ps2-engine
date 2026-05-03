@@ -25,7 +25,8 @@ option(ENGINE_SANDBOX_MODE "Restrict app to EngineApp.h" ON)
 
 Initialises all engine subsystems, synchronously reads and executes the entry-point Lua script.
 
-- If `mainScript` is `NULL`, uses the canonical path defined by `SCRIPTING_MAIN_SCRIPT_PATH` in `Constants.h` (`"cdrom0:\\MAIN.LUA;1"`).
+- If `mainScript` is `NULL`, the path is constructed at runtime using `Engine_BuildPath()` with the active resource
+  location token and `SCRIPTING_MAIN_SCRIPT_FILENAME` (`"MAIN.LUA"`), so it resolves correctly on any storage device.
 - Returns `false` if engine init, file read, or Lua execution fails.
 
 ### `EngineUpdate(void)`

@@ -18,7 +18,7 @@ Loads a level from a `.ps2l` file. When implemented:
 - Returns `true` on success, `false` on failure or if not yet implemented.
 
 ```lua
-local ok = level.load("cdrom0:\\LEVELS\\LEVEL1.PS2L;1")
+local ok = level.load(engine.make_path("LEVELS\\LEVEL1.PS2L"))
 if not ok then
     engine.log("Level load failed")
 end
