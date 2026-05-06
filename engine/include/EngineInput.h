@@ -44,6 +44,8 @@ enum class GamePadJoystick : uint8_t
 bool InitPad(uint8_t port, bool locked);
 void ShutdownAllPads();
 
+void EngineInput_PollAllPads();
+
 bool IsGamePadButtonPressed(uint8_t port, GamePadButton button);
 Vector2 GetGamePadAxis(uint8_t port, GamePadJoystick axis);
 Vector2* GetGamePadPosition(uint8_t port);

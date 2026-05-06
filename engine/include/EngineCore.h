@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/Renderer.h"
+#include <cstddef>
 
 typedef struct
 {
@@ -15,9 +16,8 @@ Renderer* Engine_GetRenderer();
 void Engine_Update();
 
 void Engine_Close();
-void Engine_Close(void);
 
-const char* Engine_GetResourceLocationToken(void);
+const char* Engine_GetResourceLocationToken();
 
 // Constructs a full filesystem path by combining the active resource location
 // token with a relative path, inserting the correct separator and version
