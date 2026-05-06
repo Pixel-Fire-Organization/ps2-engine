@@ -7,6 +7,7 @@
 #include "graphics/RaylibRenderer.h"
 #include "graphics/Renderer.h"
 #include <cstring>
+#include <cstdio>
 
 static void* s_UnifiedArenaBlock = nullptr;
 static Renderer* g_Renderer = nullptr;

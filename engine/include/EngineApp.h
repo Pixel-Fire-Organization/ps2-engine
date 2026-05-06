@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 
 // ---------------------------------------------------------------------------
 // EngineApp — the sole public interface exposed to the application layer.

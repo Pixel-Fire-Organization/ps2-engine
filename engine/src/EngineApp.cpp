@@ -1,6 +1,7 @@
 ﻿#include "EngineApp.h"
 #include "Engine.h"
 #include "EngineCore.h"
+#include "EngineInput.h"
 
 #include <cstdio>
 #include <cstring>

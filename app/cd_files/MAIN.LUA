@@ -64,10 +64,8 @@ local camPitch  = 0.4  -- vertical angle in radians (clamped 0.05 – 1.45)
 local CAM_DIST  = 20.0 -- orbit radius
 local CAM_SPEED = 1.8  -- radians per second
 
-local DEAD_ZONE = 0.12 -- ignore stick values below this magnitude (normalised)
-
--- Converts a raw PS2 joystick byte (0–255, centre≈128) to −1 … 0 … +1.
-local function joy_norm(raw) return (raw - 128) / 128.0 end
+-- Deadzone and normalization are handled in C (NormalizeAxis / INPUT_ANALOG_DEADZONE).
+-- input.get_joy_status already returns [-1, +1] with dead-zone zeroed out.
 
 local BG_COLOR = { 20, 20, 20, 255 }
 
@@ -77,21 +75,16 @@ local BG_COLOR = { 20, 20, 20, 255 }
 function OnUpdate(dt)
     local lj = input.get_joy_status(0, "left")
     if lj then
-        local lx = joy_norm(lj.x)
-        local ly = joy_norm(lj.y)
-        if math.abs(lx) > DEAD_ZONE then cubeX = cubeX + lx * SPEED * dt end
-        if math.abs(ly) > DEAD_ZONE then cubeZ = cubeZ + ly * SPEED * dt end
+        cubeX = cubeX + lj.x * SPEED * dt
+        cubeZ = cubeZ + lj.y * SPEED * dt
     end
-
-    --if input.is_pad_pressed(0, "dpad_left")  then cubeX = cubeX - SPEED * dt end
-    --if input.is_pad_pressed(0, "dpad_right") then cubeX = cubeX + SPEED * dt end
-    --if input.is_pad_pressed(0, "dpad_up")    then cubeZ = cubeZ - SPEED * dt end
-    --if input.is_pad_pressed(0, "dpad_down")  then cubeZ = cubeZ + SPEED * dt end
 
     if input.is_pad_pressed(0, "x")   then cubeY = cubeY + SPEED * dt end
     if input.is_pad_pressed(0, "cir") then cubeY = cubeY - SPEED * dt end
     if input.is_pad_pressed(0, "tri") then
-        cubeX = 0; cubeY = 0; cubeZ = 0;
+        cubeX = 0
+        cubeY = 0
+        cubeZ = 0
     end
 
     -- Square: exit
@@ -102,10 +95,8 @@ function OnUpdate(dt)
 
     local rj = input.get_joy_status(0, "right")
     if rj then
-        local rx = joy_norm(rj.x)
-        local ry = joy_norm(rj.y)
-        if math.abs(rx) > DEAD_ZONE then camYaw   = camYaw   + rx * CAM_SPEED * dt end
-        if math.abs(ry) > DEAD_ZONE then camPitch  = camPitch + ry * CAM_SPEED * dt end
+        camYaw   = camYaw   + rj.x * CAM_SPEED * dt
+        camPitch = camPitch + rj.y * CAM_SPEED * dt
     end
 
     -- Clamp pitch so the camera never flips over

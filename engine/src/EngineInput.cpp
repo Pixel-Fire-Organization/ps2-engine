@@ -5,10 +5,24 @@ extern "C" {
 #include <loadfile.h>
 }
 
+#include <cmath>
 #include "Constants.h"
 #include "EngineApp.h"
 
 static pad_t* openedGamePads[MAX_GAME_PAD_PORTS] = {nullptr, nullptr};
+
+// Map a raw PS2 analog byte [0, 255] to a normalised float [-1, +1] and apply
+// a symmetric deadzone.  Values inside the dead zone return exactly 0.0f so
+// that idle sticks drifting off their mechanical center produce no movement.
+static float NormalizeAxis(uint8_t raw)
+{
+    float v = (static_cast<float>(raw) - INPUT_ANALOG_RAW_CENTER) / INPUT_ANALOG_RAW_SCALE;
+    if (v > 1.0f)
+        v = 1.0f;
+    if (v < -1.0f)
+        v = -1.0f;
+    return (fabsf(v) < INPUT_ANALOG_DEADZONE) ? 0.0f : v;
+}
 static Vector2 joystickPositions[MAX_GAME_PAD_PORTS][MAX_JOYSTICKS] = {};
 static bool s_PadSystemInitDone = false;
 
@@ -80,11 +94,9 @@ Vector2 GetGamePadAxis(uint8_t port, GamePadJoystick axis)
     PollPad(port);
 
     if (axis == GamePadJoystick::LeftJoystick)
-        return Vector2{static_cast<float>(openedGamePads[port]->buttons->ljoy_h),
-                       static_cast<float>(openedGamePads[port]->buttons->ljoy_v)};
+        return Vector2{NormalizeAxis(openedGamePads[port]->buttons->ljoy_h), NormalizeAxis(openedGamePads[port]->buttons->ljoy_v)};
     if (axis == GamePadJoystick::RightJoystick)
-        return Vector2{static_cast<float>(openedGamePads[port]->buttons->rjoy_h),
-                       static_cast<float>(openedGamePads[port]->buttons->rjoy_v)};
+        return Vector2{NormalizeAxis(openedGamePads[port]->buttons->rjoy_h), NormalizeAxis(openedGamePads[port]->buttons->rjoy_v)};
 
     return Vector2{0, 0};
 }
