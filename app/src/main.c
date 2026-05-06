@@ -7,7 +7,7 @@ int main(int argv, char** argc)
     const char* locationToken = NULL;
     for (int i = 0; i < argv; i++)
     {
-        printf("%u: %s\n", i, argc[i]);
+        printf("%i: %s\n", i, argc[i]);
     }
     if (argv >= 1)
         locationToken = argc[0];
