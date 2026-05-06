@@ -106,17 +106,19 @@ const char* Engine_GetResourceLocationToken(void) { return s_ResourceLocationTok
 
 bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf, size_t bufSize)
 {
+    int written = 0;
+
     if (!token || !relativePath || !outBuf || bufSize == 0)
         return false;
 
     if (token[0] == 'c') // cdrom0: → "cdrom0:\\<PATH>;1"
-        snprintf(outBuf, bufSize, "cdrom0:\\%s;1", relativePath);
+        written = snprintf(outBuf, bufSize, "cdrom0:\\%s;1", relativePath);
     else if (token[0] == 'm') // mass0: → "mass0:\\<PATH>"
-        snprintf(outBuf, bufSize, "mass0:\\%s", relativePath);
-    else if (token[0] == 'h' && token[1] == 'd') // hdd0: → "hdd0:\\<PATH>"
-        snprintf(outBuf, bufSize, "hdd0:\\%s", relativePath);
+        written = snprintf(outBuf, bufSize, "mass0:\\%s", relativePath);
+    else if (token[0] == 'h' && token[1] != '\0' && token[1] == 'd') // hdd0: → "hdd0:\\<PATH>"
+        written = snprintf(outBuf, bufSize, "hdd0:\\%s", relativePath);
     else // host: → "host:<PATH>"  (no separator — PS2 host driver requirement)
-        snprintf(outBuf, bufSize, "%s%s", token, relativePath);
+        written = snprintf(outBuf, bufSize, "%s%s", token, relativePath);
 
-    return true;
+    return written >= 0 && (size_t)written < bufSize;
 }
