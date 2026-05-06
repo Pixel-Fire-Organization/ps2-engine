@@ -278,11 +278,14 @@ bool EngineStart(const char* resourceLocationToken, const char* mainScript)
     Engine_Script_SetExitCallback(EngineApp_OnExitRequested);
 
     // Bootstrap: load and run the entry-point script.
+    Engine_LogInfo("EngineStart: token='%s' script='%s'", resourceLocationToken, scriptPath);
     int32_t fd = EngineApp_FileOpen(scriptPath);
     if (fd < 0)
     {
-        Engine_LogError("EngineStart: failed to open main script '%s'", scriptPath);
-        Engine_Panic("EngineStart: failed to open main script — check path and storage device");
+        // Buffer is large enough: prefix (24) + path (max IO_FILE_MAX_PATH=256) + null < 320
+        char panicBuff[IO_FILE_MAX_PATH + 64];
+        snprintf(panicBuff, sizeof(panicBuff), "Cannot open script: %.255s", scriptPath);
+        Engine_Panic(panicBuff);
         return false;
     }
 
