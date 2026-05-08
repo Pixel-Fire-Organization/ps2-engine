@@ -247,7 +247,7 @@ def pack_asset(json_path, src_dir, dst_dir, skip_convert=False):
 
     for i in range(MAX_DEPS):
         if i < dep_count:
-            dep_path = f"cdrom0:\\RASSETS\\{deps[i].upper()}.PS2A;1"
+            dep_path = f"RASSETS/{deps[i].upper()}.PS2A"
             header += pack_dep_string(dep_path)
         else:
             header += b"\x00" * MAX_PATH_LEN

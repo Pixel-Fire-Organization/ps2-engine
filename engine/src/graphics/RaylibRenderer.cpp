@@ -94,3 +94,6 @@ void RaylibRenderer::Shutdown()
     CloseWindow();
     m_initialized = false;
 }
+
+DrawStats RaylibRenderer::GetLastStats() const { return m_drawLists.GetLastStats(); }
+

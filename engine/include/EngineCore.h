@@ -7,6 +7,7 @@ typedef struct
 {
     const char* windowTitle;
     const char* resourceLocationToken;
+    bool enablePerfLogger;
 } EngineConfig;
 
 bool Engine_Init(EngineConfig config);

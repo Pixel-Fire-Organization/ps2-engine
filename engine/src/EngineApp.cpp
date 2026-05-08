@@ -1,4 +1,4 @@
-﻿#include "EngineApp.h"
+#include "EngineApp.h"
 #include "Engine.h"
 #include "EngineCore.h"
 #include "EngineInput.h"
@@ -69,9 +69,11 @@ int32_t EngineApp_FileOpen(const char* path)
         return -1;
     }
 
+    Engine_IO_AcquireFileAccess();
     FILE* f = fopen(path, "rb");
     if (!f)
     {
+        Engine_IO_ReleaseFileAccess();
         Engine_LogError("EngineApp: failed to open '%s'", path);
         return -1;
     }
@@ -82,6 +84,7 @@ int32_t EngineApp_FileOpen(const char* path)
     {
         Engine_LogError("EngineApp: failed to get file length '%s'", path);
         fclose(f);
+        Engine_IO_ReleaseFileAccess();
         return -1;
     }
     size_t fileSize = (size_t)fileSizeL;
@@ -91,6 +94,7 @@ int32_t EngineApp_FileOpen(const char* path)
     {
         Engine_LogError("EngineApp: file '%s' size %zu exceeds APP_MAX_FILE_DATA_SIZE", path, fileSize);
         fclose(f);
+        Engine_IO_ReleaseFileAccess();
         return -1;
     }
 
@@ -99,12 +103,14 @@ int32_t EngineApp_FileOpen(const char* path)
     {
         Engine_LogError("EngineApp: failed to reserve config slot %d for '%s'", fd, path);
         fclose(f);
+        Engine_IO_ReleaseFileAccess();
         return -1;
     }
 
     void* slotPtr = Engine_GetSlot(ARENA_CONFIG, static_cast<uint32_t>(fd));
     size_t bytesRead = fread(slotPtr, 1, fileSize, f);
     fclose(f);
+    Engine_IO_ReleaseFileAccess();
 
     if (bytesRead != fileSize)
     {
@@ -196,15 +202,18 @@ size_t EngineApp_FileWrite(int32_t fileId, const void* data, size_t size)
     if (!data || size == 0)
         return 0;
 
+    Engine_IO_AcquireFileAccess();
     FILE* f = fopen(s_Files[fileId].path, "wb");
     if (!f)
     {
+        Engine_IO_ReleaseFileAccess();
         Engine_LogError("EngineApp: failed to open '%s' for writing", s_Files[fileId].path);
         return 0;
     }
 
     size_t written = fwrite(data, 1, size, f);
     fclose(f);
+    Engine_IO_ReleaseFileAccess();
     return written;
 }
 
@@ -268,6 +277,7 @@ bool EngineStart(const char* resourceLocationToken, const char* mainScript)
     EngineConfig config;
     config.windowTitle = "PS2 Engine";
     config.resourceLocationToken = resourceLocationToken;
+    config.enablePerfLogger = true;
 
     if (!Engine_Init(config))
     {
@@ -339,6 +349,7 @@ void EngineUpdate()
 
     Engine_IO_Update();
     Engine_Resource_Update();
+    Engine_PerfLogger_Tick();
     Engine_Script_FrameTick();
 }
 

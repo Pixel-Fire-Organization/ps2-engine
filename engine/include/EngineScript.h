@@ -43,3 +43,7 @@ void Engine_Script_EndCurrentMode();
 // Advances the internal frame counter and runs the camera LFU eviction pass.
 // Must be called once per frame (after EndDrawing).
 void Engine_Script_FrameTick();
+
+// Returns the current frame counter (incremented by Engine_Script_FrameTick).
+uint32_t Engine_Script_GetFrameCount();
+

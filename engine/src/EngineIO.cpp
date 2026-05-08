@@ -39,6 +39,20 @@ static int s_IOMutex = -1;
 // the data and the slot is marked IDLE.
 static int s_IOBufferSema = -1;
 
+static int s_FileSema = -1;
+
+void Engine_IO_AcquireFileAccess()
+{
+    if (s_FileSema >= 0)
+        WaitSema(s_FileSema);
+}
+
+void Engine_IO_ReleaseFileAccess()
+{
+    if (s_FileSema >= 0)
+        SignalSema(s_FileSema);
+}
+
 extern void* _gp;
 
 // Stack for the IO thread. Must be statically allocated and 16-byte aligned
@@ -94,6 +108,7 @@ static void IOThreadEntry(void* arg)
             if (!s_IOThreadActive)
                 break;
 
+            Engine_IO_AcquireFileAccess();
             FILE* f = fopen(filepath, "rb");
             void* data = nullptr;
             size_t size = 0;
@@ -105,8 +120,6 @@ static void IOThreadEntry(void* arg)
                 {
                     Engine_LogError("IO: File seek failed. File: %s", filepath);
                     fclose(f);
-                    // Treat as per-request failure: data=NULL, size=0.
-                    // Continue to dispatch path below so callback gets notified.
                 }
                 else
                 {
@@ -115,13 +128,10 @@ static void IOThreadEntry(void* arg)
 
                     if (size > IO_READ_BUFFER_SIZE)
                     {
-                        // File exceeds the static buffer cap. Reject rather than truncate
-                        // — a truncated asset would silently corrupt the decoded resource.
                         Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath,
                                         size, IO_READ_BUFFER_SIZE);
                         fclose(f);
                         size = 0;
-                        // data stays NULL; callback receives (NULL, 0, userData).
                     }
                     else
                     {
@@ -132,7 +142,6 @@ static void IOThreadEntry(void* arg)
                             Engine_LogError("IO: Short read for '%s': expected %zu, got %zu", filepath, size,
                                             bytesRead);
                             size = 0;
-                            // data stays NULL; downstream decoders would see truncated/garbage data.
                         }
                         else
                         {
@@ -145,6 +154,7 @@ static void IOThreadEntry(void* arg)
             {
                 Engine_LogError("Failed to open %s", filepath);
             }
+            Engine_IO_ReleaseFileAccess();
 
             if (s_IOMutex >= 0)
             {
@@ -166,6 +176,12 @@ bool Engine_IO_Init()
 {
     memset(s_Requests, 0, sizeof(s_Requests));
     s_IOThreadActive = true;
+
+    ee_sema_t fSema;
+    fSema.init_count = 1;
+    fSema.max_count = 1;
+    fSema.option = 0;
+    s_FileSema = CreateSema(&fSema);
 
     ee_sema_t sema;
     sema.init_count = 1;
@@ -209,7 +225,7 @@ bool Engine_IO_Init()
     threadParam.stack = s_IOThreadStack;
     threadParam.stack_size = IO_THREAD_STACK_SIZE;
     threadParam.gp_reg = &_gp;
-    threadParam.initial_priority = 0x40;
+    threadParam.initial_priority = 0x18;
 
     s_IOThreadID = CreateThread(&threadParam);
     if (s_IOThreadID < 0)

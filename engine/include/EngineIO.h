@@ -12,3 +12,6 @@ bool Engine_IO_ReadAsync(const char* filepath, IO_Callback callback, void* userD
 void Engine_IO_Update();
 
 void Engine_IO_Shutdown();
+
+void Engine_IO_AcquireFileAccess();
+void Engine_IO_ReleaseFileAccess();

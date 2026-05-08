@@ -44,6 +44,8 @@ public:
 
     bool IsInitialized() const override;
     void Shutdown() override;
+
+    DrawStats GetLastStats() const override;
 };
 
 #else

@@ -18,3 +18,12 @@ void Engine_DrawAsciiTable();
 
 // PS2-specific panic BSOD trigger
 void Engine_Panic(const char* message);
+
+// ---------------------------------------------------------------------------
+// Performance Logger
+// Triggered by holding L1+L2+R1+R2 on port 0.
+// Dumps a per-frame snapshot (draw counts, VRAM, RAM, pads, BIOS) to console.
+// Only active when enablePerfLogger was set in EngineConfig.
+// ---------------------------------------------------------------------------
+void Engine_PerfLogger_Init(bool enabled);
+void Engine_PerfLogger_Tick();
