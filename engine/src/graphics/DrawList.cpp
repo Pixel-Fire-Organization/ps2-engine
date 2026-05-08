@@ -1,5 +1,7 @@
 #include "../include/graphics/DrawList.h"
+#include "../include/graphics/PrimitiveGeometry.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <raylib.h>
@@ -8,174 +10,7 @@
 #include "EngineResource.h"
 #include "rlgl.h"
 
-// clang-format off
-const float MODEL_CUBE[] = {
-    // --- Front (+Z) ---
-    -0.5f, -0.5f,  0.5f,   0.f, 0.f, 1.f,   0.f, 0.f,
-     0.5f, -0.5f,  0.5f,   0.f, 0.f, 1.f,   1.f, 0.f,
-     0.5f,  0.5f,  0.5f,   0.f, 0.f, 1.f,   1.f, 1.f,
-    -0.5f, -0.5f,  0.5f,   0.f, 0.f, 1.f,   0.f, 0.f,
-     0.5f,  0.5f,  0.5f,   0.f, 0.f, 1.f,   1.f, 1.f,
-    -0.5f,  0.5f,  0.5f,   0.f, 0.f, 1.f,   0.f, 1.f,
-
-    // --- Back (-Z) ---
-     0.5f, -0.5f, -0.5f,   0.f, 0.f,-1.f,   0.f, 0.f,
-    -0.5f, -0.5f, -0.5f,   0.f, 0.f,-1.f,   1.f, 0.f,
-    -0.5f,  0.5f, -0.5f,   0.f, 0.f,-1.f,   1.f, 1.f,
-     0.5f, -0.5f, -0.5f,   0.f, 0.f,-1.f,   0.f, 0.f,
-    -0.5f,  0.5f, -0.5f,   0.f, 0.f,-1.f,   1.f, 1.f,
-     0.5f,  0.5f, -0.5f,   0.f, 0.f,-1.f,   0.f, 1.f,
-
-    // --- Left (-X) ---
-    -0.5f, -0.5f, -0.5f,  -1.f, 0.f, 0.f,   0.f, 0.f,
-    -0.5f, -0.5f,  0.5f,  -1.f, 0.f, 0.f,   1.f, 0.f,
-    -0.5f,  0.5f,  0.5f,  -1.f, 0.f, 0.f,   1.f, 1.f,
-    -0.5f, -0.5f, -0.5f,  -1.f, 0.f, 0.f,   0.f, 0.f,
-    -0.5f,  0.5f,  0.5f,  -1.f, 0.f, 0.f,   1.f, 1.f,
-    -0.5f,  0.5f, -0.5f,  -1.f, 0.f, 0.f,   0.f, 1.f,
-
-    // --- Right (+X) ---
-     0.5f, -0.5f,  0.5f,   1.f, 0.f, 0.f,   0.f, 0.f,
-     0.5f, -0.5f, -0.5f,   1.f, 0.f, 0.f,   1.f, 0.f,
-     0.5f,  0.5f, -0.5f,   1.f, 0.f, 0.f,   1.f, 1.f,
-     0.5f, -0.5f,  0.5f,   1.f, 0.f, 0.f,   0.f, 0.f,
-     0.5f,  0.5f, -0.5f,   1.f, 0.f, 0.f,   1.f, 1.f,
-     0.5f,  0.5f,  0.5f,   1.f, 0.f, 0.f,   0.f, 1.f,
-
-    // --- Top (+Y) ---
-    -0.5f,  0.5f,  0.5f,   0.f, 1.f, 0.f,   0.f, 0.f,
-     0.5f,  0.5f,  0.5f,   0.f, 1.f, 0.f,   1.f, 0.f,
-     0.5f,  0.5f, -0.5f,   0.f, 1.f, 0.f,   1.f, 1.f,
-    -0.5f,  0.5f,  0.5f,   0.f, 1.f, 0.f,   0.f, 0.f,
-     0.5f,  0.5f, -0.5f,   0.f, 1.f, 0.f,   1.f, 1.f,
-    -0.5f,  0.5f, -0.5f,   0.f, 1.f, 0.f,   0.f, 1.f,
-
-    // --- Bottom (-Y) ---
-    -0.5f, -0.5f, -0.5f,   0.f,-1.f, 0.f,   0.f, 0.f,
-     0.5f, -0.5f, -0.5f,   0.f,-1.f, 0.f,   1.f, 0.f,
-     0.5f, -0.5f,  0.5f,   0.f,-1.f, 0.f,   1.f, 1.f,
-    -0.5f, -0.5f, -0.5f,   0.f,-1.f, 0.f,   0.f, 0.f,
-     0.5f, -0.5f,  0.5f,   0.f,-1.f, 0.f,   1.f, 1.f,
-    -0.5f, -0.5f,  0.5f,   0.f,-1.f, 0.f,   0.f, 1.f,
-};
-
-// Octahedron — 6 axis-aligned vertices, 8 faces
-// Vertices: A=(0,+0.5,0)  B=(0,-0.5,0)  C=(+0.5,0,0)
-//           D=(-0.5,0,0)  E=(0,0,+0.5)  F=(0,0,-0.5)
-// Normals = normalized position (vertex normal = face direction for an octahedron)
-const float MODEL_SPHERE[] = {
-    // --- Face 1: A, E, C (+Y +Z +X) ---
-     0.0f, 0.5f, 0.0f,   0.f, 1.f, 0.f,   0.50f, 0.00f,
-     0.0f, 0.0f, 0.5f,   0.f, 0.f, 1.f,   0.75f, 0.50f,
-     0.5f, 0.0f, 0.0f,   1.f, 0.f, 0.f,   1.00f, 0.50f,
-
-    // --- Face 2: A, C, F (+Y +X -Z) ---
-     0.0f, 0.5f,  0.0f,   0.f, 1.f, 0.f,   0.50f, 0.00f,
-     0.5f, 0.0f,  0.0f,   1.f, 0.f, 0.f,   1.00f, 0.50f,
-     0.0f, 0.0f, -0.5f,   0.f, 0.f,-1.f,   0.25f, 0.50f,
-
-    // --- Face 3: A, F, D (+Y -Z -X) ---
-     0.0f, 0.5f,  0.0f,   0.f, 1.f,  0.f,   0.50f, 0.00f,
-     0.0f, 0.0f, -0.5f,   0.f, 0.f, -1.f,   0.25f, 0.50f,
-    -0.5f, 0.0f,  0.0f,  -1.f, 0.f,  0.f,   0.00f, 0.50f,
-
-    // --- Face 4: A, D, E (+Y -X +Z) ---
-     0.0f, 0.5f, 0.0f,   0.f, 1.f, 0.f,   0.50f, 0.00f,
-    -0.5f, 0.0f, 0.0f,  -1.f, 0.f, 0.f,   0.00f, 0.50f,
-     0.0f, 0.0f, 0.5f,   0.f, 0.f, 1.f,   0.75f, 0.50f,
-
-    // --- Face 5: B, C, E (-Y +X +Z) ---
-     0.0f, -0.5f, 0.0f,   0.f, -1.f, 0.f,   0.50f, 1.00f,
-     0.5f,  0.0f, 0.0f,   1.f,  0.f, 0.f,   1.00f, 0.50f,
-     0.0f,  0.0f, 0.5f,   0.f,  0.f, 1.f,   0.75f, 0.50f,
-
-    // --- Face 6: B, F, C (-Y -Z +X) ---
-     0.0f, -0.5f,  0.0f,   0.f, -1.f,  0.f,   0.50f, 1.00f,
-     0.0f,  0.0f, -0.5f,   0.f,  0.f, -1.f,   0.25f, 0.50f,
-     0.5f,  0.0f,  0.0f,   1.f,  0.f,  0.f,   1.00f, 0.50f,
-
-    // --- Face 7: B, D, F (-Y -X -Z) ---
-     0.0f, -0.5f,  0.0f,   0.f, -1.f,  0.f,   0.50f, 1.00f,
-    -0.5f,  0.0f,  0.0f,  -1.f,  0.f,  0.f,   0.00f, 0.50f,
-     0.0f,  0.0f, -0.5f,   0.f,  0.f, -1.f,   0.25f, 0.50f,
-
-    // --- Face 8: B, E, D (-Y +Z -X) ---
-     0.0f, -0.5f, 0.0f,   0.f, -1.f, 0.f,   0.50f, 1.00f,
-     0.0f,  0.0f, 0.5f,   0.f,  0.f, 1.f,   0.75f, 0.50f,
-    -0.5f,  0.0f, 0.0f,  -1.f,  0.f, 0.f,   0.00f, 0.50f,
-};
-
-// 4-slice cylinder — square cross-section, radius 0.5, height 1.0, centered at origin
-// Corners (xz): p0=(+0.5,0)  p1=(0,+0.5)  p2=(-0.5,0)  p3=(0,-0.5)
-// Side normals are per-vertex radial; cap normals are flat ±Y
-const float MODEL_CYLINDER[] = {
-    // --- Face 0: p0 → p1 ---
-     0.5f, -0.5f, 0.0f,     1.f, 0.f, 0.f,    0.00f, 0.f,
-     0.5f,  0.5f, 0.0f,     1.f, 0.f, 0.f,    0.00f, 1.f,
-     0.0f,  0.5f, 0.5f,     0.f, 0.f, 1.f,    0.25f, 1.f,
-     0.5f, -0.5f, 0.0f,     1.f, 0.f, 0.f,    0.00f, 0.f,
-     0.0f,  0.5f, 0.5f,     0.f, 0.f, 1.f,    0.25f, 1.f,
-     0.0f, -0.5f, 0.5f,     0.f, 0.f, 1.f,    0.25f, 0.f,
-
-    // --- Face 1: p1 → p2 ---
-     0.0f, -0.5f, 0.5f,     0.f, 0.f, 1.f,    0.25f, 0.f,
-     0.0f,  0.5f, 0.5f,     0.f, 0.f, 1.f,    0.25f, 1.f,
-    -0.5f,  0.5f, 0.0f,    -1.f, 0.f, 0.f,    0.50f, 1.f,
-     0.0f, -0.5f, 0.5f,     0.f, 0.f, 1.f,    0.25f, 0.f,
-    -0.5f,  0.5f, 0.0f,    -1.f, 0.f, 0.f,    0.50f, 1.f,
-    -0.5f, -0.5f, 0.0f,    -1.f, 0.f, 0.f,    0.50f, 0.f,
-
-    // --- Face 2: p2 → p3 ---
-    -0.5f, -0.5f,  0.0f,   -1.f, 0.f,  0.f,   0.50f, 0.f,
-    -0.5f,  0.5f,  0.0f,   -1.f, 0.f,  0.f,   0.50f, 1.f,
-     0.0f,  0.5f, -0.5f,    0.f, 0.f, -1.f,   0.75f, 1.f,
-    -0.5f, -0.5f,  0.0f,   -1.f, 0.f,  0.f,   0.50f, 0.f,
-     0.0f,  0.5f, -0.5f,    0.f, 0.f, -1.f,   0.75f, 1.f,
-     0.0f, -0.5f, -0.5f,    0.f, 0.f, -1.f,   0.75f, 0.f,
-
-    // --- Face 3: p3 → p0 ---
-     0.0f, -0.5f, -0.5f,    0.f, 0.f, -1.f,   0.75f, 0.f,
-     0.0f,  0.5f, -0.5f,    0.f, 0.f, -1.f,   0.75f, 1.f,
-     0.5f,  0.5f,  0.0f,    1.f, 0.f,  0.f,   1.00f, 1.f,
-     0.0f, -0.5f, -0.5f,    0.f, 0.f, -1.f,   0.75f, 0.f,
-     0.5f,  0.5f,  0.0f,    1.f, 0.f,  0.f,   1.00f, 1.f,
-     0.5f, -0.5f,  0.0f,    1.f, 0.f,  0.f,   1.00f, 0.f,
-
-    // === Top cap (y=+0.5, norm=+Y) — fan from center, CCW from above ===
-     0.0f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    0.50f, 0.50f,
-     0.0f, 0.5f,  0.5f,     0.f, 1.f, 0.f,    0.50f, 1.00f,
-     0.5f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    1.00f, 0.50f,
-     0.0f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    0.50f, 0.50f,
-    -0.5f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    0.00f, 0.50f,
-     0.0f, 0.5f,  0.5f,     0.f, 1.f, 0.f,    0.50f, 1.00f,
-     0.0f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    0.50f, 0.50f,
-     0.0f, 0.5f, -0.5f,     0.f, 1.f, 0.f,    0.50f, 0.00f,
-    -0.5f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    0.00f, 0.50f,
-     0.0f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    0.50f, 0.50f,
-     0.5f, 0.5f,  0.0f,     0.f, 1.f, 0.f,    1.00f, 0.50f,
-     0.0f, 0.5f, -0.5f,     0.f, 1.f, 0.f,    0.50f, 0.00f,
-
-    // === Bottom cap (y=-0.5, norm=-Y) — fan from center, CCW from below ===
-     0.0f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   0.50f, 0.50f,
-     0.5f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   1.00f, 0.50f,
-     0.0f, -0.5f,  0.5f,    0.f, -1.f, 0.f,   0.50f, 1.00f,
-     0.0f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   0.50f, 0.50f,
-     0.0f, -0.5f,  0.5f,    0.f, -1.f, 0.f,   0.50f, 1.00f,
-    -0.5f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   0.00f, 0.50f,
-     0.0f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   0.50f, 0.50f,
-    -0.5f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   0.00f, 0.50f,
-     0.0f, -0.5f, -0.5f,    0.f, -1.f, 0.f,   0.50f, 0.00f,
-     0.0f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   0.50f, 0.50f,
-     0.0f, -0.5f, -0.5f,    0.f, -1.f, 0.f,   0.50f, 0.00f,
-     0.5f, -0.5f,  0.0f,    0.f, -1.f, 0.f,   1.00f, 0.50f,
-};
-// clang-format on
-
-static void PrimitiveSetTexture(int32_t textureId, const Color3& color);
-static void RenderCube(const PrimitiveDrawEntry& entry);
-static void RenderCylinder(const PrimitiveDrawEntry& entry);
-static void RenderSphere(const PrimitiveDrawEntry& entry);
-static void RenderPrimitiveCore(const float* model, uint32_t vertexCount, uint32_t stride, const Transform3D& transform);
+static void RenderPrimitiveCore(const float* model, uint32_t vertexCount, uint32_t stride, const Transform3D& transform, float cr = 1.f, float cg = 1.f, float cb = 1.f, bool useColor = false);
 
 // clang-format off
 DrawLists::DrawLists()
@@ -253,6 +88,8 @@ void DrawLists::Render()
 
 void DrawLists::Reset(const bool resetSkybox)
 {
+    m_lastStats.modelCount = modelCount;
+
     primitiveCount = 0;
     modelCount = 0;
     uiCount = 0;
@@ -279,70 +116,132 @@ void DrawLists::RenderSkybox() const
     const Transform3D skyTransform({camera3D.position.x, camera3D.position.y, camera3D.position.z}, {0.f, 0.f, 0.f}, {500.f, 500.f, 500.f});
 
     rlBegin(RL_TRIANGLES);
-    RenderPrimitiveCore(MODEL_CUBE, PRIMITIVE_CUBE_VERTEX_COUNT, PRIMITIVE_VERTEX_STRIDE, skyTransform);
+    RenderPrimitiveCore(MODEL_CUBE, PRIMITIVE_CUBE_VERTEX_COUNT, PRIMITIVE_VERTEX_STRIDE, skyTransform, 1.f, 1.f, 1.f, false);
     rlEnd();
 
-    rlSetTexture(0);
+    rlDisableTexture();
     rlEnableBackfaceCulling();
     rlEnableDepthMask();
 }
 
-void DrawLists::RenderPrimitives() const
+void DrawLists::RenderPrimitives()
 {
-    rlBegin(RL_TRIANGLES);
+    m_lastStats.primitiveCount = primitiveCount;
+
+    if (primitiveCount == 0)
+        return;
+
+    // Sort by textureId so same-texture primitives are contiguous.
+    // This lets us open one rlBegin/rlEnd per unique texture group,
+    // minimising GS DMA flushes on PS2 (the main perf cost).
+    // 1. Sort by texture first, then by color for untextured primitives.
+    // This allows us to batch untextured primitives that share the same color.
+    std::sort(primitives, primitives + primitiveCount,
+              [](const PrimitiveDrawEntry& a, const PrimitiveDrawEntry& b)
+              {
+                  if (a.textureId != b.textureId)
+                      return a.textureId < b.textureId;
+                  if (a.textureId == -1)
+                  {
+                      if (a.color.r != b.color.r)
+                          return a.color.r < b.color.r;
+                      if (a.color.g != b.color.g)
+                          return a.color.g < b.color.g;
+                      return a.color.b < b.color.b;
+                  }
+                  return false;
+              });
+
+    // Sentinel: no batch open yet.
+    constexpr int32_t kNoBatch = INT32_MIN;
+    int32_t currentTextureId = kNoBatch;
+    Color3 currentColor = {-1.f, -1.f, -1.f};
+    uint16_t uniqueTextures = 0;
+
     for (uint16_t i = 0; i < primitiveCount; ++i)
     {
-        switch (primitives[i].type)
+        const PrimitiveDrawEntry& entry = primitives[i];
+
+        // On a texture-group boundary: flush the current batch and start a new one.
+        if (entry.textureId != currentTextureId)
         {
-        case Primitive3D::Cube:
-            RenderCube(primitives[i]);
-            break;
-        case Primitive3D::Cylinder:
-            RenderCylinder(primitives[i]);
-            break;
-        case Primitive3D::Sphere:
-            RenderSphere(primitives[i]);
-            break;
-        default:
-            Engine_LogError("Undefined primitive type was sent as a draw list item. Type: %u", primitives[i].type);
-            break;
+            // Only flush if we had a TEXTURED batch open.
+            // Untextured batches (-1) now close themselves inside the loop.
+            if (currentTextureId != kNoBatch && currentTextureId != -1)
+            {
+                rlEnd();
+                rlDisableTexture();
+            }
+
+            currentTextureId = entry.textureId;
+            ++uniqueTextures;
+
+            if (currentTextureId != -1)
+            {
+                const auto* tex = static_cast<const Texture2D*>(Engine_Resource_Get(currentTextureId));
+                if (tex && tex->id != 0)
+                {
+                    rlEnableTexture(tex->id);
+                }
+                else
+                {
+                    rlDisableTexture(); // resource not ready — render untextured
+                }
+                rlBegin(RL_TRIANGLES);
+            }
+        }
+
+        // For untextured primitives each entry may carry a different solid colour.
+        // Pass the colour explicitly into RenderPrimitiveCore so it is emitted
+        // per vertex — ps2gl/GS requires colour to be set before each glVertex3f.
+        const bool isUntextured = (currentTextureId == -1);
+
+        if (entry.textureId == -1)
+        {
+            // Untextured path: One batch per primitive (safe)
+            rlSetTexture(rlGetTextureIdDefault());
+            rlBegin(RL_TRIANGLES);
+            RenderPrimitiveCore(entry.type == Primitive3D::Cube ? MODEL_CUBE : (entry.type == Primitive3D::Cylinder ? MODEL_CYLINDER : MODEL_SPHERE),
+                                entry.type == Primitive3D::Cube ? PRIMITIVE_CUBE_VERTEX_COUNT : (entry.type == Primitive3D::Cylinder ? PRIMITIVE_CYLINDER_VERTEX_COUNT : PRIMITIVE_SPHERE_VERTEX_COUNT),
+                                PRIMITIVE_VERTEX_STRIDE, entry.transform, entry.color.r, entry.color.g, entry.color.b, true);
+            rlEnd();
+        }
+        else
+        {
+            // Textured path: One batch per primitive (safe)
+            const auto* tex = static_cast<const Texture2D*>(Engine_Resource_Get(entry.textureId));
+            if (tex && tex->id != 0)
+            {
+                rlEnableTexture(tex->id);
+            }
+            else
+            {
+                rlSetTexture(rlGetTextureIdDefault());
+            }
+
+            rlBegin(RL_TRIANGLES);
+            RenderPrimitiveCore(entry.type == Primitive3D::Cube ? MODEL_CUBE : (entry.type == Primitive3D::Cylinder ? MODEL_CYLINDER : MODEL_SPHERE),
+                                entry.type == Primitive3D::Cube ? PRIMITIVE_CUBE_VERTEX_COUNT : (entry.type == Primitive3D::Cylinder ? PRIMITIVE_CYLINDER_VERTEX_COUNT : PRIMITIVE_SPHERE_VERTEX_COUNT),
+                                PRIMITIVE_VERTEX_STRIDE, entry.transform, 1.f, 1.f, 1.f, false);
+            rlEnd();
         }
     }
-    rlEnd();
+
+    // Close the last open batch.
+    if (currentColor.r >= 0.f || (currentTextureId != kNoBatch && currentTextureId != -1))
+    {
+        rlEnd();
+        rlDisableTexture();
+    }
+
+    m_lastStats.uniqueTextures = uniqueTextures;
 }
 
 void DrawLists::RenderModels() const {}
 
 void DrawLists::RenderUI() const {}
 
-static void RenderCube(const PrimitiveDrawEntry& entry)
-{
-    PrimitiveSetTexture(entry.textureId, entry.color);
-    RenderPrimitiveCore(MODEL_CUBE, PRIMITIVE_CUBE_VERTEX_COUNT, PRIMITIVE_VERTEX_STRIDE, entry.transform);
-
-    if (entry.textureId != -1)
-        rlSetTexture(0);
-}
-
-static void RenderCylinder(const PrimitiveDrawEntry& entry)
-{
-    PrimitiveSetTexture(entry.textureId, entry.color);
-    RenderPrimitiveCore(MODEL_CYLINDER, PRIMITIVE_CYLINDER_VERTEX_COUNT, PRIMITIVE_VERTEX_STRIDE, entry.transform);
-
-    if (entry.textureId != -1)
-        rlSetTexture(0);
-}
-
-static void RenderSphere(const PrimitiveDrawEntry& entry)
-{
-    PrimitiveSetTexture(entry.textureId, entry.color);
-    RenderPrimitiveCore(MODEL_SPHERE, PRIMITIVE_SPHERE_VERTEX_COUNT, PRIMITIVE_VERTEX_STRIDE, entry.transform);
-
-    if (entry.textureId != -1)
-        rlSetTexture(0);
-}
-
-static void RenderPrimitiveCore(const float* model, uint32_t vertexCount, uint32_t stride, const Transform3D& transform)
+static void RenderPrimitiveCore(const float* model, uint32_t vertexCount, uint32_t stride, const Transform3D& transform, float cr, float cg, float cb, bool useColor)
 {
     const Vector3 position = transform.GetPosition();
     const Vector3 rotation = transform.GetRotation();
@@ -380,6 +279,11 @@ static void RenderPrimitiveCore(const float* model, uint32_t vertexCount, uint32
     auto texU = 0.0f;
     auto texV = 0.0f;
 
+    if (useColor)
+        rlColor4ub(static_cast<unsigned char>(cr * 255.f), static_cast<unsigned char>(cg * 255.f), static_cast<unsigned char>(cb * 255.f), 255);
+    else
+        rlColor4ub(255, 255, 255, 255);
+
     for (uint32_t i = 0; i < vertexCount; ++i)
     {
         lx = model[i * stride + 0] * scale.x;
@@ -400,21 +304,8 @@ static void RenderPrimitiveCore(const float* model, uint32_t vertexCount, uint32
         texU = model[i * stride + 6];
         texV = model[i * stride + 7];
 
-        rlVertex3f(vertX, vertY, vertZ);
         rlNormal3f(normX, normY, normZ);
         rlTexCoord2f(texU, texV);
-    }
-}
-
-static void PrimitiveSetTexture(int32_t textureId, const Color3& color)
-{
-    if (textureId == -1)
-    {
-        rlColor3f(color.r, color.g, color.b);
-    }
-    else
-    {
-        const auto tex = static_cast<const Texture2D*>(Engine_Resource_Get(textureId));
-        rlSetTexture(tex->id);
+        rlVertex3f(vertX, vertY, vertZ);
     }
 }

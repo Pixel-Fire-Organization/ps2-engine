@@ -1,8 +1,10 @@
 #include <raylib.h>
 #include <cstdarg>
 #include <cstdio>
+#include <malloc.h>
 #include "Engine.h"
 #include "EngineInput.h"
+#include "graphics/DrawList.h"
 
 static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
                                           "+,-./01234\n" /* 43-52  */
@@ -105,3 +107,92 @@ void Engine_Panic(const char* message)
 
 #endif
 }
+
+// ---------------------------------------------------------------------------
+// Performance Logger
+// ---------------------------------------------------------------------------
+
+static bool  s_PerfLoggerEnabled  = false;
+static bool  s_ComboWasHeld       = false;   // debounce — fire once per hold
+
+void Engine_PerfLogger_Init(bool enabled)
+{
+    s_PerfLoggerEnabled = enabled;
+    s_ComboWasHeld      = false;
+    if (enabled)
+        Engine_LogInfo("[PerfLogger] Initialized. Hold L1+L2+R1+R2 to dump snapshot.");
+}
+
+void Engine_PerfLogger_Tick()
+{
+    if (!s_PerfLoggerEnabled)
+        return;
+
+    // Combo: all four shoulder buttons simultaneously on port 0.
+    const bool comboNow =
+        IsGamePadButtonPressed(0, GamePadButton::L1) &&
+        IsGamePadButtonPressed(0, GamePadButton::L2) &&
+        IsGamePadButtonPressed(0, GamePadButton::R1) &&
+        IsGamePadButtonPressed(0, GamePadButton::R2);
+
+    if (!comboNow)
+    {
+        s_ComboWasHeld = false;
+        return;
+    }
+
+    // Fire once per hold (rising edge).
+    if (s_ComboWasHeld)
+        return;
+    s_ComboWasHeld = true;
+
+    // --- Gather stats ---
+    DrawStats ds{};
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        ds = r->GetLastStats();
+
+    const double   timeSec    = GetTime();
+    const uint32_t frameNum   = Engine_Script_GetFrameCount();
+    const uint32_t gsUsed     = Engine_Resource_GetAllocatedGsPages();
+    const uint32_t gsBudget   = Engine_Resource_GetGsPageBudget();
+
+    // Heap info via mallinfo (available in newlib / glibc)
+    struct mallinfo mi = mallinfo();
+    // uordblks  = total allocated bytes; fordblks = total free bytes in arena
+    const uint32_t heapFreeKB = static_cast<uint32_t>(mi.fordblks) / 1024u;
+    const uint32_t heapUsedKB = static_cast<uint32_t>(mi.uordblks) / 1024u;
+
+    // --- Print snapshot ---
+    Engine_LogInfo("[PERF] ========== PERFORMANCE SNAPSHOT ==========");
+    Engine_LogInfo("[PERF] Time since start  : %.3f s", timeSec);
+    Engine_LogInfo("[PERF] Frame number      : %u",     frameNum);
+    Engine_LogInfo("[PERF] --- Draw Lists ---");
+    Engine_LogInfo("[PERF] Primitives        : %u",     ds.primitiveCount);
+    Engine_LogInfo("[PERF] Models            : %u",     ds.modelCount);
+    Engine_LogInfo("[PERF] Texture batches   : %u",     ds.uniqueTextures);
+    Engine_LogInfo("[PERF] --- GS VRAM ---");
+    Engine_LogInfo("[PERF] Pages used        : %u / %u (%u%% full)",
+                   gsUsed, gsBudget,
+                   gsBudget ? (gsUsed * 100u / gsBudget) : 0u);
+    Engine_LogInfo("[PERF] --- Heap Memory ---");
+    Engine_LogInfo("[PERF] Used              : %u KB", heapUsedKB);
+    Engine_LogInfo("[PERF] Free (arena)      : %u KB", heapFreeKB);
+    Engine_LogInfo("[PERF] --- Controllers ---");
+    for (uint8_t p = 0; p < MAX_GAME_PAD_PORTS; ++p)
+    {
+        Engine_LogInfo("[PERF] Port %u            : %s", p,
+                       IsGamePadInitialized(p) ? "CONNECTED" : "NOT INITIALIZED");
+    }
+
+#if defined(PLATFORM_PLAYSTATION2)
+    Engine_LogInfo("[PERF] --- System ---");
+    Engine_LogInfo("[PERF] Platform         : PlayStation 2 (EE)");
+#else
+    Engine_LogInfo("[PERF] --- System ---");
+    Engine_LogInfo("[PERF] Platform         : PC (development build)");
+#endif
+
+    Engine_LogInfo("[PERF] =============================================");
+}
+

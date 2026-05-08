@@ -70,6 +70,13 @@ void ShutdownAllPads()
     }
 }
 
+bool IsGamePadInitialized(uint8_t port)
+{
+    if (port >= MAX_GAME_PAD_PORTS)
+        return false;
+    return openedGamePads[port] != nullptr;
+}
+
 bool IsGamePadButtonPressed(uint8_t port, GamePadButton button)
 {
     if (!openedGamePads[port])

@@ -2,6 +2,7 @@
 
 #include "EngineGraphics.h"
 #include "EngineLevel.h"
+#include "DrawList.h"
 
 class Renderer {
 public:
@@ -35,4 +36,6 @@ public:
 
     virtual bool IsInitialized() const = 0;
     virtual void Shutdown() = 0;
+
+    virtual DrawStats GetLastStats() const = 0;
 };

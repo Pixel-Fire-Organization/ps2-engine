@@ -3,6 +3,13 @@
 
 #include "EngineGraphics.h"
 
+struct DrawStats
+{
+    uint16_t primitiveCount;   // primitives submitted last frame
+    uint16_t modelCount;       // models submitted last frame
+    uint16_t uniqueTextures;   // unique texture IDs bound last frame (0 = untextured batch counts as 1 if any)
+};
+
 struct PrimitiveDrawEntry
 {
     Transform3D transform;
@@ -37,8 +44,10 @@ class DrawLists
     Camera3D camera3D{};
     Camera2D camera2D{};
 
+    DrawStats m_lastStats{};
+
     void RenderSkybox() const;
-    void RenderPrimitives() const;
+    void RenderPrimitives();
     void RenderModels() const;
     void RenderUI() const;
 
@@ -60,4 +69,6 @@ public:
 
     void Render();
     void Reset(bool resetSkybox = false);
+
+    DrawStats GetLastStats() const { return m_lastStats; }
 };

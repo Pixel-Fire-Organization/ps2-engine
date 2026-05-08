@@ -44,6 +44,9 @@ enum class GamePadJoystick : uint8_t
 bool InitPad(uint8_t port, bool locked);
 void ShutdownAllPads();
 
+// Returns true if the pad at 'port' was successfully opened via InitPad.
+bool IsGamePadInitialized(uint8_t port);
+
 void EngineInput_PollAllPads();
 
 bool IsGamePadButtonPressed(uint8_t port, GamePadButton button);

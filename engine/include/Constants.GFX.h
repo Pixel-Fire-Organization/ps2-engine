@@ -38,8 +38,10 @@
 #define GFX_MAX_DRAW_LIST_LENGTH 1024
 
 #define PRIMITIVE_CUBE_VERTEX_STRIDE 8
-#define PRIMITIVE_CUBE_VERTEX_COUNT 36
 #define PRIMITIVE_VERTEX_STRIDE 8
 #define PRIMITIVE_CUBE_VERTEX_COUNT 36
-#define PRIMITIVE_SPHERE_VERTEX_COUNT 24
-#define PRIMITIVE_CYLINDER_VERTEX_COUNT 48
+// Octahedron: 8 faces * 3 verts/face = 24 verts
+#define PRIMITIVE_SPHERE_VERTEX_COUNT 336
+// 4-sided cylinder: 4 side quads (2 tris each) + 4 top-cap + 4 bottom-cap tris
+// = (8 + 4 + 4) tris * 3 = 48 verts
+#define PRIMITIVE_CYLINDER_VERTEX_COUNT 144

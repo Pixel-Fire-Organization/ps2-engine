@@ -1,4 +1,4 @@
-﻿-- MAIN.LUA — PS2 Engine entry-point script
+-- MAIN.LUA — PS2 Engine entry-point script
 -- Loaded and executed once by EngineStart.
 -- OnUpdate(dt) is called every frame by EngineUpdate.
 
@@ -33,7 +33,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Startup: request a texture resource (async — check is_ready each frame)
 -- ---------------------------------------------------------------------------
-local texHandle = resources.load("TEXTURE", engine.make_path("RASSETS\\BOX.PS2A"))
+local texHandle = resources.load("TEXTURE", engine.make_path("RASSETS/BOX.PS2A"))
 engine.log("Texture handle: " .. texHandle)
 
 -- ---------------------------------------------------------------------------
@@ -121,9 +121,22 @@ function OnUpdate(dt)
 
     if resources.is_ready(texHandle) then
         graphics.draw_cube_textured(cubeX, cubeY, cubeZ, 2.0, texHandle)
+        
+        -- Safe loading: only trigger the heavy stress test after async IO completes.
+        -- If we trigger it immediately, the GS DMA will saturate the EE bus and 
+        -- starve the IOP CDROM SIF DMA transfer, causing the texture read to timeout!
+        if not _G.stressTestLoaded then
+            _G.stressTestLoaded = true
+            engine.log("Texture fully loaded! Safely starting stress test...")
+            local ok = engine.load_script(engine.make_path("STRESSDRAW.LUA"))
+            if not ok then
+                engine.log("[MAIN] WARNING: STRESSDRAW.LUA failed to load")
+            end
+        end
     else
         graphics.draw_cube(cubeX, cubeY, cubeZ, 2.0, { 220, 60, 60, 255 })
     end
 end
 
 engine.log("MAIN.LUA ready")
+

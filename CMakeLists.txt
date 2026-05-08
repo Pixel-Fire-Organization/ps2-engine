@@ -33,6 +33,8 @@ endif()
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
     message(WARNING "You should build this project using the PS2 toolchain file. E.g.: cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -B build")
+else()
+    add_definitions(-DPLATFORM_PLAYSTATION2)
 endif()
 
 set(APP_EXE_NAME "main.elf")

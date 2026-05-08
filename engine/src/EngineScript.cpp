@@ -232,6 +232,12 @@ bool Engine_Script_Init()
             RegisterIOBindings(s_ScriptUnits[i].L);
             RegisterResourceBindings(s_ScriptUnits[i].L);
             RegisterLevelBindings(s_ScriptUnits[i].L);
+
+            // Hyper-aggressive GC configuration for small 512KB heaps.
+            // SETPAUSE 100: Start a new cycle as soon as any memory is freed.
+            // SETSTEPMUL 500: Run the GC much faster than the allocator.
+            lua_gc(s_ScriptUnits[i].L, LUA_GCSETPAUSE, 100);
+            lua_gc(s_ScriptUnits[i].L, LUA_GCSETSTEPMUL, 500);
         }
         else
         {
@@ -331,20 +337,25 @@ void Engine_Script_UpdateAll(float dt)
     {
         if (s_ScriptUnits[i].active && s_ScriptUnits[i].L)
         {
-            lua_getglobal(s_ScriptUnits[i].L, "OnUpdate");
-            if (lua_isfunction(s_ScriptUnits[i].L, -1))
+            lua_State* L = s_ScriptUnits[i].L;
+            lua_getglobal(L, "OnUpdate");
+            if (lua_isfunction(L, -1))
             {
-                lua_pushnumber(s_ScriptUnits[i].L, dt);
-                if (lua_pcall(s_ScriptUnits[i].L, 1, 0, 0) != LUA_OK)
+                lua_pushnumber(L, dt);
+                if (lua_pcall(L, 1, 0, 0) != LUA_OK)
                 {
-                    const char* err = lua_tostring(s_ScriptUnits[i].L, -1);
+                    const char* err = lua_tostring(L, -1);
                     Engine_LogError("Lua Update error in unit %d: %s", i, err);
+                    lua_pop(L, 1);
                 }
             }
             else
             {
-                lua_pop(s_ScriptUnits[i].L, 1);
+                lua_pop(L, 1);
             }
+
+            // Force a more aggressive GC step every frame to keep the 512KB heaps clean.
+            lua_gc(L, LUA_GCSTEP, 100);
         }
     }
 }
@@ -380,6 +391,8 @@ void Engine_Script_FrameTick()
         }
     }
 }
+
+uint32_t Engine_Script_GetFrameCount() { return s_FrameCount; }
 
 // --- Internal Binding Implementations ---
 
@@ -622,6 +635,54 @@ static int Lua_Engine_MakePath(lua_State* L)
     return 1;
 }
 
+// engine.load_script(path) → bool
+// Loads a Lua source file into a free ScriptUnit, runs it (registering its
+// OnUpdate), and returns true on success.  The file descriptor is released
+// immediately after the bytecode is copied into the arena slot.
+//
+// Forward-declare the EngineApp file helpers here; their full extern block
+// lives in the IO bindings section further down the file.
+extern int32_t EngineApp_FileOpen(const char* path);
+extern size_t  EngineApp_FileRead(int32_t fileId, const void** outData);
+extern bool    EngineApp_FileClose(int32_t fileId);
+
+static int Lua_Engine_LoadScript(lua_State* L)
+{
+    const char* path = luaL_checkstring(L, 1);
+
+    int32_t fd = EngineApp_FileOpen(path);
+    if (fd < 0)
+    {
+        Engine_LogError("[Lua] engine.load_script: cannot open '%s'", path);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    const void* data = nullptr;
+    size_t size = EngineApp_FileRead(fd, &data);
+    if (size == 0 || !data)
+    {
+        Engine_LogError("[Lua] engine.load_script: empty or unreadable '%s'", path);
+        EngineApp_FileClose(fd);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    int unitIndex = Engine_Script_Load(data, size);
+    EngineApp_FileClose(fd);
+
+    if (unitIndex < 0)
+    {
+        Engine_LogError("[Lua] engine.load_script: no free script unit for '%s'", path);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    bool ok = Engine_Script_Run(unitIndex);
+    lua_pushboolean(L, ok ? 1 : 0);
+    return 1;
+}
+
 // Graphics
 static int Lua_Graphics_Clear(lua_State* L)
 {
@@ -675,17 +736,73 @@ static int Lua_Graphics_DrawCube(lua_State* L)
     Color3 color = {1.f, 1.f, 1.f};
     if (lua_istable(L, 5))
     {
-        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
-        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
-        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
         lua_pop(L, 3);
         // alpha is ignored — Color3 has no alpha channel
-        if (lua_geti(L, 5, 4)) lua_pop(L, 1);
+        lua_geti(L, 5, 4); lua_pop(L, 1);
     }
 
     Renderer* r = Engine_GetRenderer();
     if (r)
         r->AddPrimitiveToDrawList(Primitive3D::Cube,
+                                  Vector3{px, py, pz},
+                                  Vector3{0.f, 0.f, 0.f},
+                                  Vector3{sz, sz, sz},
+                                  color);
+    return 0;
+}
+
+// graphics.draw_sphere(x, y, z, size [, {r,g,b,a}])
+static int Lua_Graphics_DrawSphere(lua_State* L)
+{
+    float px = static_cast<float>(luaL_checknumber(L, 1));
+    float py = static_cast<float>(luaL_checknumber(L, 2));
+    float pz = static_cast<float>(luaL_checknumber(L, 3));
+    float sz = static_cast<float>(luaL_checknumber(L, 4));
+
+    Color3 color = {1.f, 1.f, 1.f};
+    if (lua_istable(L, 5))
+    {
+        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_pop(L, 3);
+        lua_geti(L, 5, 4); lua_pop(L, 1);
+    }
+
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->AddPrimitiveToDrawList(Primitive3D::Sphere,
+                                  Vector3{px, py, pz},
+                                  Vector3{0.f, 0.f, 0.f},
+                                  Vector3{sz, sz, sz},
+                                  color);
+    return 0;
+}
+
+// graphics.draw_cylinder(x, y, z, size [, {r,g,b,a}])
+static int Lua_Graphics_DrawCylinder(lua_State* L)
+{
+    float px = static_cast<float>(luaL_checknumber(L, 1));
+    float py = static_cast<float>(luaL_checknumber(L, 2));
+    float pz = static_cast<float>(luaL_checknumber(L, 3));
+    float sz = static_cast<float>(luaL_checknumber(L, 4));
+
+    Color3 color = {1.f, 1.f, 1.f};
+    if (lua_istable(L, 5))
+    {
+        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_pop(L, 3);
+        lua_geti(L, 5, 4); lua_pop(L, 1);
+    }
+
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->AddPrimitiveToDrawList(Primitive3D::Cylinder,
                                   Vector3{px, py, pz},
                                   Vector3{0.f, 0.f, 0.f},
                                   Vector3{sz, sz, sz},
@@ -715,11 +832,11 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     Color3 tint = {1.f, 1.f, 1.f};
     if (lua_istable(L, 6))
     {
-        lua_geti(L, 6, 1); tint.r = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
-        lua_geti(L, 6, 2); tint.g = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
-        lua_geti(L, 6, 3); tint.b = static_cast<float>(lua_tointeger(L, -1)) / 255.f;
+        lua_geti(L, 6, 1); tint.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 6, 2); tint.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, 6, 3); tint.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
         lua_pop(L, 3);
-        if (lua_geti(L, 6, 4)) lua_pop(L, 1);
+        lua_geti(L, 6, 4); lua_pop(L, 1);
     }
 
     Renderer* r = Engine_GetRenderer();
@@ -909,6 +1026,8 @@ static void RegisterCoreBindings(lua_State* L)
     lua_setfield(L, -2, "get_resource_token");
     lua_pushcfunction(L, Lua_Engine_MakePath);
     lua_setfield(L, -2, "make_path");
+    lua_pushcfunction(L, Lua_Engine_LoadScript);
+    lua_setfield(L, -2, "load_script");
     lua_setglobal(L, "engine");
 }
 
@@ -921,6 +1040,10 @@ static void RegisterGraphicsBindings(lua_State* L)
     lua_setfield(L, -2, "draw_rect");
     lua_pushcfunction(L, Lua_Graphics_DrawCube);
     lua_setfield(L, -2, "draw_cube");
+    lua_pushcfunction(L, Lua_Graphics_DrawSphere);
+    lua_setfield(L, -2, "draw_sphere");
+    lua_pushcfunction(L, Lua_Graphics_DrawCylinder);
+    lua_setfield(L, -2, "draw_cylinder");
     lua_pushcfunction(L, Lua_Graphics_DrawGrid);
     lua_setfield(L, -2, "draw_grid");
     lua_pushcfunction(L, Lua_Graphics_DrawCubeTextured);

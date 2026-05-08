@@ -16,6 +16,7 @@ static const char* s_ResourceLocationToken = NULL;
 bool Engine_Init(EngineConfig config)
 {
     Engine_InitDebug();
+    Engine_PerfLogger_Init(config.enablePerfLogger);
     s_ResourceLocationToken = config.resourceLocationToken;
 
     // Calculate total arena size from centralized constants
@@ -122,15 +123,45 @@ bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf,
 
     if (tokenLen >= 4) // smallest is host & hdd0
     {
-        if (token[0] == 'c') // cdrom0: → "cdrom0:\\<PATH>;1"
-            written = snprintf(outBuf, bufSize, "cdrom0:\\%s;1", relativePath);
-        else if (token[0] == 'm') // mass0: → "mass0:\\<PATH>"
-            written = snprintf(outBuf, bufSize, "mass0:\\%s", relativePath);
-        else if (token[0] == 'h' && token[1] == 'd') // hdd0: → "hdd0:\\<PATH>"
-            written = snprintf(outBuf, bufSize, "hdd0:\\%s", relativePath);
-        else if (token[0] == 'h' && token[1] == 'o') // host: → "host:<PATH>"
-            written = snprintf(outBuf, bufSize, "%s%s", token, relativePath);
+        if (token[0] == 'c') // cdrom0: → "cdrom0:<PATH>;1"
+            written = snprintf(outBuf, bufSize, "cdrom0:%s;1", relativePath);
+        else if (token[0] == 'm') // mass0: → "mass0:<PATH>"
+            written = snprintf(outBuf, bufSize, "mass0:%s", relativePath);
+        else if (token[0] == 'h' && token[1] == 'd') // hdd0: → "hdd0:<PATH>"
+            written = snprintf(outBuf, bufSize, "hdd0:%s", relativePath);
+        else if (token[0] == 'h' && token[1] == 'o') // host: → "host:<DIR>/<PATH>"
+        {
+            // Extract the directory part from host:path/to/elf
+            char baseDir[256];
+            strncpy(baseDir, token, sizeof(baseDir));
+            baseDir[sizeof(baseDir) - 1] = '\0';
+            char* lastSlash = strrchr(baseDir, '/');
+            char* lastBackslash = strrchr(baseDir, '\\');
+            char* lastColon = strchr(baseDir, ':');
+            
+            char* splitPoint = (lastSlash > lastBackslash) ? lastSlash : lastBackslash;
+            if (!splitPoint) splitPoint = lastColon;
+
+            if (splitPoint)
+            {
+                *(splitPoint + 1) = '\0'; // keep the slash/colon
+                written = snprintf(outBuf, bufSize, "%s%s", baseDir, relativePath);
+            }
+            else
+            {
+                written = snprintf(outBuf, bufSize, "%s%s", token, relativePath);
+            }
+        }
     }
 
-    return written >= 0 && (size_t)written < bufSize;
+    if (written >= 0 && (size_t)written < bufSize)
+    {
+        for (int i = 0; i < written; ++i)
+        {
+            if (outBuf[i] == '\\')
+                outBuf[i] = '/';
+        }
+        return true;
+    }
+    return false;
 }
