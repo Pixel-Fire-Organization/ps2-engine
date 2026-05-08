@@ -26,6 +26,7 @@ typedef enum
     ARENA_SCRIPT,
     ARENA_CONFIG,
     ARENA_LEVEL_DATA,
+    ARENA_RENDERER,
     ARENA_COUNT
 } ArenaType;
 
@@ -54,6 +55,9 @@ void Engine_ArenaReset(MemoryArena* arena);
 
 void Engine_ArenaClear(MemoryArena* arena);
 
+void Engine_GetArenaStats(ArenaType type, size_t* outCapacity, size_t* outUsed);
+void Engine_GetHeapStats(size_t* outTotal, size_t* outUsed, size_t* outFree);
+
 // Pool Allocator (Fixed block size)
 typedef struct PoolFreeNode
 {
@@ -73,7 +77,7 @@ void Engine_PoolInitMain(void* buffer, size_t capacity, size_t chunk_size);
 void* Engine_PoolAllocMain();
 
 void Engine_PoolFreeMain(void* ptr);
-
+void Engine_GetPoolStatsMain(size_t* outCapacity, size_t* outUsed);
 void* Engine_PoolGetBufferMain();
 
 void Engine_PoolInit(MemoryPool* pool, void* backing_buffer, size_t capacity, size_t chunk_size);

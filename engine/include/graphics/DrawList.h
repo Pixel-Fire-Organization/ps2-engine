@@ -5,9 +5,9 @@
 
 struct DrawStats
 {
-    uint16_t primitiveCount;   // primitives submitted last frame
-    uint16_t modelCount;       // models submitted last frame
-    uint16_t uniqueTextures;   // unique texture IDs bound last frame (0 = untextured batch counts as 1 if any)
+    uint16_t primitiveCount; // primitives submitted last frame
+    uint16_t modelCount; // models submitted last frame
+    uint16_t uniqueTextures; // unique texture IDs bound last frame (0 = untextured batch counts as 1 if any)
 };
 
 struct PrimitiveDrawEntry
@@ -48,11 +48,6 @@ class DrawLists
 
     DrawStats m_lastStats{};
 
-    void RenderSkybox() const;
-    void RenderPrimitives();
-    void RenderModels() const;
-    void RenderUI() const;
-
 public:
     DrawLists();
 
@@ -69,8 +64,25 @@ public:
     void SetActiveCamera3D(const Camera3D& camera);
     void SetActiveCamera2D(const Camera2D& camera);
 
-    void Render();
     void Reset(bool resetSkybox = false);
 
+    // Getters for Renderer
+    const PrimitiveDrawEntry* GetUntexturedPrims() const { return untexturedPrims; }
+    uint16_t GetUntexturedCount() const { return untexturedCount; }
+
+    const PrimitiveDrawEntry* GetTexturedPrims() const { return texturedPrims; }
+    uint16_t GetTexturedCount() const { return texturedCount; }
+
+    const ModelDrawEntry* GetModels() const { return models; }
+    uint16_t GetModelCount() const { return modelCount; }
+
+    const UIDrawEntry* GetUIItems() const { return uiItems; }
+    uint16_t GetUICount() const { return uiCount; }
+
+    int32_t GetSkyboxResourceId() const { return skyboxResourceId; }
+    const Camera3D& GetCamera3D() const { return camera3D; }
+    const Camera2D& GetCamera2D() const { return camera2D; }
+
     DrawStats GetLastStats() const { return m_lastStats; }
+    void SetLastStats(const DrawStats& stats) { m_lastStats = stats; }
 };

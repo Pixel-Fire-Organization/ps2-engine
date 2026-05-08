@@ -20,6 +20,17 @@ void Engine_Close();
 
 const char* Engine_GetResourceLocationToken();
 
+// Performance metrics
+float Engine_GetDeltaTime();
+float Engine_GetFPS();
+float Engine_GetTotalTime();
+
+// Frame profiling
+void Engine_ReportFrameStats(float logicTime, float renderTime, float waitTime);
+float Engine_GetLogicTime();
+float Engine_GetRenderTime();
+float Engine_GetWaitTime();
+
 // Constructs a full filesystem path by combining the active resource location
 // token with a relative path, inserting the correct separator and version
 // suffix for the device type (e.g. cdrom0:\\FOLDER\\FILE;1, host:FILE).

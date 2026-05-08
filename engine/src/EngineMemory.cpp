@@ -23,6 +23,7 @@ static inline uintptr_t AlignForward(uintptr_t ptr, size_t alignment)
 static MemoryArena g_ScriptArena;
 static MemoryArena g_ConfigArena;
 static MemoryArena g_LevelDataArena;
+static MemoryArena g_RendererArena;
 
 // Global pool (Encapsulated)
 static MemoryPool g_MainPool;
@@ -92,6 +93,10 @@ void Engine_ArenasInitSegmented(void* base_ptr)
 
     Engine_ArenaInit(&g_LevelDataArena, ptr, MEM_BLOCK_LEVEL_DATA_SIZE);
     Internal_InitSlots(ARENA_LEVEL_DATA, &g_LevelDataArena, MEM_BLOCK_LEVEL_DATA_SLOTS);
+    ptr += MEM_BLOCK_LEVEL_DATA_SIZE;
+
+    Engine_ArenaInit(&g_RendererArena, ptr, MEM_BLOCK_RENDERER_SIZE);
+    Internal_InitSlots(ARENA_RENDERER, &g_RendererArena, MEM_BLOCK_RENDERER_SLOTS);
 }
 
 void* Engine_GetSlot(ArenaType type, uint32_t slotIndex)
@@ -163,6 +168,8 @@ void* Engine_AddToArena(ArenaType type, size_t size, size_t alignment)
         return Engine_ArenaAlloc(&g_ConfigArena, size, alignment);
     case ARENA_LEVEL_DATA:
         return Engine_ArenaAlloc(&g_LevelDataArena, size, alignment);
+    case ARENA_RENDERER:
+        return Engine_ArenaAlloc(&g_RendererArena, size, alignment);
     default:
         return nullptr;
     }
@@ -209,6 +216,47 @@ void Engine_ArenaClear(MemoryArena* arena)
         memset(arena->buffer, 0, arena->capacity);
     }
     arena->offset = 0;
+}
+
+void Engine_GetArenaStats(ArenaType type, size_t* outCapacity, size_t* outUsed)
+{
+    if (type >= ARENA_COUNT)
+        return;
+
+    MemoryArena* a = nullptr;
+    switch (type)
+    {
+    case ARENA_SCRIPT:
+        a = &g_ScriptArena;
+        break;
+    case ARENA_CONFIG:
+        a = &g_ConfigArena;
+        break;
+    case ARENA_LEVEL_DATA:
+        a = &g_LevelDataArena;
+        break;
+    case ARENA_RENDERER:
+        a = &g_RendererArena;
+        break;
+    default:
+        break;
+    }
+
+    if (a)
+    {
+        if (outCapacity)
+            *outCapacity = a->capacity;
+
+        // Accumulate used size from all slots in this arena
+        size_t totalUsed = 0;
+        uint32_t count = s_SlotCounts[type];
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            totalUsed += s_Slots[type][i].usedSize;
+        }
+        if (outUsed)
+            *outUsed = totalUsed;
+    }
 }
 
 void Engine_PoolInit(MemoryPool* pool, void* backing_buffer, size_t capacity, size_t chunk_size)
@@ -269,4 +317,34 @@ void Engine_PoolFree(MemoryPool* pool, void* ptr)
     PoolFreeNode* node = static_cast<PoolFreeNode *>(ptr);
     node->next = pool->head;
     pool->head = node;
+}
+
+void Engine_GetPoolStatsMain(size_t* outCapacity, size_t* outUsed)
+{
+    if (outCapacity)
+        *outCapacity = g_MainPool.capacity;
+    if (outUsed)
+    {
+        size_t totalChunks = g_MainPool.capacity / g_MainPool.chunk_size;
+        size_t freeChunks = 0;
+        PoolFreeNode* curr = g_MainPool.head;
+        while (curr)
+        {
+            freeChunks++;
+            curr = curr->next;
+        }
+        *outUsed = (totalChunks - freeChunks) * g_MainPool.chunk_size;
+    }
+}
+
+#include <malloc.h>
+void Engine_GetHeapStats(size_t* outTotal, size_t* outUsed, size_t* outFree)
+{
+    struct mallinfo mi = mallinfo();
+    if (outUsed)
+        *outUsed = (size_t)mi.uordblks;
+    if (outTotal)
+        *outTotal = (size_t)MEM_LIMIT_MAX_EE_RAM;
+    if (outFree)
+        *outFree = (size_t)mi.fordblks;
 }

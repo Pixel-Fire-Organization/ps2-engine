@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "EngineGraphics.h"
 #include "EngineLevel.h"
@@ -38,4 +38,13 @@ public:
     virtual void Shutdown() = 0;
 
     virtual DrawStats GetLastStats() const = 0;
+    virtual Camera3D GetActiveCamera3D() const = 0;
+
+protected:
+    DrawLists m_drawLists;
+
+    virtual void RenderSkybox(const DrawLists& lists) = 0;
+    virtual void RenderPrimitives(DrawLists& lists) = 0;
+    virtual void RenderModels(const DrawLists& lists) = 0;
+    virtual void RenderUI(const DrawLists& lists) = 0;
 };

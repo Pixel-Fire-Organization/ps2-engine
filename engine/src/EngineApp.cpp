@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 // ---------------------------------------------------------------------------
 // Internal exit flag — set by EngineApp_OnExitRequested (called from Lua via
@@ -332,23 +333,44 @@ bool EngineStart(const char* resourceLocationToken, const char* mainScript)
 
 void EngineUpdate()
 {
-    float dt = GetFrameTime();
+    static double frameStartTime = 0;
+    static double scriptEndTime = 0;
+    static double renderEndTime = 0;
+
+    frameStartTime = (double)clock() / CLOCKS_PER_SEC;
+
+    Engine_Update();
+    float dt = Engine_GetDeltaTime();
 
     BeginDrawing();
     {
+        // 1. Scripting Phase
         Engine_Script_UpdateAll(dt);
         Engine_Script_EndCurrentMode();
+        scriptEndTime = (double)clock() / CLOCKS_PER_SEC;
 
+        // 2. Renderer Phase (CPU-side transforms)
         Renderer* r = Engine_GetRenderer();
         if (r && r->IsInitialized())
             r->Render();
 
         Engine_DrawDebugOverlay();
     }
-    EndDrawing();
 
-    Engine_IO_Update();
-    Engine_Resource_Update();
+    renderEndTime = (double)clock() / CLOCKS_PER_SEC;
+    EndDrawing(); // 3. GPU Sync Phase
+
+    double frameEndTime = (double)clock() / CLOCKS_PER_SEC;
+
+    // Detailed Stats Reporting
+    // CPU Logic = Start to ScriptEnd
+    // CPU Render = ScriptEnd to RenderEnd (Mega-batching)
+    // GS Wait = RenderEnd to Vblank/Finish
+    Engine_ReportFrameStats((float)(scriptEndTime - frameStartTime), // Logic
+                            (float)(renderEndTime - scriptEndTime), // Render
+                            (float)(frameEndTime - renderEndTime) // Wait
+    );
+
     Engine_PerfLogger_Tick();
     Engine_Script_FrameTick();
 }
