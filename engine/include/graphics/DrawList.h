@@ -33,10 +33,12 @@ struct UIDrawEntry
 
 class DrawLists
 {
-    PrimitiveDrawEntry primitives[GFX_MAX_DRAW_LIST_LENGTH];
+    PrimitiveDrawEntry untexturedPrims[GFX_MAX_DRAW_LIST_LENGTH];
+    PrimitiveDrawEntry texturedPrims[GFX_MAX_DRAW_LIST_LENGTH];
     ModelDrawEntry models[GFX_MAX_DRAW_LIST_LENGTH];
     UIDrawEntry uiItems[GFX_MAX_DRAW_LIST_LENGTH]{};
-    uint16_t primitiveCount = 0;
+    uint16_t untexturedCount = 0;
+    uint16_t texturedCount = 0;
     uint16_t modelCount = 0;
     uint16_t uiCount = 0;
     int32_t skyboxResourceId = -1;

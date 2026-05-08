@@ -20,18 +20,31 @@ static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
 
 static void CustomLog(int logLevel, const char* text, va_list args)
 {
-    // Basic formatting
+    char buffer[512];
     const char* prefix = "INFO: ";
-    if (logLevel == LOG_WARNING)
-        prefix = "WARN: ";
-    else if (logLevel == LOG_ERROR)
-        prefix = "ERR : ";
-    else if (logLevel == LOG_DEBUG)
-        prefix = "DBG : ";
 
-    printf("%s", prefix);
-    vprintf(text, args);
-    printf("\n");
+    if (logLevel == LOG_WARNING) prefix = "WARN: ";
+    else if (logLevel == LOG_ERROR)   prefix = "ERR : ";
+    else if (logLevel == LOG_DEBUG)   prefix = "DBG : ";
+
+    int offset = snprintf(buffer, sizeof(buffer), "%s", prefix);
+    if (offset < (int)sizeof(buffer))
+    {
+        vsnprintf(buffer + offset, sizeof(buffer) - offset, text, args);
+    }
+    buffer[sizeof(buffer) - 1] = '\0';
+
+    // Sanitize: replace non-ASCII / non-printable characters to prevent console hangs
+    for (int i = 0; buffer[i] != '\0'; i++)
+    {
+        unsigned char c = static_cast<unsigned char>(buffer[i]);
+        if (c < 32 || c > 126) 
+        {
+            buffer[i] = '?';
+        }
+    }
+
+    printf("%s\n", buffer);
 }
 
 void Engine_InitDebug()
