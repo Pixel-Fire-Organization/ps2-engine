@@ -3,11 +3,12 @@
 #include <raylib.h>
 #include "Engine.h"
 
+#include <cstdio>
+#include <cstring>
+#include <ctime>
 #include "EngineInput.h"
 #include "graphics/RaylibRenderer.h"
 #include "graphics/Renderer.h"
-#include <cstring>
-#include <cstdio>
 
 static void* s_UnifiedArenaBlock = nullptr;
 static Renderer* g_Renderer = nullptr;
@@ -20,7 +21,7 @@ bool Engine_Init(EngineConfig config)
     s_ResourceLocationToken = config.resourceLocationToken;
 
     // Calculate total arena size from centralized constants
-    constexpr size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE;
+    constexpr size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE + MEM_BLOCK_RENDERER_SIZE;
     constexpr size_t totalRequiredMemory = totalArenaSize + MEM_POOL_MAIN_SIZE;
 
     // Safety Threshold Check (PS2 Hardware Limit)
@@ -90,11 +91,51 @@ bool Engine_Is_GFX_Initialized() { return !g_Renderer ? false : g_Renderer->IsIn
 
 Renderer* Engine_GetRenderer() { return g_Renderer; }
 
+static float s_EngineDeltaTime = 0.0f;
+static float s_EngineFPS = 0.0f;
+static double s_EngineLastTime = 0.0;
+static double s_EngineStartTime = 0.0;
+static float s_LogicTime = 0.0f;
+static float s_RenderTime = 0.0f;
+static float s_WaitTime = 0.0f;
+
 void Engine_Update()
 {
+    double currentTime = (double)clock() / CLOCKS_PER_SEC;
+
+    // Initialise start/last time on first frame
+    if (s_EngineLastTime == 0.0)
+    {
+        s_EngineLastTime = currentTime;
+        s_EngineStartTime = currentTime;
+    }
+
+    s_EngineDeltaTime = (float)(currentTime - s_EngineLastTime);
+    s_EngineLastTime = currentTime;
+
+    if (s_EngineDeltaTime > 0)
+    {
+        s_EngineFPS = 1.0f / s_EngineDeltaTime;
+    }
+
     Engine_IO_Update();
     Engine_Resource_Update();
 }
+
+float Engine_GetDeltaTime() { return s_EngineDeltaTime; }
+float Engine_GetFPS() { return s_EngineFPS; }
+float Engine_GetTotalTime() { return (float)(((double)clock() / CLOCKS_PER_SEC) - s_EngineStartTime); }
+
+void Engine_ReportFrameStats(float logicTime, float renderTime, float waitTime)
+{
+    s_LogicTime = logicTime;
+    s_RenderTime = renderTime;
+    s_WaitTime = waitTime;
+}
+
+float Engine_GetLogicTime() { return s_LogicTime; }
+float Engine_GetRenderTime() { return s_RenderTime; }
+float Engine_GetWaitTime() { return s_WaitTime; }
 
 void Engine_Close()
 {
@@ -102,7 +143,8 @@ void Engine_Close()
     Engine_IO_Shutdown();
     Engine_Script_Close();
     // CloseAudioDevice();
-    g_Renderer->Shutdown();
+    if (g_Renderer)
+        g_Renderer->Shutdown();
     free(s_UnifiedArenaBlock);
     if (Engine_PoolGetBufferMain())
     {

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #ifdef USE_RAYLIB
     #include "DrawList.h"
@@ -7,9 +7,8 @@
 
 class RaylibRenderer final : public Renderer
 {
-    DrawLists m_drawLists;
-
     bool m_initialized = false;
+    float* m_megaBatch = nullptr;
 
 public:
     RaylibRenderer() = delete;
@@ -46,6 +45,13 @@ public:
     void Shutdown() override;
 
     DrawStats GetLastStats() const override;
+    Camera3D GetActiveCamera3D() const override;
+
+protected:
+    void RenderSkybox(const DrawLists& lists) override;
+    void RenderPrimitives(DrawLists& lists) override;
+    void RenderModels(const DrawLists& lists) override;
+    void RenderUI(const DrawLists& lists) override;
 };
 
 #else
