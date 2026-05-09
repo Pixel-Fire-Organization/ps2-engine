@@ -1,6 +1,7 @@
 #pragma once
 
 #ifdef USE_RAYLIB
+
     #include "DrawList.h"
     #include "EngineCore.h"
     #include "Renderer.h"
@@ -8,6 +9,9 @@
 class RaylibRenderer final : public Renderer
 {
     bool m_initialized = false;
+
+    // ARENA_RENDERER scratch buffer — holds separated geometry arrays
+    // for ps2gl glDrawArrays (stride must be 0, no interleaved data).
     float* m_megaBatch = nullptr;
 
 public:
@@ -53,7 +57,4 @@ protected:
     void RenderModels(const DrawLists& lists) override;
     void RenderUI(const DrawLists& lists) override;
 };
-
-#else
-    #error Use of Raylib is turned off
 #endif

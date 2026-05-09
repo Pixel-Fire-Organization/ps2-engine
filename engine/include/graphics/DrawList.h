@@ -48,6 +48,27 @@ class DrawLists
 
     DrawStats m_lastStats{};
 
+    // Separated vertex / normal / UV arrays extracted from MODEL_* at init.
+    // Pointers into the renderer arena buffer; persistent for display list lifetime.
+    float* m_cubeVerts = nullptr;
+    float* m_cubeNorms = nullptr;
+    float* m_cubeUVs = nullptr;
+    float* m_sphereVerts = nullptr;
+    float* m_sphereNorms = nullptr;
+    float* m_sphereUVs = nullptr;
+    float* m_cylVerts = nullptr;
+    float* m_cylNorms = nullptr;
+    float* m_cylUVs = nullptr;
+
+    // ps2gl display list handles — one per primitive type.
+    // Compiled once at startup; the DMA packet is cached on first glCallList.
+    unsigned int m_dlCube = 0;
+    unsigned int m_dlSphere = 0;
+    unsigned int m_dlCylinder = 0;
+
+    // Compile display lists from separated geometry arrays.
+    void CompilePrimitiveDLists(float* megaBatch);
+
 public:
     DrawLists();
 
@@ -55,6 +76,13 @@ public:
     DrawLists(DrawLists&&) = delete;
     DrawLists& operator=(const DrawLists&) = delete;
     DrawLists& operator=(DrawLists&&) = delete;
+
+    // Initialise OpenGL display lists using the given pre-allocated geometry buffer.
+    // Must be called once after the GL context is ready.
+    void Init(float* megaBatch);
+
+    // Free OpenGL display list resources.
+    void Shutdown();
 
     bool AddPrimitive(const PrimitiveDrawEntry& entry);
     bool AddModel(const ModelDrawEntry& entry);
@@ -65,6 +93,9 @@ public:
     void SetActiveCamera2D(const Camera2D& camera);
 
     void Reset(bool resetSkybox = false);
+
+    // Return the display list handle for a given primitive type.
+    unsigned int GetListForType(Primitive3D type) const;
 
     // Getters for Renderer
     const PrimitiveDrawEntry* GetUntexturedPrims() const { return untexturedPrims; }
