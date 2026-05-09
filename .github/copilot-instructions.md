@@ -74,6 +74,15 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 - `thirdparty/raylib`: Custom PS2 port (usually `work` branch). There is a script for injecting custom patches into raylib. Never modify raylib directly or commit the changes there.
 - `thirdparty/ps2gl`: Graphics abstraction layer. Depends on ps2stuff headers (`ps2s/`) at compile time.
 - `thirdparty/ps2stuff`: Low-level PS2 hardware utility library. Must be built and installed (`make install`) **before** ps2gl. Its install step copies `include/ps2s/` headers to `$(PS2SDK)/ports/include/ps2s/`. Never modify ps2stuff directly or commit the changes there.
+- `thirdparty/lua`: Lua 5.4 source tree built in-tree by CMake (`add_library(lua STATIC …)`). Never modify Lua source
+  files directly or commit changes there.
+    - **Patches applied by `scripts/patch_lua.sh`** (idempotent, run at CMake configure time inside the
+      `if(CMAKE_SYSTEM_NAME STREQUAL "Generic")` block in `thirdparty/CMakeLists.txt`):
+        - `LUA_PATCHED_32BITS` — sets `LUA_32BITS=1` in `luaconf.h`, mapping `lua_Number → float` and
+          `lua_Integer → int`. The PS2 EE COP1 FPU supports only single-precision IEEE 754; `double` is
+          software-emulated and 5–10× slower. This patch ensures all Lua arithmetic (including `math.sin`, `math.cos`,
+          loop counters) runs on the hardware FPU. CMake's compiler dependency scanning detects the header change and
+          recompiles `liblua.a` automatically — no manual cache deletion is needed.
 - **Link Order Matters**: Ensure `ps2stuff` is linked when using `ps2gl`.
 
 ## Documentation

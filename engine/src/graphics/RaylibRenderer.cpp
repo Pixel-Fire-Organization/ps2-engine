@@ -106,8 +106,23 @@ void RaylibRenderer::Render()
     RenderSkybox(m_drawLists);
 
     BeginMode3D(m_drawLists.GetCamera3D());
-    RenderPrimitives(m_drawLists);
-    RenderModels(m_drawLists);
+    {
+        rlDrawRenderBatchActive();
+        rlEnableBackfaceCulling();
+        rlSetCullFace(RL_CULL_FACE_FRONT);
+        rlEnableDepthTest();
+        rlEnableDepthMask();
+
+        RenderPrimitives(m_drawLists);
+        RenderModels(m_drawLists);
+
+        rlDisableTexture();
+        rlDrawRenderBatchActive();
+        rlDisableBackfaceCulling();
+        rlDisableDepthTest();
+        rlDisableDepthMask();
+        rlSetCullFace(RL_CULL_FACE_BACK);
+    }
     EndMode3D();
 
     BeginMode2D(m_drawLists.GetCamera2D());
@@ -161,13 +176,6 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
     if (uCount == 0 && tCount == 0)
         return;
 
-    // Flush any pending rlgl geometry before switching to direct gl calls.
-    rlDrawRenderBatchActive();
-    rlEnableBackfaceCulling();
-    rlSetCullFace(RL_CULL_FACE_FRONT);
-    rlEnableDepthTest();
-    rlEnableDepthMask();
-
     // -----------------------------------------------------------------------
     // Optimisation strategy (PS2-specific):
     //
@@ -187,13 +195,42 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
     // is active.
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // VIF1 DMA budget enforcement (PS2-specific):
+    //
+    // ps2gl's main frame DMA packet (CurPacket) is fixed at
+    // GFX_PGL_MAIN_PACKET_QWORDS = 65,000 qwords (kDmaPacketMaxQwordLength).
+    // Every glCallList writes ~GFX_QWORDS_PER_DRAWCALL qwords into it:
+    //   - AddVu1RendererContext: 77 qwords VU1 context (matrix + lights)
+    //   - DMA/VIF overhead headers: ~3 qwords
+    //   - DMA CALL tag to geometry packet: ~2 qwords
+    // When the packet overflows in a release build, mErrorIf is a no-op and
+    // the packet writes past its end, corrupting heap memory.  The result is
+    // "Vif1: Unknown VifCmd!" followed by TLB misses and a crash to pc=0x0.
+    // GFX_DRAW_CALL_BUDGET = 640 keeps total qword usage ≤ 52,480, leaving
+    // ~12,520 qwords for rlgl, DrawGrid, UI, and other rendering overhead.
+    // -----------------------------------------------------------------------
+    const uint16_t totalPrims = uCount + tCount;
+    if (totalPrims > GFX_DRAW_CALL_BUDGET)
+    {
+        Engine_LogError("RenderPrimitives: draw call budget exceeded (%u > %u). "
+                        "Excess primitives dropped to prevent VIF1 DMA overflow crash. "
+                        "Reduce primitive counts to stay within GFX_DRAW_CALL_BUDGET.",
+                        totalPrims, (uint16_t)GFX_DRAW_CALL_BUDGET);
+    }
+
+    // Distribute budget: fill untextured first, then textured with remainder.
+    const uint16_t uRender = (uCount <= GFX_DRAW_CALL_BUDGET) ? uCount : (uint16_t)GFX_DRAW_CALL_BUDGET;
+    const uint16_t tBudget = (uRender < GFX_DRAW_CALL_BUDGET) ? (uint16_t)(GFX_DRAW_CALL_BUDGET - uRender) : 0;
+    const uint16_t tRender = (tCount <= tBudget) ? tCount : tBudget;
+
     // 1. Untextured primitives
-    if (uCount > 0)
+    if (uRender > 0)
     {
         rlSetTexture(rlGetTextureIdDefault());
         const PrimitiveDrawEntry* prims = lists.GetUntexturedPrims();
 
-        for (uint16_t i = 0; i < uCount; ++i)
+        for (uint16_t i = 0; i < uRender; ++i)
         {
             const auto& entry = prims[i];
             const Vector3 pos = entry.transform.GetPosition();
@@ -217,12 +254,12 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
     }
 
     // 2. Textured primitives (batched by texture to minimise state changes)
-    if (tCount > 0)
+    if (tRender > 0)
     {
         int32_t lastTexId = -2;
         const PrimitiveDrawEntry* prims = lists.GetTexturedPrims();
 
-        for (uint16_t i = 0; i < tCount; ++i)
+        for (uint16_t i = 0; i < tRender; ++i)
         {
             const auto& entry = prims[i];
 
@@ -232,7 +269,10 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
                 if (tex && tex->id != 0)
                     rlEnableTexture(tex->id);
                 else
+                {
+                    Engine_LogError("Tried to access texture ID (%i), but it wasn't initialized!", entry.textureId);
                     rlSetTexture(rlGetTextureIdDefault());
+                }
                 lastTexId = entry.textureId;
             }
 
@@ -256,15 +296,8 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
         }
     }
 
-    rlDisableTexture();
-    rlDrawRenderBatchActive();
-    rlDisableBackfaceCulling();
-    rlDisableDepthTest();
-    rlDisableDepthMask();
-    rlSetCullFace(RL_CULL_FACE_BACK);
-
     DrawStats stats{};
-    stats.primitiveCount = uCount + tCount;
+    stats.primitiveCount = uRender + tRender;
     lists.SetLastStats(stats);
 }
 

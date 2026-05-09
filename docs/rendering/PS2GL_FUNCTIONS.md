@@ -10,6 +10,47 @@ the implemented tables and listed in the **[Not Implemented](#not-implemented)**
 
 ---
 
+## ⚠️ VIF1 DMA Frame Packet Budget (Critical)
+
+**Hard limit: 640 primitives total per frame** (`GFX_DRAW_CALL_BUDGET` in `Constants.GFX.h`).
+
+### Why
+
+ps2gl allocates a fixed **65,000-qword** main DMA frame packet (`CGLContext::CurPacket`,
+`kDmaPacketMaxQwordLength`). Every `glCallList` in the engine render loop triggers a full
+**VU1 renderer context re-upload** because both `glColor4f` and `glTranslatef` set the
+`RendererContextChanged` flags before each call:
+
+| Write                                                                                  | Source                         |  Qwords |
+|:---------------------------------------------------------------------------------------|:-------------------------------|--------:|
+| `AddVu1RendererContext` — 77-qword VU1 context (matrices, 8 lights, material, GIF tag) | `CLinearRenderer::InitContext` |      77 |
+| DMA CNT tag + VIF codes (STCYCL, FLUSH, UNPACK header, MSCAL, FLUSHE, BASE, OFFSET)    | `InitContext`                  |      ~3 |
+| DMA CALL tag to pre-compiled geometry packet + Pad128                                  | `CDrawArraysCmd::Play`         |      ~2 |
+| **Total per `glCallList`**                                                             |                                | **~82** |
+
+Safe maximum: `floor(65,000 / 82) = 792`. Budget constant `640` leaves ~16 % headroom for
+raylib's rlgl flush, `DrawGrid`, UI, and text rendering.
+
+### In release builds — silent overflow, always fatal
+
+`mErrorIf` (the overflow check inside `CDmaPacket::operator+=`) is **compiled out** when
+`_DEBUG` is not defined. Overflow silently advances `pNext` past the end of the 1 MB buffer,
+writing into adjacent heap memory. The first victim is usually a live C++ vtable or a ps2gl
+state bitfield. Within a few fields the VIF1 unit receives a corrupted byte as a command
+(e.g. `0x43`) → `Vif1: Unknown VifCmd! [43]` → subsequent TLB misses at garbage
+addresses → EE jumps to `pc=0x0` → unrecoverable crash.
+
+### The fix in the engine
+
+`RenderPrimitives` in `RaylibRenderer.cpp` enforces the budget **before** the draw loop:
+
+- If `uCount + tCount > GFX_DRAW_CALL_BUDGET`, excess primitives are **dropped** and
+  `Engine_LogError` is called (loud failure, never a silent corrupt).
+- `STRESSDRAW.LUA` defaults (`cube_count=330, sphere_count=200, cylinder_count=100`)
+  total 630 — safely within budget.
+
+---
+
 ## Table of Contents
 
 - [1. Library Initialization & Lifecycle](#1-library-initialization--lifecycle)

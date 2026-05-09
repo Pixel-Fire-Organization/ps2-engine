@@ -29,6 +29,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     set(_PS2SDK "${_PS2DEV}/ps2sdk")
     set(_PS2_PATH "${_PS2DEV}/ee/bin:${_PS2DEV}/iop/bin:${_PS2DEV}/dvp/bin:$ENV{PATH}")
 
+    # Patch luaconf.h at configure time (idempotent — safe to run on every configure).
+    # Sets LUA_32BITS=1 so lua_Number→float and lua_Integer→int, mapping all Lua
+    # arithmetic to the PS2 EE COP1 hardware FPU (single-precision only; double is
+    # software-emulated and ~5-10x slower).  CMake dependency tracking automatically
+    # detects the header change and recompiles liblua.a without manual intervention.
+    execute_process(
+            COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/patch_lua.sh"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            RESULT_VARIABLE _LUA_PATCH_RESULT
+    )
+    if (NOT _LUA_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "patch_lua.sh failed")
+    endif ()
+
     # Patch raylib at configure time (idempotent — safe to run on every configure)
     execute_process(
         COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/patch_raylib.sh"

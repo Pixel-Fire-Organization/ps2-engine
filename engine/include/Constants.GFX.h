@@ -37,6 +37,27 @@
 
 #define GFX_MAX_DRAW_LIST_LENGTH 1024
 
+// ---------------------------------------------------------------------------
+// ps2gl VIF1 DMA packet budget
+// ---------------------------------------------------------------------------
+// ps2gl allocates a fixed-size main DMA frame packet:
+//   CGLContext::CurPacket → kDmaPacketMaxQwordLength = 65000 qwords (1 MB).
+// Each glCallList that changes the modelview matrix or color (which happens
+// every primitive because of glTranslatef + glColor4f) triggers a full
+// VU1 renderer context upload via AddVu1RendererContext():
+//   • 77 qwords VU1 context (matrices, lights, material, GIF tag)
+//   • ~3 qwords DMA/VIF header overhead (CNT, STCYCL, FLUSH, MSCAL…)
+//   • ~2 qwords DMA CALL tag to the pre-compiled geometry packet
+//   Total: ~82 qwords per draw call written into CurPacket.
+//
+// Theoretical max: floor(65000 / 82) = 792 draws/frame.
+// GFX_DRAW_CALL_BUDGET leaves ~16 % headroom for rlgl, DrawGrid, UI, text.
+// Exceeding it causes CurPacket to silently overflow in release builds
+// (mErrorIf is a no-op), corrupting heap → bad VifCmd → TLB miss → crash.
+#define GFX_PGL_MAIN_PACKET_QWORDS 65000 // kDmaPacketMaxQwordLength (ps2gl)
+#define GFX_QWORDS_PER_DRAWCALL 82 // measured overhead per glCallList
+#define GFX_DRAW_CALL_BUDGET 640 // safe per-frame primitive limit
+
 #define PRIMITIVE_CUBE_VERTEX_STRIDE 8
 #define PRIMITIVE_VERTEX_STRIDE 8
 #define PRIMITIVE_CUBE_VERTEX_COUNT 36
