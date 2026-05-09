@@ -70,14 +70,21 @@ local CAM_SPEED = 1.8  -- radians per second
 local BG_COLOR = { 20, 20, 20, 255 }
 
 -- ---------------------------------------------------------------------------
+-- Upvalue locals — look up globals ONCE at module load time.
+-- Saves two hash-table traversals per call in the hot OnUpdate loop.
+-- ---------------------------------------------------------------------------
+local sin = math.sin
+local cos = math.cos
+
+-- ---------------------------------------------------------------------------
 -- OnUpdate — called every frame inside BeginDrawing/EndDrawing
 -- ---------------------------------------------------------------------------
 function OnUpdate(dt)
-    local lj = input.get_joy_status(0, "left")
-    if lj then
-        cubeX = cubeX + lj.x * SPEED * dt
-        cubeZ = cubeZ + lj.y * SPEED * dt
-    end
+    -- input.get_joy_axis returns x, y as two numbers directly (no table created).
+    -- Use this instead of get_joy_status to avoid a per-frame Lua heap allocation.
+    local lj_x, lj_y = input.get_joy_axis(0, "left")
+    cubeX = cubeX + lj_x * SPEED * dt
+    cubeZ = cubeZ + lj_y * SPEED * dt
 
     if input.is_pad_pressed(0, "x")   then cubeY = cubeY + SPEED * dt end
     if input.is_pad_pressed(0, "cir") then cubeY = cubeY - SPEED * dt end
@@ -93,21 +100,19 @@ function OnUpdate(dt)
         engine.exit()
     end
 
-    local rj = input.get_joy_status(0, "right")
-    if rj then
-        camYaw   = camYaw   + rj.x * CAM_SPEED * dt
-        camPitch = camPitch + rj.y * CAM_SPEED * dt
-    end
+    local rj_x, rj_y = input.get_joy_axis(0, "right")
+    camYaw   = camYaw   + rj_x * CAM_SPEED * dt
+    camPitch = camPitch + rj_y * CAM_SPEED * dt
 
     -- Clamp pitch so the camera never flips over
     if camPitch > 1.45 then camPitch = 1.45 end
     if camPitch < 0.05 then camPitch = 0.05 end
 
     -- Compute orbit position (spherical → cartesian)
-    local cosPitch = math.cos(camPitch)
-    local camX = cubeX + CAM_DIST * cosPitch * math.sin(camYaw)
-    local camPosY = cubeY + CAM_DIST * math.sin(camPitch)
-    local camZ = cubeZ + CAM_DIST * cosPitch * math.cos(camYaw)
+    local cosPitch = cos(camPitch)
+    local camX = cubeX + CAM_DIST * cosPitch * sin(camYaw)
+    local camPosY = cubeY + CAM_DIST * sin(camPitch)
+    local camZ = cubeZ + CAM_DIST * cosPitch * cos(camYaw)
 
     -- Push updated position/target into the camera slot before BeginMode3D
     graphics.update_camera_3d(cam3d, camX, camPosY, camZ, 0, 0, 0)
@@ -139,4 +144,3 @@ function OnUpdate(dt)
 end
 
 engine.log("MAIN.LUA ready")
-

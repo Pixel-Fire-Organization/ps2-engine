@@ -3,6 +3,7 @@
 #include "EngineInput.h"
 #include <malloc.h>
 #include <cstring>
+#include <cmath>
 #include "EngineApp.h"
 #include "EngineMemory.h"
 #include "EngineResource.h"
@@ -62,6 +63,8 @@ static void RegisterIOBindings(lua_State* L);
 static void RegisterResourceBindings(lua_State* L);
 
 static void RegisterLevelBindings(lua_State* L);
+
+static void RegisterMathExtensions(lua_State* L);
 
 // ---------------------------------------------------------------------------
 // Minimal first-fit free-list heap — runs entirely within a pre-allocated
@@ -233,11 +236,18 @@ bool Engine_Script_Init()
             RegisterResourceBindings(s_ScriptUnits[i].L);
             RegisterLevelBindings(s_ScriptUnits[i].L);
 
-            // Hyper-aggressive GC configuration for small 512KB heaps.
-            // SETPAUSE 100: Start a new cycle as soon as any memory is freed.
-            // SETSTEPMUL 500: Run the GC much faster than the allocator.
-            lua_gc(s_ScriptUnits[i].L, LUA_GCSETPAUSE, 100);
-            lua_gc(s_ScriptUnits[i].L, LUA_GCSETSTEPMUL, 500);
+            // Inject performance extensions into the standard math table.
+            RegisterMathExtensions(s_ScriptUnits[i].L);
+
+            // Switch to generational GC (Lua 5.4).
+            // Generational mode is far better for a game loop:
+            //   - Minor cycle: only scans short-lived (young) objects — very cheap.
+            //   - Major cycle: full mark-sweep, triggered when old gen grows significantly.
+            // Scripts that allocate nothing per frame (e.g. STRESSDRAW) pay zero GC cost.
+            // Scripts that allocate a few small tables per frame (e.g. MAIN) pay only cheap
+            // minor cycles. minormul=20: minor GC when young-gen memory grows 20%;
+            // majormul=100: major GC when old-gen doubles.
+            lua_gc(s_ScriptUnits[i].L, LUA_GCGEN, 20, 100);
         }
         else
         {
@@ -353,9 +363,8 @@ void Engine_Script_UpdateAll(float dt)
             {
                 lua_pop(L, 1);
             }
-
-            // Force a more aggressive GC step every frame to keep the 512KB heaps clean.
-            lua_gc(L, LUA_GCSTEP, 100);
+            // Generational GC handles reclamation automatically (minor cycles are
+            // triggered by allocations, not by an explicit per-frame cost here).
         }
     }
 }
@@ -589,7 +598,7 @@ static int Lua_Engine_Log(lua_State* L)
 
 static int Lua_Engine_GetTime(lua_State* L)
 {
-    lua_pushnumber(L, GetTime());
+    lua_pushnumber(L, static_cast<lua_Number>(GetTime()));
     return 1;
 }
 
@@ -927,6 +936,36 @@ static void Lua_PushVector2(lua_State* L, Vector2 v)
     lua_setfield(L, -2, "m15");
 }
 
+// ---------------------------------------------------------------------------
+// math.sincos — PS2 performance extension
+// ---------------------------------------------------------------------------
+
+// math.sincos(angle) → sin_val, cos_val
+// Computes both sin and cos of the same angle in a single C binding call.
+// Saves one Lua→C FFI crossing vs. calling math.sin + math.cos separately, and
+// with LUA_32BITS=1 the underlying sinf/cosf hits the PS2 hardware FPU path via
+// ps2sdk's libm (single-precision, hardware-accelerated on the EE COP1 unit).
+static int Lua_Math_SinCos(lua_State* L)
+{
+    float angle = static_cast<float>(luaL_checknumber(L, 1));
+    lua_pushnumber(L, static_cast<lua_Number>(sinf(angle)));
+    lua_pushnumber(L, static_cast<lua_Number>(cosf(angle)));
+    return 2;
+}
+
+// Injects math.sincos into the existing math table.
+// Must be called AFTER luaL_requiref(L, "math", luaopen_math, 1).
+static void RegisterMathExtensions(lua_State* L)
+{
+    lua_getglobal(L, "math");
+    if (lua_istable(L, -1))
+    {
+        lua_pushcfunction(L, Lua_Math_SinCos);
+        lua_setfield(L, -2, "sincos");
+    }
+    lua_pop(L, 1);
+}
+
 // Input
 /// input.is_pad_pressed(port, btn)
 static int Lua_Input_IsPadPressed(lua_State* L)
@@ -1013,6 +1052,42 @@ static int Lua_Input_GetJoyStatus(lua_State* L)
     return 1;
 }
 
+// input.get_joy_axis(port, joystick) -> x, y
+// Like get_joy_status but returns two numbers instead of a table.
+// Avoids a per-frame Lua heap allocation (lua_createtable) in the hot update loop.
+// joystick: "left" or "right".  Returns 0, 0 on any error.
+static int Lua_Input_GetJoyAxis(lua_State* L)
+{
+    const lua_Number port = luaL_checknumber(L, 1);
+    const char* joystick = luaL_checkstring(L, 2);
+    GamePadJoystick joy = GamePadJoystick::UnknownJoystick;
+
+    if (port < 0 || port >= MAX_GAME_PAD_PORTS)
+    {
+        Engine_LogError("[Lua] input.get_joy_axis: invalid port specified '%d'", (int)port);
+        lua_pushnumber(L, 0);
+        lua_pushnumber(L, 0);
+        return 2;
+    }
+
+    if (strcmp(joystick, "left") == 0)
+        joy = GamePadJoystick::LeftJoystick;
+    else if (strcmp(joystick, "right") == 0)
+        joy = GamePadJoystick::RightJoystick;
+    else
+    {
+        Engine_LogError("[Lua] input.get_joy_axis: unknown joystick '%s' (expected 'left' or 'right')", joystick);
+        lua_pushnumber(L, 0);
+        lua_pushnumber(L, 0);
+        return 2;
+    }
+
+    const auto vec = GetGamePadAxis(static_cast<uint8_t>(port), joy);
+    lua_pushnumber(L, static_cast<lua_Number>(vec.x));
+    lua_pushnumber(L, static_cast<lua_Number>(vec.y));
+    return 2;
+}
+
 static void RegisterCoreBindings(lua_State* L)
 {
     lua_newtable(L);
@@ -1068,6 +1143,8 @@ static void RegisterInputBindings(lua_State* L)
     lua_setfield(L, -2, "is_pad_pressed");
     lua_pushcfunction(L, Lua_Input_GetJoyStatus);
     lua_setfield(L, -2, "get_joy_status");
+    lua_pushcfunction(L, Lua_Input_GetJoyAxis);
+    lua_setfield(L, -2, "get_joy_axis");
     lua_setglobal(L, "input");
 }
 
