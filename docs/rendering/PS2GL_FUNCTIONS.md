@@ -10,16 +10,23 @@ the implemented tables and listed in the **[Not Implemented](#not-implemented)**
 
 ---
 
-## ⚠️ VIF1 DMA Frame Packet Budget (Critical)
+## ⚠️ VIF1 DMA Frame Packet Budget (Critical — Shared by All Render Paths)
 
-**Hard limit: 640 primitives total per frame** (`GFX_DRAW_CALL_BUDGET` in `Constants.GFX.h`).
+**Hard combined limit: 640 draw calls total per frame** (`GFX_DRAW_CALL_BUDGET` in `Constants.GFX.h`).
 
 ### Why
 
 ps2gl allocates a fixed **65,000-qword** main DMA frame packet (`CGLContext::CurPacket`,
-`kDmaPacketMaxQwordLength`). Every `glCallList` in the engine render loop triggers a full
-**VU1 renderer context re-upload** because both `glColor4f` and `glTranslatef` set the
-`RendererContextChanged` flags before each call:
+`kDmaPacketMaxQwordLength`). `CGLContext::GetVif1Packet()` always returns `*Vif1Packet` which is
+initialized to `CurPacket` — so **every rendering path shares this packet**:
+
+- `RenderPrimitives` — one `glCallList` per primitive
+- `RenderModels` — one `glCallList` per model mesh
+- `RenderSkybox` — one rlgl cube draw via `ImmGeomManager`
+- UI / text / `DrawGrid` — rlgl batch flushes
+
+Every `glCallList` that changes any `RendererContextChanged` flag (matrix, color, texture) writes a full
+**VU1 renderer context re-upload** into `CurPacket`:
 
 | Write                                                                                  | Source                         |  Qwords |
 |:---------------------------------------------------------------------------------------|:-------------------------------|--------:|
@@ -29,7 +36,13 @@ ps2gl allocates a fixed **65,000-qword** main DMA frame packet (`CGLContext::Cur
 | **Total per `glCallList`**                                                             |                                | **~82** |
 
 Safe maximum: `floor(65,000 / 82) = 792`. Budget constant `640` leaves ~16 % headroom for
-raylib's rlgl flush, `DrawGrid`, UI, and text rendering.
+the skybox, rlgl draws, `DrawGrid`, UI, and text rendering.
+
+**Multi-mesh model optimisation**: `RenderModels` calls `glColor4f` once per model (not per mesh)
+and does NOT reset color between meshes of the same model. After the first mesh of a model clears
+the `CurMaterial` dirty flag, subsequent meshes of the **same model instance** only need to update
+the texture (GS context) and re-emit the DMA CALL tag (~3–5 qwords instead of ~82).
+This means a 4-mesh model costs roughly `82 + 3 + 3 + 3 = 91 qwords`, not `4 × 82 = 328 qwords`.
 
 ### In release builds — silent overflow, always fatal
 
@@ -42,12 +55,22 @@ addresses → EE jumps to `pc=0x0` → unrecoverable crash.
 
 ### The fix in the engine
 
-`RenderPrimitives` in `RaylibRenderer.cpp` enforces the budget **before** the draw loop:
+`RenderPrimitives` and `RenderModels` in `RaylibRenderer.cpp` share the counter
+`m_frameDrawCallsUsed` (reset at the start of `Render()`) and check it against
+`GFX_DRAW_CALL_BUDGET` before every `glCallList`:
 
-- If `uCount + tCount > GFX_DRAW_CALL_BUDGET`, excess primitives are **dropped** and
-  `Engine_LogError` is called (loud failure, never a silent corrupt).
+- If the combined budget is exhausted, excess primitives/models are **dropped** with
+  `Engine_LogError` (loud failure, never a silent corrupt).
 - `STRESSDRAW.LUA` defaults (`cube_count=330, sphere_count=200, cylinder_count=100`)
   total 630 — safely within budget.
+
+### Indexed model meshes (NOT supported)
+
+ps2gl's `glDrawElements()` is a hard `mError()`. `pglDrawIndexedArrays()` only handles
+unsigned-byte indices (< 256 vertices per mesh). Model meshes with `mesh.indices != nullptr`
+are **skipped** by `RenderModels`, logged with `Engine_LogError`, and rendered as invisible.  
+**Workaround**: export models with vertex sharing disabled (separate triangles), or generate
+meshes programmatically with Raylib's `GenMesh*` functions (these produce unindexed geometry).
 
 ---
 
