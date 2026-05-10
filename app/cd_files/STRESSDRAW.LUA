@@ -15,7 +15,7 @@ local CFG = {
     -- Exceeding it triggers VIF1 DMA overflow → "Unknown VifCmd" → crash.
     cube_count     = 330,
     sphere_count   = 200,
-    cylinder_count = 100,   -- total = 630, safely within the 640 budget
+    cylinder_count = 100,
 
     -- Spread: keep objects close enough to stay inside the camera frustum.
     -- Camera is at (0,10,20), 45° FOV → half-width ≈ 8.3 units at z=0.

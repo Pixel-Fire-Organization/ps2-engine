@@ -35,8 +35,10 @@ Every `glCallList` that changes any `RendererContextChanged` flag (matrix, color
 | DMA CALL tag to pre-compiled geometry packet + Pad128                                  | `CDrawArraysCmd::Play`         |      ~2 |
 | **Total per `glCallList`**                                                             |                                | **~82** |
 
-Safe maximum: `floor(65,000 / 82) = 792`. Budget constant `640` leaves ~16 % headroom for
-the skybox, rlgl draws, `DrawGrid`, UI, and text rendering.
+Safe maximum: `floor(65,000 / 82) = 792`. Fixed overhead from non-draw-call paths
+(skybox `rlBegin/rlEnd` ~87 qwords, rlgl/text/UI ~200 qwords, setup ~50 qwords) totals
+~400 qwords, leaving `floor(64,600 / 82) = 787` usable draw-call slots.
+Budget constant `720` keeps a 45-slot (~3,720 qword) safety margin.
 
 **Multi-mesh model optimisation**: `RenderModels` calls `glColor4f` once per model (not per mesh)
 and does NOT reset color between meshes of the same model. After the first mesh of a model clears
@@ -61,8 +63,8 @@ addresses → EE jumps to `pc=0x0` → unrecoverable crash.
 
 - If the combined budget is exhausted, excess primitives/models are **dropped** with
   `Engine_LogError` (loud failure, never a silent corrupt).
-- `STRESSDRAW.LUA` defaults (`cube_count=330, sphere_count=200, cylinder_count=100`)
-  total 630 — safely within budget.
+- `STRESSDRAW.LUA` defaults (`cube_count=400, sphere_count=220, cylinder_count=100`)
+  total 720 — exactly at `GFX_DRAW_CALL_BUDGET`, exercising the full budget.
 
 ### Indexed model meshes (NOT supported)
 

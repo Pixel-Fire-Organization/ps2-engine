@@ -104,7 +104,6 @@ void RaylibRenderer::ClearDrawLists() { m_drawLists.Reset(false); }
 
 void RaylibRenderer::Render()
 {
-    // Reset shared per-frame draw-call budget counter and stat accumulators.
     m_frameDrawCallsUsed = 0;
     m_framePrimCount = 0;
     m_frameModelMeshCount = 0;
@@ -131,7 +130,6 @@ void RaylibRenderer::Render()
     }
     EndMode3D();
 
-    // Commit combined render stats now that all 3D sub-functions are done.
     DrawStats stats{};
     stats.primitiveCount = m_framePrimCount;
     stats.modelCount = m_frameModelMeshCount;
@@ -188,32 +186,6 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
     if (uCount == 0 && tCount == 0)
         return;
 
-    // -----------------------------------------------------------------------
-    // Optimisation strategy (PS2-specific):
-    //
-    // Instead of CPU-transforming all vertices into world space and calling
-    // rlBegin/rlEnd for each primitive, we:
-    //   1. Push the per-primitive TRS onto ps2gl's modelview matrix stack.
-    //   2. Call glCallList — the VU1 handles the transform in hardware.
-    //   3. Pop the matrix to restore the camera view.
-    //
-    // Each display list was compiled at startup with glDrawArrays pointing at
-    // the stride-0 vertex/normal/UV arrays extracted from MODEL_*.  On the
-    // first glCallList the VIF1 DMA packet is built and cached; subsequent
-    // calls just DMA the cached packet, costing near-zero EE cycles.
-    //
-    // Per-primitive colour is forwarded through glColor4f, which sets
-    // ps2gl's current colour used as vertex colour when no GL_COLOR_ARRAY
-    // is active.
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    // VIF1 DMA shared budget (PS2-specific):
-    //
-    // m_frameDrawCallsUsed is shared with RenderModels — both functions check
-    // it against GFX_DRAW_CALL_BUDGET before every glCallList call.
-    // See Constants.GFX.h for the full budget analysis.
-    // -----------------------------------------------------------------------
     const uint16_t totalPrims = uCount + tCount;
     const uint16_t budgetLeft = (GFX_DRAW_CALL_BUDGET > m_frameDrawCallsUsed) ? static_cast<uint16_t>(GFX_DRAW_CALL_BUDGET - m_frameDrawCallsUsed) : 0u;
 
@@ -224,12 +196,10 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
                         m_frameDrawCallsUsed, totalPrims, (uint16_t)GFX_DRAW_CALL_BUDGET);
     }
 
-    // Distribute available budget: fill untextured first, then textured with remainder.
     const uint16_t uRender = (uCount <= budgetLeft) ? uCount : budgetLeft;
     const uint16_t tBudget = (uRender < budgetLeft) ? static_cast<uint16_t>(budgetLeft - uRender) : 0u;
     const uint16_t tRender = (tCount <= tBudget) ? tCount : tBudget;
 
-    // 1. Untextured primitives
     if (uRender > 0)
     {
         rlSetTexture(rlGetTextureIdDefault());
@@ -259,7 +229,6 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
         }
     }
 
-    // 2. Textured primitives (batched by texture to minimise state changes)
     if (tRender > 0)
     {
         int32_t lastTexId = -2;
@@ -304,7 +273,6 @@ void RaylibRenderer::RenderPrimitives(DrawLists& lists)
     }
 
     m_framePrimCount = uRender + tRender;
-    // Note: DrawStats are set by Render() after all sub-functions finish.
 }
 
 void RaylibRenderer::RenderModels(const DrawLists& lists)
@@ -312,28 +280,6 @@ void RaylibRenderer::RenderModels(const DrawLists& lists)
     const uint16_t mCount = lists.GetModelCount();
     if (mCount == 0)
         return;
-
-    // -----------------------------------------------------------------------
-    // Model rendering strategy (PS2-specific):
-    //
-    // Models share the same ps2gl display list caching strategy as primitives.
-    // On the first draw of a model, a DList is compiled for each unindexed
-    // mesh (mesh.indices == nullptr).  Raylib's Mesh struct already stores
-    // vertices / normals / texcoords as stride-0 float arrays, so they can be
-    // passed directly to glVertexPointer / glNormalPointer / glTexCoordPointer
-    // without any data copy.
-    //
-    // Per-model transform is pushed once (one glPushMatrix + glTranslatef +
-    // glScalef block), then all meshes of that model are drawn with glCallList.
-    // glColor4f is called once per model (not per mesh), so from the second
-    // mesh onward CurMaterial is NOT re-dirtied → ps2gl skips the material
-    // section of the VU1 context re-upload, saving ~10 qwords per extra mesh.
-    //
-    // Indexed mesh (mesh.indices != nullptr) support is NOT available:
-    //   • glDrawElements() is a hard mError() in ps2gl.
-    //   • pglDrawIndexedArrays() only handles unsigned-byte indices (< 256).
-    // Such meshes are skipped with an error log on first encounter.
-    // -----------------------------------------------------------------------
 
     const ModelDrawEntry* entries = lists.GetModels();
     uint16_t modelMeshDraws = 0;
@@ -381,21 +327,18 @@ void RaylibRenderer::RenderModels(const DrawLists& lists)
             glRotatef(rot.z, 0.f, 0.f, 1.f);
         glScalef(scl.x, scl.y, scl.z);
 
-        // Set color once per model — NOT between meshes.  Calling glColor4f
-        // sets the CurMaterial dirty flag which triggers a full VU1 context
-        // re-upload (~82 qwords).  If we keep it constant across meshes,
-        // only the first mesh of this model pays the full context cost.
+        // glColor4f once per model — NOT per mesh: repeated calls set CurMaterial dirty,
+        // triggering a full VU1 context re-upload for every subsequent mesh.
         glColor4f(1.f, 1.f, 1.f, 1.f);
 
         for (uint8_t m = 0; m < dl->meshCount; ++m)
         {
             if (dl->handles[m] == 0)
-                continue; // unsupported / indexed mesh, already logged at compile
+                continue;
 
             if (m_frameDrawCallsUsed >= GFX_DRAW_CALL_BUDGET)
                 break;
 
-            // Bind diffuse texture for this mesh.
             const int matIdx = (model->meshMaterial) ? model->meshMaterial[m] : 0;
             if (model->materials)
             {
@@ -420,20 +363,14 @@ void RaylibRenderer::RenderModels(const DrawLists& lists)
 
 void RaylibRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }
 
-// ---------------------------------------------------------------------------
-// Model DList cache helpers
-// ---------------------------------------------------------------------------
-
 RaylibRenderer::ModelDListEntry* RaylibRenderer::FindOrCompileModelDLists(const Model* model, int32_t resourceId)
 {
-    // Fast path: find existing cache entry.
     for (uint8_t i = 0; i < m_modelDListCacheCount; ++i)
     {
         if (m_modelDListCache[i].resourceId == resourceId)
             return &m_modelDListCache[i];
     }
 
-    // Cache miss — compile a new entry.
     if (m_modelDListCacheCount >= GFX_MAX_CACHED_MODELS)
     {
         Engine_LogError("FindOrCompileModelDLists: model DList cache full (%d entries). "
@@ -456,8 +393,7 @@ RaylibRenderer::ModelDListEntry* RaylibRenderer::FindOrCompileModelDLists(const 
 
         if (mesh.indices != nullptr)
         {
-            // glDrawElements is a hard mError() in ps2gl.
-            // pglDrawIndexedArrays only supports unsigned-byte indices (< 256 verts).
+            // glDrawElements is mError() in ps2gl; pglDrawIndexedArrays only handles byte indices (< 256 verts).
             Engine_LogError("FindOrCompileModelDLists: resource %d mesh %d has indices — "
                             "glDrawElements is not supported on PS2 (ps2gl limitation). "
                             "Export the model without vertex sharing or use GenMesh* functions.",
@@ -475,10 +411,6 @@ RaylibRenderer::ModelDListEntry* RaylibRenderer::FindOrCompileModelDLists(const 
             continue;
         }
 
-        // Raylib's Mesh already stores vertices / normals / texcoords as
-        // stride-0 float arrays — pass them directly (no data copy needed).
-        // glVertexPointer / glNormalPointer calls are immediate state; only
-        // the glDrawArrays call is recorded into the DList.
         glVertexPointer(3, GL_FLOAT, 0, mesh.vertices);
 
         if (mesh.normals)
