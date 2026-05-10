@@ -5,8 +5,8 @@
 
 struct DrawStats
 {
-    uint16_t primitiveCount; // primitives submitted last frame
-    uint16_t modelCount; // models submitted last frame
+    uint16_t primitiveCount; // primitives rendered last frame
+    uint16_t modelCount; // model mesh draw calls last frame (one per unindexed mesh)
     uint16_t uniqueTextures; // unique texture IDs bound last frame (0 = untextured batch counts as 1 if any)
 };
 
