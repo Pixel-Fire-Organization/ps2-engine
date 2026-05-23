@@ -24,5 +24,8 @@ case "${REGION^^}" in
 		;;
 esac
 
+echo "=== Initialising git submodules..."
+git submodule update --init --recursive || exit 1
+
 echo "=== Building engine & app ($BUILD_TYPE, DEBUG=$DEBUG_FLAG, REGION=$REGION_FLAG)"
 cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -DDEBUG="$DEBUG_FLAG" -DREGION="$REGION_FLAG" -B build && cmake --build build --target generate-iso || exit 1

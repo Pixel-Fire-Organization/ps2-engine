@@ -1,5 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdlib>
+#include <cstdio>
 #include "EngineApp.h"
 
 int main(int argv, char** argc)

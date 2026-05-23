@@ -1,4 +1,4 @@
-add_executable(${APP_EXE_NAME} EXCLUDE_FROM_ALL src/main.c)
+add_executable(${APP_EXE_NAME} EXCLUDE_FROM_ALL src/main.cpp)
 set_target_properties(${APP_EXE_NAME} PROPERTIES
     LINKER_LANGUAGE CXX
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/exec"
