@@ -53,18 +53,27 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         message(FATAL_ERROR "patch_raylib.sh failed")
     endif()
 
+    # Stamp file lives inside the CMake build tree so `cmake --build --target clean`
+    # removes it and forces a rebuild next time.  Using a stamp (rather than the
+    # installed .a path) means CMake emits exactly ONE rule for ps2stuff regardless
+    # of how many other targets depend on it — eliminating the parallel-build race
+    # where two make jobs both try to `cp` the .a and one fails with "File exists".
+    set(_PS2STUFF_STAMP "${CMAKE_BINARY_DIR}/ps2stuff.installed.stamp")
+
     # Build and install ps2stuff first; its install target copies ps2s/ headers to
     # $(PS2SDK)/ports/include/ps2s/ which ps2gl requires at compile time.
     add_custom_command(
-        OUTPUT "${_PS2SDK}/ports/lib/libps2stuff.a"
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} all
+        OUTPUT "${_PS2STUFF_STAMP}"
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM}
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${_PS2SDK}/ports/lib/libps2stuff.a"
         COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} install
+        COMMAND ${CMAKE_COMMAND} -E touch "${_PS2STUFF_STAMP}"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2stuff"
         COMMENT "Building and installing ps2stuff..."
         VERBATIM
     )
     add_custom_target(ps2stuff_build
-        DEPENDS "${_PS2SDK}/ports/lib/libps2stuff.a"
+        DEPENDS "${_PS2STUFF_STAMP}"
     )
 
     # Build ps2gl after ps2stuff has installed ps2s/ headers into $(PS2SDK)/ports/include.
@@ -73,7 +82,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         OUTPUT "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
         COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM}
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl"
-        DEPENDS "${_PS2SDK}/ports/lib/libps2stuff.a"
+        DEPENDS "${_PS2STUFF_STAMP}"
         COMMENT "Building ps2gl..."
         VERBATIM
     )
