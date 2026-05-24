@@ -20,6 +20,11 @@ target_include_directories(lua PUBLIC lua)
 target_compile_options(lua PRIVATE -w)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    find_program(PYTHON3_BIN python3)
+    if(NOT PYTHON3_BIN)
+        set(PYTHON3_BIN "python3")
+    endif()
+
     # Derive PS2DEV/PS2SDK at configure time so build-phase commands have the correct env
     if(DEFINED ENV{PS2DEV})
         set(_PS2DEV "$ENV{PS2DEV}")
@@ -35,22 +40,22 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     # software-emulated and ~5-10x slower).  CMake dependency tracking automatically
     # detects the header change and recompiles liblua.a without manual intervention.
     execute_process(
-            COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/patch_lua.sh"
+            COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/patch_lua.py"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             RESULT_VARIABLE _LUA_PATCH_RESULT
     )
     if (NOT _LUA_PATCH_RESULT EQUAL 0)
-        message(FATAL_ERROR "patch_lua.sh failed")
+        message(FATAL_ERROR "patch_lua.py failed")
     endif ()
 
     # Patch raylib at configure time (idempotent — safe to run on every configure)
     execute_process(
-        COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/patch_raylib.sh"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/patch_raylib.py"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         RESULT_VARIABLE _PATCH_RESULT
     )
     if(NOT _PATCH_RESULT EQUAL 0)
-        message(FATAL_ERROR "patch_raylib.sh failed")
+        message(FATAL_ERROR "patch_raylib.py failed")
     endif()
 
     # Stamp file lives inside the CMake build tree so `cmake --build --target clean`

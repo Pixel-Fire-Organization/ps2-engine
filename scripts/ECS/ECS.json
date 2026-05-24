@@ -1,0 +1,57 @@
+{
+  "$schema": "./schema.json",
+  "components": [
+    {
+      "name": "HealthComponent",
+      "description": "Handles entity vitality",
+      "properties": [
+        { "name": "max_health", "type": "int", "description": "Maximum health", "default": 100 }
+      ],
+      "actions": [
+        { "name": "hurtPlayer", "engineHook": "HurtEntity" }
+      ]
+    },
+    {
+      "name": "CollisionComponent",
+      "description": "Handles physics layers",
+      "properties": [
+        {
+          "name": "layer_mask",
+          "type": "flags",
+          "description": "Collision layers this entity interacts with",
+          "default": 1,
+          "options": {
+            "1": "WORLD",
+            "2": "PLAYER",
+            "4": "ENEMY"
+          }
+        }
+      ]
+    },
+    {
+      "name": "MoverComponent",
+      "description": "Moves a SolidClass between two points",
+      "properties": [
+        { "name": "targetname", "type": "string", "description": "ID to trigger this mover" },
+        { "name": "speed", "type": "float", "default": 64.0 }
+      ],
+      "actions": [
+        { "name": "OnTriggered", "engineHook": "ActivateMover" }
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "classname": "prop_barrel",
+      "classType": "PointClass",
+      "description": "An explosive barrel",
+      "components": ["HealthComponent", "CollisionComponent"]
+    },
+    {
+      "classname": "func_door",
+      "classType": "SolidClass",
+      "description": "A sliding door",
+      "components": ["MoverComponent"]
+    }
+  ]
+}

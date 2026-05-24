@@ -83,14 +83,19 @@ add_subdirectory(app)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
 
+    find_program(PYTHON3_BIN python3)
+    if(NOT PYTHON3_BIN)
+        set(PYTHON3_BIN "python3")
+    endif()
+
     add_custom_target(run-emulator
-        COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/runEmulator.sh" "${CMAKE_SOURCE_DIR}/exec/engine.iso"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/runEmulator.py" "${CMAKE_SOURCE_DIR}/exec/engine.iso"
         COMMENT "Launching PCSX2 with ISO..."
         VERBATIM
     )
 
     add_custom_target(run-emulator-elf
-        COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/runEmulator.sh" "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/runEmulator.py" "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
         COMMENT "Launching PCSX2 with ELF..."
         VERBATIM
     )
