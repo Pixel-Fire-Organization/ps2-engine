@@ -21,7 +21,7 @@
                 "name": { "type": "string" },
                 "type": { 
                   "type": "string",
-                  "enum": ["int", "float", "bool", "string", "choices", "flags", "color255"]
+                  "enum": ["int", "float", "bool", "string", "choices", "flags", "color255", "studio"]
                 },
                 "description": { "type": "string" },
                 "default": { "type": ["string", "number", "boolean"] },

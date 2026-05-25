@@ -1,0 +1,23 @@
+// Game: PS2 Custom Engine
+// Format: Valve
+// entity 0
+{
+"mapversion" "220"
+"classname" "worldspawn"
+"_tb_soft_map_bounds" "none"
+// brush 0
+{
+( -575 59 0 ) ( -580 -381 0 ) ( -580 -381 -1 ) utils/missing [ 0 1.0000000000000002 0 -27 ] [ 0 0 -1.0000000000000002 -4 ] 90 1 1
+( -575 59 0 ) ( -575 59 -1 ) ( 269 61 -1 ) utils/missing [ -1 0 0 3 ] [ 0 0 -1 -4 ] 90 1 1
+( 267 -380 -1 ) ( 269 61 -1 ) ( -575 59 -1 ) utils/missing [ -1 0 0 3 ] [ 0 -1 0 9 ] 90 1 1
+( -575 59 0 ) ( 269 61 0 ) ( 267 -380 0 ) utils/missing [ 1 0 0 -3 ] [ 0 -1 0 9 ] 90 1 1
+( -580 -381 0 ) ( 267 -380 0 ) ( 267 -380 -1 ) utils/missing [ 1 0 0 -3 ] [ 0 0 -1 -4 ] 90 1 1
+( 267 -380 0 ) ( 269 61 0 ) ( 269 61 -1 ) utils/missing [ 0 1 0 -9 ] [ 0 0 -1 -4 ] 90 1 1
+}
+}
+// entity 1
+{
+"classname" "prop_model"
+"origin" "-32 -32 32"
+"model" "models/test.obj"
+}

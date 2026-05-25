@@ -5,6 +5,9 @@ CMakeFiles/
 cmake_install.cmake
 Makefile
 
+# Engine resources
+resources/maps/autosave/**
+
 # Executables Outputs and Release Folders
 exec/
 bin/

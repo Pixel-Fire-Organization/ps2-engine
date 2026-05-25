@@ -1,13 +1,13 @@
 // AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 #pragma once
-#include <stdint.h>
+#include <cstdint>
 #include "ECSHooks.h"
 
 enum class ComponentType : uint16_t {
     None = 0,
     HealthComponent = 1,
     CollisionComponent = 2,
-    MoverComponent = 3
+    ModelComponent = 3
 };
 
 struct IComponent {
@@ -34,16 +34,11 @@ struct CollisionComponent : public IComponent {
     }
 };
 
-struct MoverComponent : public IComponent {
-    const char* targetname = "";
-    float speed = 64.0f;
+struct ModelComponent : public IComponent {
+    const char* model = "models/barrel.mdl";
 
-    MoverComponent() {
-        type = ComponentType::MoverComponent;
-    }
-
-    void OnTriggered() {
-        Hooks::ActivateMover(this);
+    ModelComponent() {
+        type = ComponentType::ModelComponent;
     }
 };
 

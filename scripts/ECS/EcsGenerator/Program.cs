@@ -77,17 +77,14 @@ namespace EcsGenerator
     // --- MAIN PROGRAM ---
     class Program
     {
-
         static void Main(string[] args)
         {
-            // 1. Enforce Command Line Arguments
             if (args.Length < 2)
             {
                 Console.WriteLine("Usage: EcsGenerator <path_to_schema.json> <path_to_data.json> [output_header.h] [output.fgd]");
                 Environment.Exit(1);
             }
 
-            // Convert relative paths (like ../) into safe, absolute paths for the URI parser
             string schemaPath = Path.GetFullPath(args[0]);
             string dataPath = Path.GetFullPath(args[1]);
             
@@ -105,8 +102,7 @@ namespace EcsGenerator
                 Environment.Exit(1);
             }
 
-            // 2. Strict JSON Validation (JsonSchema.Net)
-            // Because schemaPath is now absolute, this will no longer throw a UriFormatException
+            // 1. Strict JSON Validation (JsonSchema.Net)
             var schema = JsonSchema.FromFile(schemaPath);
             string jsonText = File.ReadAllText(dataPath);
             
@@ -130,11 +126,11 @@ namespace EcsGenerator
 
             Console.WriteLine("JSON Validation Passed!");
 
-            // 3. Deserialization
+            // 2. Deserialization
             var options = new JsonSerializerOptions { ReadCommentHandling = JsonCommentHandling.Skip };
             EcsSchema data = JsonSerializer.Deserialize<EcsSchema>(jsonText, options)!;
 
-            // 4. File Generation
+            // 3. File Generation
             GenerateCppHeader(data, cppOutPath);
             GenerateFgd(data, fgdOutPath);
 
@@ -167,14 +163,13 @@ namespace EcsGenerator
         // --- C++ GENERATOR ---
         static void GenerateCppHeader(EcsSchema data, string outPath)
         {
-            // Ensure the output directory exists
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
 
             using var writer = new StreamWriter(outPath);
             
             writer.WriteLine("// AUTO-GENERATED FILE - DO NOT EDIT MANUALLY");
             writer.WriteLine("#pragma once");
-            writer.WriteLine("#include <stdint.h>");
+            writer.WriteLine("#include <cstdint>");
             writer.WriteLine("#include \"ECSHooks.h\"");
             writer.WriteLine();
 
@@ -226,7 +221,6 @@ namespace EcsGenerator
         // --- FGD GENERATOR ---
         static void GenerateFgd(EcsSchema data, string outPath)
         {
-            // Ensure the output directory exists
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
 
             using var writer = new StreamWriter(outPath);
@@ -236,7 +230,15 @@ namespace EcsGenerator
 
             foreach (var comp in data.Components)
             {
-                writer.WriteLine($"@BaseClass = {comp.Name} [");
+                // FIX 1: Detect if this component contains a 'studio' property and apply the new header binding
+                string classModifiers = "";
+                var studioProp = comp.Properties.Find(p => p.Type == "studio");
+                if (studioProp != null)
+                {
+                    classModifiers = $"model({{ \"path\": {studioProp.Name} }}) ";
+                }
+
+                writer.WriteLine($"@BaseClass {classModifiers}= {comp.Name} [");
                 foreach (var prop in comp.Properties)
                 {
                     string fgdType = MapToFgdType(prop.Type);
@@ -276,7 +278,10 @@ namespace EcsGenerator
                 string baseAttr = string.IsNullOrEmpty(bases) ? "" : $"base({bases}) ";
                 string classType = string.IsNullOrEmpty(ent.ClassType) ? "PointClass" : ent.ClassType;
                 
-                writer.WriteLine($"@{classType} {baseAttr}= {ent.Classname} : \"{ent.Description}\" []");
+                // FIX 3: Add a default bounding box to PointClasses
+                string sizeAttr = classType == "PointClass" ? "size(-16 -16 -16, 16 16 16) " : "";
+                
+                writer.WriteLine($"@{classType} {baseAttr}{sizeAttr}= {ent.Classname} : \"{ent.Description}\" []");
                 writer.WriteLine();
             }
         }
@@ -290,6 +295,7 @@ namespace EcsGenerator
                 "bool" => "bool",
                 "string" => "const char*",
                 "color255" => "const char*",
+                "studio" => "const char*",
                 "choices" => "int",
                 "flags" => "uint32_t",
                 _ => "int"
@@ -304,6 +310,7 @@ namespace EcsGenerator
                 "bool" => "choices",
                 "string" => "string",
                 "color255" => "color255",
+                "studio" => "string", // FIX 2: Output as standard string in the property block
                 "choices" => "choices",
                 "flags" => "flags",
                 _ => "string"
@@ -331,13 +338,13 @@ namespace EcsGenerator
         {
             if (element.ValueKind == JsonValueKind.Undefined || element.ValueKind == JsonValueKind.Null)
             {
-                return originalType == "string" ? "\"\"" : "0";
+                return (originalType == "string" || originalType == "studio") ? "\"\"" : "0";
             }
 
             string val = element.ToString() ?? "";
 
             if (originalType == "bool") return val.ToLower() == "true" ? "1" : "0";
-            if (originalType == "string") return $"\"{val}\"";
+            if (originalType == "string" || originalType == "studio") return $"\"{val}\"";
             
             return val;
         }
