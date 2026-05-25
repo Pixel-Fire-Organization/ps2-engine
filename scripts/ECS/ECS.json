@@ -29,14 +29,15 @@
       ]
     },
     {
-      "name": "MoverComponent",
-      "description": "Moves a SolidClass between two points",
+      "name": "ModelComponent",
+      "description": "Handles 3D mesh rendering",
       "properties": [
-        { "name": "targetname", "type": "string", "description": "ID to trigger this mover" },
-        { "name": "speed", "type": "float", "default": 64.0 }
-      ],
-      "actions": [
-        { "name": "OnTriggered", "engineHook": "ActivateMover" }
+        { 
+          "name": "model", 
+          "type": "studio", 
+          "description": "Path to the 3D model file", 
+          "default": "models/barrel.mdl" 
+        }
       ]
     }
   ],
@@ -45,13 +46,13 @@
       "classname": "prop_barrel",
       "classType": "PointClass",
       "description": "An explosive barrel",
-      "components": ["HealthComponent", "CollisionComponent"]
+      "components": ["HealthComponent", "CollisionComponent", "ModelComponent"]
     },
     {
-      "classname": "func_door",
-      "classType": "SolidClass",
-      "description": "A sliding door",
-      "components": ["MoverComponent"]
+      "classname": "prop_model",
+      "classType": "PointClass",
+      "description": "An static model",
+      "components": ["CollisionComponent", "ModelComponent"]
     }
   ]
 }

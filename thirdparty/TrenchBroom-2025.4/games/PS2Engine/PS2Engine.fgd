@@ -12,12 +12,11 @@
     ]
 ]
 
-@BaseClass = MoverComponent [
-    targetname(string) : "ID to trigger this mover" : ""
-    speed(string) : "" : 64.0
+@BaseClass model({ "path": model }) = ModelComponent [
+    model(string) : "Path to the 3D model file" : "models/barrel.mdl"
 ]
 
-@PointClass base(HealthComponent, CollisionComponent) = prop_barrel : "An explosive barrel" []
+@PointClass base(HealthComponent, CollisionComponent, ModelComponent) size(-16 -16 -16, 16 16 16) = prop_barrel : "An explosive barrel" []
 
-@SolidClass base(MoverComponent) = func_door : "A sliding door" []
+@PointClass base(CollisionComponent, ModelComponent) size(-16 -16 -16, 16 16 16) = prop_model : "An static model" []
 
