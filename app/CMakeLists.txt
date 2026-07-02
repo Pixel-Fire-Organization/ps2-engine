@@ -7,15 +7,13 @@ target_compile_options(${APP_EXE_NAME} PRIVATE -Wall -Wextra -Werror)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     target_link_directories(${APP_EXE_NAME} PRIVATE
-        ${CMAKE_SOURCE_DIR}/thirdparty/raylib/src
         ${CMAKE_SOURCE_DIR}/thirdparty/ps2gl
     )
     target_link_libraries(${APP_EXE_NAME} PRIVATE
         ps2_engine
         lua
-        ${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a
         ${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a
-            ps2stuff dma graph draw input pad math3d gs png z m mc c -ldebug
+            ps2stuff dma packet2 graph draw input pad math3d gs png z m mc c -ldebug
     )
 else()
     target_link_libraries(${APP_EXE_NAME} PRIVATE ps2_engine)
@@ -31,7 +29,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         COMMENT "Cleaning exec/..."
         VERBATIM
     )
-    add_dependencies(${APP_EXE_NAME} ps2gl_build raylib_build)
+    add_dependencies(${APP_EXE_NAME} ps2gl_build)
 endif()
 
 
@@ -39,9 +37,9 @@ find_program(PYTHON3_BIN python3)
 if(PYTHON3_BIN)
     add_custom_target(pack-assets
         COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/pack_assets.py"
-            --src "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/RAYLIB"
+            --src "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/ASSETS"
             --dst "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/rassets"
-        COMMENT "Packing assets from cd_files/RAYLIB -> cd_files/rassets..."
+        COMMENT "Packing assets from cd_files/ASSETS -> cd_files/rassets..."
         VERBATIM
     )
     add_dependencies(${APP_EXE_NAME} pack-assets)
@@ -76,7 +74,7 @@ endif()
 set(ISO_STAGING_DIR "${CMAKE_BINARY_DIR}/iso_root")
 
 set(ISO_CONTENT_BLACKLIST
-    "RAYLIB"   # Raw asset sources; packed output lives in rassets/
+    "ASSETS"   # Raw asset sources; packed output lives in rassets/
 )
 
 find_program(MKISOFS_BIN mkisofs)

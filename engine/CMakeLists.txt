@@ -14,7 +14,10 @@ add_library(ps2_engine STATIC
         src/EngineScript.cpp
         src/EngineApp.cpp
         src/EngineInput.cpp
-        src/graphics/RaylibRenderer.cpp
+        src/graphics/GLRenderer.cpp
+        src/graphics/TagRenderer.cpp
+        src/graphics/tim2.cpp
+        src/graphics/ModelLoad.cpp
         src/graphics/Transform3D.cpp
         src/graphics/DrawList.cpp
 
@@ -34,15 +37,18 @@ add_library(ps2_engine STATIC
         include/graphics/EngineGraphics.h
         include/graphics/Renderer.h
         include/graphics/Primitives.h
+        include/graphics/Types.h
         include/graphics/UI.h
-        include/graphics/RaylibRenderer.h
         include/graphics/DrawList.h
+        include/graphics/GLRenderer.h
+        include/graphics/TagRenderer.h
+        include/graphics/tim2.h
+        include/graphics/ModelFormat.h
 )
 
 # Internal engine code always sees the full include directory.
 target_include_directories(ps2_engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src"
     "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/include"
     "${CMAKE_SOURCE_DIR}/thirdparty/lua"
 )
@@ -58,7 +64,6 @@ else()
     # Dev/test mode: full engine header surface exposed.
     target_include_directories(ps2_engine PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src"
         "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/include"
         "${CMAKE_SOURCE_DIR}/thirdparty/lua"
     )

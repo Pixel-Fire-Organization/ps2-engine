@@ -48,16 +48,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         message(FATAL_ERROR "patch_lua.py failed")
     endif ()
 
-    # Patch raylib at configure time (idempotent — safe to run on every configure)
-    execute_process(
-        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/patch_raylib.py"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        RESULT_VARIABLE _PATCH_RESULT
-    )
-    if(NOT _PATCH_RESULT EQUAL 0)
-        message(FATAL_ERROR "patch_raylib.py failed")
-    endif()
-
     # Stamp file lives inside the CMake build tree so `cmake --build --target clean`
     # removes it and forces a rebuild next time.  Using a stamp (rather than the
     # installed .a path) means CMake emits exactly ONE rule for ps2stuff regardless
@@ -95,21 +85,4 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         DEPENDS "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
     )
     add_dependencies(ps2gl_build ps2stuff_build)
-
-    # Build raylib if the static library does not yet exist (patch applied above at configure time)
-    add_custom_command(
-        OUTPUT "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a"
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} clean
-        # WARNING_FLAGS=-w silences all warnings without overriding CFLAGS.
-        # Passing CFLAGS=... on the command line would override the Makefile's
-        # ifeq(PLATFORM_PLAYSTATION2) block which sets -DPLATFORM_PLAYSTATION2.
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} PLATFORM=PLATFORM_PLAYSTATION2 "GRAPHICS=GRAPHICS_API_OPENGL_11 -I../../ps2gl/include" "WARNING_FLAGS=-w"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src"
-        DEPENDS "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
-        COMMENT "Building raylib for PS2..."
-        VERBATIM
-    )
-    add_custom_target(raylib_build
-        DEPENDS "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a"
-    )
 endif()
