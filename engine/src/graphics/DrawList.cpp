@@ -1,19 +1,22 @@
 #include "../include/graphics/DrawList.h"
-#include "EngineDebug.h"
 
-#include <GL/gl.h>
-#include <rlgl.h>
 #include "../include/graphics/PrimitiveGeometry.h"
-#include "EngineMemory.h"
+#include "EngineDebug.h"
 
 DrawLists::DrawLists()
     : untexturedPrims{}, texturedPrims{}, models{}, uiItems{}
 {
-    camera3D.position   = Vector3{0.0f, 10.0f, 20.0f};
-    camera3D.target     = Vector3{0.0f,  0.0f,  0.0f};
-    camera3D.up         = Vector3{0.0f,  1.0f,  0.0f};
-    camera3D.fovy       = 45.0f;
-    camera3D.projection = CAMERA_PERSPECTIVE;
+    // Initialise every 3D camera slot to the same sane default so an unset
+    // active slot still renders a valid view.
+    for (uint8_t i = 0; i < GFX_MAX_CAMERAS_3D; ++i)
+    {
+        cameras3D[i].position   = Vector3{0.0f, 10.0f, 20.0f};
+        cameras3D[i].target     = Vector3{0.0f,  0.0f,  0.0f};
+        cameras3D[i].up         = Vector3{0.0f,  1.0f,  0.0f};
+        cameras3D[i].fovy       = 45.0f;
+        cameras3D[i].projection = CAMERA_PERSPECTIVE;
+    }
+    activeCamera3D = 0;
 
     camera2D.offset   = Vector2{0.0f, 0.0f};
     camera2D.target   = Vector2{0.0f, 0.0f};
@@ -25,41 +28,26 @@ DrawLists::DrawLists()
 // Init / Shutdown
 // ---------------------------------------------------------------------------
 
-void DrawLists::Init(float* megaBatch) { CompilePrimitiveDLists(megaBatch); }
+void DrawLists::Init(float* megaBatch) { ExtractPrimitiveGeometry(megaBatch); }
 
 void DrawLists::Shutdown()
 {
-    if (m_dlCube)
-    {
-        glDeleteLists(m_dlCube, 1);
-        m_dlCube = 0;
-    }
-    if (m_dlSphere)
-    {
-        glDeleteLists(m_dlSphere, 1);
-        m_dlSphere = 0;
-    }
-    if (m_dlCylinder)
-    {
-        glDeleteLists(m_dlCylinder, 1);
-        m_dlCylinder = 0;
-    }
+    // No GPU resources owned here — the renderer owns display lists / GS packets.
+    m_cubeVerts = m_cubeNorms = m_cubeUVs = nullptr;
+    m_sphereVerts = m_sphereNorms = m_sphereUVs = nullptr;
+    m_cylVerts = m_cylNorms = m_cylUVs = nullptr;
 }
 
 // ---------------------------------------------------------------------------
-// CompilePrimitiveDLists
+// ExtractPrimitiveGeometry
 // ---------------------------------------------------------------------------
-// Extracts separated (stride=0) vertex / normal / UV arrays from the
-// interleaved MODEL_* tables and compiles one ps2gl display list per
-// primitive shape.
-//
-// ps2gl constraints (see thirdparty/ps2gl/README.md):
-//   • glVertexPointer / glNormalPointer / glTexCoordPointer: stride MUST be 0.
-//   • glDrawElements: NOT implemented — triggers mError().
-//   • Display lists with glDrawArrays: the DMA packet is cached after the
-//     first glCallList, making subsequent calls very fast (no EE work at all).
+// De-interleaves the stride-8 MODEL_* tables (xyz|nxyz|uv) into separated
+// vertex / normal / UV arrays sub-allocated from the renderer arena buffer.
+// ps2gl requires stride=0 arrays; the GIFTAG builder also consumes these.
+// This routine is backend-neutral (no GL/GS calls) — the active renderer turns
+// these arrays into display lists or GS packets after its context is ready.
 // ---------------------------------------------------------------------------
-void DrawLists::CompilePrimitiveDLists(float* megaBatch)
+void DrawLists::ExtractPrimitiveGeometry(float* megaBatch)
 {
     // Helper: de-interleave MODEL_* (stride-8: xyz|nxyz|uv) into separate arrays.
     auto extract = [](const float* src, uint32_t count, float* vOut, float* nOut, float* uvOut)
@@ -106,54 +94,19 @@ void DrawLists::CompilePrimitiveDLists(float* megaBatch)
     extract(MODEL_SPHERE, PRIMITIVE_SPHERE_VERTEX_COUNT, m_sphereVerts, m_sphereNorms, m_sphereUVs);
     extract(MODEL_CYLINDER, PRIMITIVE_CYLINDER_VERTEX_COUNT, m_cylVerts, m_cylNorms, m_cylUVs);
 
-    // Flush any pending rlgl geometry before touching ps2gl client state directly.
-    rlDrawRenderBatchActive();
-
-    // Enable vertex array client state — these are immediate (not recorded in DLists).
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_NORMAL_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-    // --- CUBE ---
-    m_dlCube = glGenLists(1);
-    glVertexPointer(3, GL_FLOAT, 0, m_cubeVerts);
-    glNormalPointer(GL_FLOAT, 0, m_cubeNorms);
-    glTexCoordPointer(2, GL_FLOAT, 0, m_cubeUVs);
-    glNewList(m_dlCube, GL_COMPILE);
-    glDrawArrays(GL_TRIANGLES, 0, PRIMITIVE_CUBE_VERTEX_COUNT);
-    glEndList();
-
-    // --- SPHERE ---
-    m_dlSphere = glGenLists(1);
-    glVertexPointer(3, GL_FLOAT, 0, m_sphereVerts);
-    glNormalPointer(GL_FLOAT, 0, m_sphereNorms);
-    glTexCoordPointer(2, GL_FLOAT, 0, m_sphereUVs);
-    glNewList(m_dlSphere, GL_COMPILE);
-    glDrawArrays(GL_TRIANGLES, 0, PRIMITIVE_SPHERE_VERTEX_COUNT);
-    glEndList();
-
-    // --- CYLINDER ---
-    m_dlCylinder = glGenLists(1);
-    glVertexPointer(3, GL_FLOAT, 0, m_cylVerts);
-    glNormalPointer(GL_FLOAT, 0, m_cylNorms);
-    glTexCoordPointer(2, GL_FLOAT, 0, m_cylUVs);
-    glNewList(m_dlCylinder, GL_COMPILE);
-    glDrawArrays(GL_TRIANGLES, 0, PRIMITIVE_CYLINDER_VERTEX_COUNT);
-    glEndList();
-
-    Engine_LogInfo("DrawLists: Primitive DLists compiled (cube=%u, sphere=%u, cyl=%u)", m_dlCube, m_dlSphere, m_dlCylinder);
+    Engine_LogInfo("DrawLists: Separated primitive geometry extracted (cube/sphere/cylinder).");
 }
 
-unsigned int DrawLists::GetListForType(Primitive3D type) const
+PrimitiveArrays DrawLists::GetPrimitiveArrays(Primitive3D type) const
 {
     switch (type)
     {
     case Primitive3D::Sphere:
-        return m_dlSphere;
+        return PrimitiveArrays{m_sphereVerts, m_sphereNorms, m_sphereUVs, PRIMITIVE_SPHERE_VERTEX_COUNT};
     case Primitive3D::Cylinder:
-        return m_dlCylinder;
+        return PrimitiveArrays{m_cylVerts, m_cylNorms, m_cylUVs, PRIMITIVE_CYLINDER_VERTEX_COUNT};
     default:
-        return m_dlCube;
+        return PrimitiveArrays{m_cubeVerts, m_cubeNorms, m_cubeUVs, PRIMITIVE_CUBE_VERTEX_COUNT};
     }
 }
 
@@ -215,7 +168,26 @@ bool DrawLists::SetSkyboxTexture(int32_t skyboxTextureId)
     return false;
 }
 
-void DrawLists::SetActiveCamera3D(const Camera3D& camera) { camera3D = camera; }
+void DrawLists::SetCamera3D(CameraID id, const Camera3D& camera)
+{
+    if (id < 0 || id >= GFX_MAX_CAMERAS_3D)
+    {
+        Engine_LogError("DrawLists: SetCamera3D invalid slot %d (max %d).", static_cast<int>(id), GFX_MAX_CAMERAS_3D);
+        return;
+    }
+    cameras3D[id] = camera;
+}
+
+void DrawLists::SetActiveCamera3D(CameraID id)
+{
+    if (id < 0 || id >= GFX_MAX_CAMERAS_3D)
+    {
+        Engine_LogError("DrawLists: SetActiveCamera3D invalid slot %d (max %d).", static_cast<int>(id), GFX_MAX_CAMERAS_3D);
+        return;
+    }
+    activeCamera3D = static_cast<uint8_t>(id);
+}
+
 void DrawLists::SetActiveCamera2D(const Camera2D& camera) { camera2D = camera; }
 
 void DrawLists::Reset(const bool resetSkybox)
