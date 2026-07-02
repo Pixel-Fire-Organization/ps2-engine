@@ -2,43 +2,28 @@
 """
 pack_assets.py — PS2 Engine Asset Packer
 
-Reads JSON + source file pairs from app/cd_files/RAYLIB/ and compiles them
-into binary .ps2a files in app/cd_files/rassets/.
+Reads JSON + source file pairs from app/cd_files/ASSETS/ and compiles them into
+binary .ps2a files in app/cd_files/rassets/.
 
 Usage:
-    python3 scripts/pack_assets.py [--src <RAYLIB_DIR>] [--dst <RASSETS_DIR>] [--skip-convert]
-
-      --skip-convert   Embed textures raw without QOI transcoding (not recommended for PS2)
+    python3 scripts/pack_assets.py [--src <ASSETS_DIR>] [--dst <RASSETS_DIR>]
 
 JSON schema (e.g. player_tex.json):
-    {
-        "type": "TEXTURE",
-        "source": "player_tex.jpg",
-        "deps": []
-    }
+    { "type": "TEXTURE", "source": "player_tex.png", "deps": [] }
+    { "type": "MODEL",   "source": "prop.obj",       "deps": ["prop_tex"] }
 
 Binary .ps2a layout:
-    [AssetFileHeader]  (fixed-size)
-    [raw source bytes] (variable-size)
+    [AssetFileHeader]  (fixed-size, 2080 bytes)
+    [payload]          (TIM2 for textures, baked BKM2 blob for models)
 
-AssetFileHeader (C struct, packed):
-    uint32_t magic          — 0x50533241 ("PS2A")
-    uint32_t type           — 0=TEXTURE, 1=MODEL, 2=SOUND, 3=FONT
-    uint8_t  depCount
-    uint8_t  reserved[3]
-    char     ext[16]        — payload extension e.g. ".qoi", ".png"
-    char     deps[8][256]   — null-terminated dependency asset paths
-    uint32_t dataSize       — byte count of the raw payload
-
-TEXTURE payload encoding (in priority order):
-  1. Normal path  — Pillow decodes the source image and re-encodes it as QOI.
-                    QOI uses a trivially simple decoder (no IDCT, no entropy
-                    coding) that is reliable on the PS2 R5900 MIPS processor.
-  2. --skip-convert passed — the source file is embedded raw without any
-                    transcoding. The original extension is preserved in
-                    AssetFileHeader.ext. NOT recommended for PS2 targets.
-  3. Pillow absent — falls back to raw embed with a warning printed to stdout.
-                    The .ps2a is written but may fail to decode on PS2 hardware.
+Payload encodings (raylib was removed; runtime decodes are trivial):
+  TEXTURE -> TIM2 (PS2-native). Pillow decodes the source to RGBA8888 and it is
+             re-wrapped as a single-picture, non-paletted 32-bit (A8B8G8R8) TIM2.
+             Runtime just parses the header and DMAs the pixels to GS VRAM.
+  MODEL   -> BKM2 (baked). An .obj is parsed into separated, UNINDEXED
+             vertex/normal/uv arrays (exactly what ps2gl needs and the GIFTAG
+             builder consumes). The first dependency (if any) is the diffuse texture.
+  FONT / SOUND -> unsupported (dropped with raylib); skipped with a warning.
 """
 
 import json
@@ -51,130 +36,128 @@ MAX_DEPS = 8
 MAX_PATH_LEN = 256
 EXT_LEN = 16  # matches AssetFileHeader.ext[16]
 
-TYPE_MAP = {
-    "TEXTURE": 0,
-    "MODEL": 1,
-    "SOUND": 2,
-    "FONT": 3,
-}
+TYPE_MAP = {"TEXTURE": 0, "MODEL": 1, "SOUND": 2, "FONT": 3}
 
 # Header size: 4 + 4 + 1 + 3 + 16 + (8 * 256) + 4 = 2080 bytes
 HEADER_SIZE = 4 + 4 + 1 + 3 + EXT_LEN + (MAX_DEPS * MAX_PATH_LEN) + 4
 
+BAKED_MODEL_MAGIC = 0x324D4B42  # "BKM2"
+BAKED_MODEL_VERSION = 1
+
+
 # ---------------------------------------------------------------------------
-# QOI encoder (pure Python, no external deps)
-# Spec: https://qoiformat.org/
+# TIM2 texture encoder (single picture, 32-bit A8B8G8R8, no CLUT)
 # ---------------------------------------------------------------------------
-_QOI_MAGIC = b"qoif"
-_QOI_END   = b"\x00\x00\x00\x00\x00\x00\x00\x01"
+def _encode_tim2_rgba32(width, height, pixels_rgba):
+    """pixels_rgba: bytes of length w*h*4 in R,G,B,A order (matches A8B8G8R8 in
+    little-endian memory, and GL_RGBA/GL_UNSIGNED_BYTE for the ps2gl path)."""
+    image_size = len(pixels_rgba)
 
-def _encode_qoi(width, height, channels, pixels):
-    """
-    Encode raw pixel bytes to QOI format.
-      channels : 3 (RGB) or 4 (RGBA)
-      pixels   : bytes of length width*height*channels (row-major, top-to-bottom)
-    Returns bytes of the complete QOI file.
-    """
-    assert channels in (3, 4), f"channels must be 3 or 4, got {channels}"
-    assert len(pixels) == width * height * channels, \
-        f"pixel buffer size mismatch: {len(pixels)} != {width*height*channels}"
+    # Picture header (0x30 bytes). GsTex0/GsTex1/GsRegs/GsTexClut are left zero —
+    # the renderer computes TBP0/TBW from the allocated GS address at upload time.
+    pic = struct.pack("<III", 0x30 + image_size, 0, image_size)  # totalSize, clutSize, imageSize
+    pic += struct.pack("<HH", 0x30, 0)                            # headerSize, clutColors
+    pic += struct.pack("<BBBB", 0, 1, 0, 0x03)                    # pictFormat, mipmapCount, clutType, imageType(A8B8G8R8)
+    pic += struct.pack("<HH", width, height)                      # imageWidth, imageHeight
+    pic += struct.pack("<QQ", 0, 0)                               # GsTex0, GsTex1
+    pic += struct.pack("<II", 0, 0)                               # GsRegs, GsTexClut
+    assert len(pic) == 0x30, len(pic)
 
-    out = bytearray()
-    # Header
-    out += _QOI_MAGIC
-    out += struct.pack(">II", width, height)
-    out += struct.pack("BB", channels, 0)   # colorspace = sRGB
+    # File header (16 bytes): magic, formatVersion=4, formatId=0, pictureCount=1, pad[8]
+    fh = b"TIM2" + struct.pack("<BBH", 0x04, 0x00, 1) + (b"\x00" * 8)
+    assert len(fh) == 16, len(fh)
 
-    # Running 64-entry index table, all zero-initialised as (0,0,0,0)
-    index = [[0, 0, 0, 0] for _ in range(64)]
-    prev  = [0, 0, 0, 255]   # previous pixel (r,g,b,a)
-    run   = 0
-    n     = width * height
-
-    for i in range(n):
-        base = i * channels
-        if channels == 4:
-            px = [pixels[base], pixels[base+1], pixels[base+2], pixels[base+3]]
-        else:
-            px = [pixels[base], pixels[base+1], pixels[base+2], 255]
-
-        is_last = (i == n - 1)
-
-        if px == prev:
-            run += 1
-            if run == 62 or is_last:
-                out.append(0xC0 | (run - 1))   # QOI_OP_RUN
-                run = 0
-        else:
-            # Flush pending run
-            if run > 0:
-                out.append(0xC0 | (run - 1))
-                run = 0
-
-            h = (px[0]*3 + px[1]*5 + px[2]*7 + px[3]*11) % 64
-
-            if index[h] == px:
-                out.append(h & 0x3F)           # QOI_OP_INDEX
-            else:
-                index[h] = px[:]
-
-                if px[3] != prev[3]:
-                    # Alpha changed — QOI_OP_RGBA
-                    out += bytes([0xFF, px[0], px[1], px[2], px[3]])
-                else:
-                    # Compute signed channel deltas
-                    def sdelta(a, b):
-                        d = (a - b) & 0xFF
-                        return d if d < 128 else d - 256
-
-                    dr = sdelta(px[0], prev[0])
-                    dg = sdelta(px[1], prev[1])
-                    db = sdelta(px[2], prev[2])
-
-                    if -2 <= dr <= 1 and -2 <= dg <= 1 and -2 <= db <= 1:
-                        # QOI_OP_DIFF
-                        out.append(0x40 | ((dr+2)<<4) | ((dg+2)<<2) | (db+2))
-                    else:
-                        dr_dg = dr - dg
-                        db_dg = db - dg
-                        if (-32 <= dg <= 31 and -8 <= dr_dg <= 7 and -8 <= db_dg <= 7):
-                            # QOI_OP_LUMA
-                            out.append(0x80 | (dg + 32))
-                            out.append(((dr_dg + 8) << 4) | (db_dg + 8))
-                        else:
-                            # QOI_OP_RGB
-                            out += bytes([0xFE, px[0], px[1], px[2]])
-
-        prev = px[:]
-
-    out += _QOI_END
-    return bytes(out)
+    return fh + pic + pixels_rgba
 
 
-def _convert_texture_to_qoi(source_path):
-    """
-    Decode any image format supported by Pillow and re-encode as QOI.
-    Returns (qoi_bytes, ".qoi") or raises ImportError if Pillow is absent.
-    """
+def _convert_texture_to_tim2(source_path):
+    """Decode any Pillow-supported image and re-encode as 32-bit TIM2.
+    Returns (tim2_bytes, ".tm2") or raises ImportError if Pillow is absent."""
     from PIL import Image
     img = Image.open(source_path).convert("RGBA")
     w, h = img.size
-    pixels = img.tobytes()           # RGBA, row-major
-    return _encode_qoi(w, h, 4, pixels), ".qoi"
+    return _encode_tim2_rgba32(w, h, img.tobytes()), ".tm2"
+
+
+# ---------------------------------------------------------------------------
+# Baked model encoder (.obj -> BKM2 separated unindexed arrays)
+# ---------------------------------------------------------------------------
+def _align16(n):
+    return (n + 15) & ~15
+
+
+def _bake_obj_model(source_path, has_texture):
+    """Parse a triangulated-or-convex .obj into separated unindexed float arrays."""
+    positions, normals, uvs = [], [], []
+    out_v, out_n, out_t = [], [], []
+
+    def resolve(tok, count):
+        i = int(tok)
+        return i - 1 if i > 0 else count + i  # 1-based, or negative from end
+
+    with open(source_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            p = line.split()
+            if not p:
+                continue
+            tag = p[0]
+            if tag == "v":
+                positions.append((float(p[1]), float(p[2]), float(p[3])))
+            elif tag == "vn":
+                normals.append((float(p[1]), float(p[2]), float(p[3])))
+            elif tag == "vt":
+                uvs.append((float(p[1]), float(p[2]) if len(p) > 2 else 0.0))
+            elif tag == "f":
+                face = []
+                for v in p[1:]:
+                    s = v.split("/")
+                    vi = resolve(s[0], len(positions))
+                    ti = resolve(s[1], len(uvs)) if len(s) > 1 and s[1] else -1
+                    ni = resolve(s[2], len(normals)) if len(s) > 2 and s[2] else -1
+                    face.append((vi, ti, ni))
+                # Fan-triangulate.
+                for k in range(1, len(face) - 1):
+                    for (vi, ti, ni) in (face[0], face[k], face[k + 1]):
+                        out_v.append(positions[vi])
+                        out_n.append(normals[ni] if 0 <= ni < len(normals) else (0.0, 0.0, 0.0))
+                        uv = uvs[ti] if 0 <= ti < len(uvs) else (0.0, 0.0)
+                        out_t.append((uv[0], 1.0 - uv[1]))  # flip V for GS texel origin
+
+    count = len(out_v)
+    if count == 0 or count % 3 != 0:
+        raise ValueError(f"{source_path}: no triangles parsed ({count} verts)")
+
+    vbytes = b"".join(struct.pack("<fff", *p) for p in out_v)
+    nbytes = b"".join(struct.pack("<fff", *n) for n in out_n)
+    tbytes = b"".join(struct.pack("<ff", *t) for t in out_t)
+
+    mat_count = 1 if has_texture else 0
+    header_size, mesh_size, mat_size = 16, 24, 8 * mat_count
+    verts_off = _align16(header_size + mesh_size + mat_size)
+    norms_off = _align16(verts_off + len(vbytes))
+    uvs_off = _align16(norms_off + len(nbytes))
+    total = uvs_off + len(tbytes)
+
+    buf = bytearray(total)
+    struct.pack_into("<IIII", buf, 0, BAKED_MODEL_MAGIC, BAKED_MODEL_VERSION, 1, mat_count)
+    struct.pack_into("<IIIIII", buf, 16, count, 0, verts_off, norms_off, uvs_off, 0)
+    if mat_count:
+        struct.pack_into("<II", buf, 40, 0, 0)  # diffuseTexRef = dependency 0
+    buf[verts_off:verts_off + len(vbytes)] = vbytes
+    buf[norms_off:norms_off + len(nbytes)] = nbytes
+    buf[uvs_off:uvs_off + len(tbytes)] = tbytes
+    return bytes(buf), ".bkm"
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 def pack_dep_string(dep_str):
-    """Encode a dependency path as a fixed-width 256-byte null-terminated field."""
     encoded = dep_str.encode("utf-8")[:MAX_PATH_LEN - 1]
     return encoded + b"\x00" * (MAX_PATH_LEN - len(encoded))
 
 
-def pack_asset(json_path, src_dir, dst_dir, skip_convert=False):
-    """Pack a single JSON + source pair into a .ps2a binary."""
+def pack_asset(json_path, src_dir, dst_dir):
     with open(json_path, "r", encoding="utf-8-sig") as f:
         meta = json.load(f)
 
@@ -185,81 +168,64 @@ def pack_asset(json_path, src_dir, dst_dir, skip_convert=False):
     if asset_type_str not in TYPE_MAP:
         print(f"  ERROR: unknown type '{asset_type_str}' in {json_path}")
         return False
-
+    if asset_type_str in ("SOUND", "FONT"):
+        print(f"  SKIP:  {asset_type_str} is unsupported (dropped with raylib): {json_path}")
+        return True
     if not source_name:
         print(f"  ERROR: missing 'source' in {json_path}")
         return False
 
     source_path = os.path.join(src_dir, source_name)
     if not os.path.isfile(source_path):
-        # Warn and skip — descriptor may be added before the art is ready.
         print(f"  SKIP:  source file not found: {source_path}")
-        print(f"         Place '{source_name}' in {src_dir} to pack this asset.")
-        return True  # not a hard error; don't block the build
+        return True
 
     if len(deps) > MAX_DEPS:
         print(f"  WARNING: truncating deps to {MAX_DEPS} for {json_path}")
         deps = deps[:MAX_DEPS]
 
     # --- Build payload ---
-    # TEXTURE encoding priority:
-    #   1. QOI (preferred) — Pillow decodes the source and re-encodes as QOI.
-    #      qoi_decode is a trivially simple loop; stb_image's JPEG decoder can
-    #      fail on progressive JPEGs on the PS2 R5900.
-    #   2. Raw embed (--skip-convert) — source file written as-is; original
-    #      extension kept in ext[]. NOT recommended for PS2 targets.
-    #   3. Raw embed (Pillow absent) — same as above but with a warning.
-    #      The .ps2a is valid but may fail to decode on PS2 hardware.
     if asset_type_str == "TEXTURE":
-        if skip_convert:
-            print(f"  SKIP CONVERT: {source_name} (raw embed)")
-            with open(source_path, "rb") as fh:
-                payload = fh.read()
-            _, raw_ext = os.path.splitext(source_name)
-            ext_str = raw_ext.lower()
-        else:
-            try:
-                payload, ext_str = _convert_texture_to_qoi(source_path)
-                print(f"  CONV:  {source_name} -> QOI ({len(payload)} bytes)")
-            except ImportError:
-                print(f"  WARN:  Pillow not available; embedding {source_name} raw (may fail on PS2)")
-                with open(source_path, "rb") as fh:
-                    payload = fh.read()
-                _, raw_ext = os.path.splitext(source_name)
-                ext_str = raw_ext.lower()
+        try:
+            payload, ext_str = _convert_texture_to_tim2(source_path)
+            print(f"  CONV:  {source_name} -> TIM2 ({len(payload)} bytes)")
+        except ImportError:
+            print(f"  ERROR: Pillow required to bake TIM2 textures; cannot pack {source_name}")
+            return False
+    elif asset_type_str == "MODEL":
+        if not source_name.lower().endswith(".obj"):
+            print(f"  ERROR: MODEL baking supports .obj only (got '{source_name}')")
+            return False
+        try:
+            payload, ext_str = _bake_obj_model(source_path, has_texture=len(deps) > 0)
+            print(f"  BAKE:  {source_name} -> BKM2 ({len(payload)} bytes)")
+        except Exception as e:  # noqa: BLE001 — surface any parse failure
+            print(f"  ERROR: model bake failed for {source_name}: {e}")
+            return False
     else:
-        with open(source_path, "rb") as fh:
-            payload = fh.read()
-        _, raw_ext = os.path.splitext(source_name)
-        ext_str = raw_ext.lower()
+        return False
 
-    # Build the header
-    type_id   = TYPE_MAP[asset_type_str]
+    # --- Build header ---
+    type_id = TYPE_MAP[asset_type_str]
     dep_count = len(deps)
 
     ext_bytes = ext_str.encode("utf-8")[:EXT_LEN - 1]
     ext_field = ext_bytes + b"\x00" * (EXT_LEN - len(ext_bytes))
 
-    header  = struct.pack("<II", MAGIC, type_id)
+    header = struct.pack("<II", MAGIC, type_id)
     header += struct.pack("B", dep_count)
-    header += b"\x00" * 3  # reserved
+    header += b"\x00" * 3
     header += ext_field
-
     for i in range(MAX_DEPS):
         if i < dep_count:
-            dep_path = f"RASSETS/{deps[i].upper()}.PS2A"
-            header += pack_dep_string(dep_path)
+            header += pack_dep_string(f"RASSETS/{deps[i].upper()}.PS2A")
         else:
             header += b"\x00" * MAX_PATH_LEN
-
     header += struct.pack("<I", len(payload))
-
     assert len(header) == HEADER_SIZE, f"Header size mismatch: {len(header)} != {HEADER_SIZE}"
 
-    # Write the .ps2a file
     base_name = os.path.splitext(os.path.basename(json_path))[0]
     out_path = os.path.join(dst_dir, f"{base_name}.PS2A")
-
     with open(out_path, "wb") as fh:
         fh.write(header)
         fh.write(payload)
@@ -269,62 +235,41 @@ def pack_asset(json_path, src_dir, dst_dir, skip_convert=False):
 
 
 def main():
-    # Default paths relative to project root
-    script_dir   = os.path.dirname(os.path.abspath(__file__))
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
 
-    src_dir = os.path.join(project_root, "app", "cd_files", "RAYLIB")
+    src_dir = os.path.join(project_root, "app", "cd_files", "ASSETS")
     dst_dir = os.path.join(project_root, "app", "cd_files", "rassets")
 
-    # Allow overrides via command-line
     args = sys.argv[1:]
     i = 0
-    skip_convert = False
     while i < len(args):
         if args[i] == "--src" and i + 1 < len(args):
-            src_dir = args[i + 1]
-            i += 2
+            src_dir = args[i + 1]; i += 2
         elif args[i] == "--dst" and i + 1 < len(args):
-            dst_dir = args[i + 1]
-            i += 2
-        elif args[i] == "--skip-convert":
-            skip_convert = True
-            i += 1
+            dst_dir = args[i + 1]; i += 2
         else:
             i += 1
 
     if not os.path.isdir(src_dir):
-        print(f"Source directory not found: {src_dir}")
-        print("Nothing to pack.")
+        print(f"Source directory not found: {src_dir}\nNothing to pack.")
         return 0
 
     os.makedirs(dst_dir, exist_ok=True)
-
-    json_files = sorted(
-        f for f in os.listdir(src_dir) if f.lower().endswith(".json")
-    )
-
+    json_files = sorted(f for f in os.listdir(src_dir) if f.lower().endswith(".json"))
     if not json_files:
-        print(f"No .json asset descriptors found in {src_dir}")
-        print("Nothing to pack.")
+        print(f"No .json asset descriptors found in {src_dir}\nNothing to pack.")
         return 0
 
     print(f"Packing {len(json_files)} asset(s) from {src_dir} -> {dst_dir}")
     errors = 0
     for jf in json_files:
-        json_path = os.path.join(src_dir, jf)
-        result = pack_asset(json_path, src_dir, dst_dir, skip_convert)
-        if result is False:
+        if pack_asset(os.path.join(src_dir, jf), src_dir, dst_dir) is False:
             errors += 1
 
-    if errors > 0:
-        print(f"\nFinished with {errors} error(s).")
-        return 1
-
-    print(f"\nAll {len(json_files)} descriptor(s) processed (errors: {errors}).")
-    return 0
+    print(f"\nFinished ({errors} error(s)).")
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
