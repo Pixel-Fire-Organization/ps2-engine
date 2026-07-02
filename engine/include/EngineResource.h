@@ -4,10 +4,10 @@
 
 #include "Constants.h"
 
-// Resource types matching Raylib handle categories
-// NOTE: RES_SOUND requires SUPPORT_MODULE_RAUDIO to be defined in raylib's config.h.
-//       On PS2 the raudio module is disabled — Engine_Resource_Load(RES_SOUND, ...) will
-//       log an error and return -1 at runtime. Use the PS2 native audio subsystem instead.
+// Engine resource categories.
+// NOTE: RES_SOUND and RES_FONT are unsupported since raylib was removed —
+//       Engine_Resource_Load(RES_SOUND/RES_FONT, ...) logs an error and returns
+//       -1. Textures are baked to TIM2; models to separated unindexed arrays.
 typedef enum
 {
     RES_TEXTURE,
@@ -43,9 +43,10 @@ bool Engine_Resource_Init();
 // Shut down and release all resources
 void Engine_Resource_Shutdown();
 
-// Load a resource from a .ps2a file on disc.
-// For RES_MODEL: loads synchronously via Raylib's LoadModel.
-// For all others: streams via Engine_IO_ReadAsync, then decodes via *FromMemory.
+// Load a resource from a .ps2a file on disc. All types stream via
+// Engine_IO_ReadAsync and decode from memory: TIM2 for textures (uploaded to GS
+// VRAM by the active renderer) and the baked blob for models. Dependencies
+// declared in the .ps2a header are loaded first.
 // Returns a handle >= 0 on success, or -1 on failure.
 int32_t Engine_Resource_Load(ResourceType type, const char* path);
 
@@ -56,9 +57,9 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path);
 // header is invalid, or the underlying load fails.
 int32_t Engine_Resource_LoadAuto(const char* path);
 
-// Retrieve a pointer to the underlying Raylib resource.
+// Retrieve a pointer to the underlying engine resource.
 // Returns NULL if the resource is not yet ready or the handle is invalid.
-// Caller must cast to the appropriate Raylib type (Texture2D*, Model*, etc.).
+// Caller casts to the matching engine type (Texture2D* or Model*).
 void* Engine_Resource_Get(int32_t handle);
 
 // Check if a resource has finished loading.

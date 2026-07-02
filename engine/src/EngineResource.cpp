@@ -1,7 +1,10 @@
-﻿#include <raylib.h>
-#include <cstdio>
+﻿#include <cstdio>
 #include <cstring>
 #include "Engine.h"
+#include "graphics/Renderer.h"
+#include "graphics/Types.h"
+#include "graphics/tim2.h"
+#include "graphics/ModelFormat.h"
 
 // Stable per-dependency reference: packs a slot index and a generation counter
 // into 4 bytes (same width as the old int32_t). The generation must match the
@@ -30,15 +33,13 @@ typedef struct
     DepHandle deps[RES_MAX_DEPENDENCIES];
     uint8_t depCount;
 
-    // Raylib resource storage (only one is active based on type)
+    // Engine-native resource storage (only one is active based on type).
+    // Fonts and sound were dropped with raylib; those types are unsupported and
+    // load attempts are logged and rejected.
     union
     {
         Texture2D texture;
         Model model;
-#if defined(SUPPORT_MODULE_RAUDIO)
-        Sound sound;
-#endif
-        Font font;
     } handle;
 } ResourceEntry;
 
@@ -132,7 +133,7 @@ static int32_t Internal_EvictLRU()
     return bestIndex;
 }
 
-static void Internal_UnloadRaylibHandle(const ResourceEntry* entry)
+static void Internal_UnloadHandle(ResourceEntry* entry)
 {
     if (entry->state != RES_STATE_READY)
         return;
@@ -140,19 +141,18 @@ static void Internal_UnloadRaylibHandle(const ResourceEntry* entry)
     switch (entry->type)
     {
     case RES_TEXTURE:
-        UnloadTexture(entry->handle.texture);
+        {
+            Renderer* r = Engine_GetRenderer();
+            if (r && entry->handle.texture.id != 0)
+                r->ReleaseTexture(entry->handle.texture.id);
+        }
         break;
     case RES_MODEL:
-        UnloadModel(entry->handle.model);
+        Model_FreeBaked(&entry->handle.model);
         break;
     case RES_SOUND:
-#if defined(SUPPORT_MODULE_RAUDIO)
-        UnloadSound(entry->handle.sound);
-#endif
-        break;
     case RES_FONT:
-        UnloadFont(entry->handle.font);
-        break;
+        break; // unsupported — nothing was allocated
     }
 }
 
@@ -183,7 +183,7 @@ static void Internal_UnloadEntry(int32_t index)
         }
     }
 
-    Internal_UnloadRaylibHandle(entry);
+    Internal_UnloadHandle(entry);
 
     // Release shadow GS page accounting for textures
     if (entry->type == RES_TEXTURE && entry->gsPages > 0)
@@ -201,6 +201,18 @@ static void Internal_UnloadEntry(int32_t index)
     // Restore the incremented generation so future DepHandle bindings get the
     // new value and old stale bindings remain detectable.
     entry->generation = nextGeneration;
+}
+
+// Resolve a baked model's diffuse texture reference (an index into the owning
+// asset's dependency list) to a resource handle. Passed to Model_LoadBaked; the
+// returned handle is stored in the material and resolved to a live Texture2D at
+// draw time (the texture dependency may still be streaming in).
+static int32_t Internal_ResolveModelTexture(uint32_t diffuseTexRef, void* user)
+{
+    const ResourceEntry* entry = static_cast<const ResourceEntry*>(user);
+    if (!entry || diffuseTexRef >= entry->depCount)
+        return -1;
+    return entry->deps[diffuseTexRef].index; // resource handle, or -1 if unbound
 }
 
 // Callback context for async IO loads
@@ -275,132 +287,100 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
     {
     case RES_TEXTURE:
         {
-            Image img = LoadImageFromMemory(header.ext, payload, static_cast<int>(header.dataSize));
-            if (img.data != nullptr)
+            // Textures are baked to TIM2 (GS-native). Parse the header, budget-check
+            // GS VRAM, then hand the pixels to the active renderer for upload.
+            Tim2Image img;
+            if (!Tim2_Parse(payload, static_cast<size_t>(payloadSize), &img))
             {
-                // Hard-reject textures that exceed the GS VRAM slot budget.
-                // Raylib registers slots up to 64 pages (512×256 at PSM32); anything larger
-                // has no valid slot and LoadTextureFromImage would silently return id=0
-                // while aliasing GS VRAM (TBP field is 14-bit, page 512 wraps to page 0).
-                uint32_t pagesW = (static_cast<uint32_t>(img.width) + GFX_GS_PAGE_WIDTH_PSM32 - 1) / GFX_GS_PAGE_WIDTH_PSM32;
-                uint32_t pagesH = (static_cast<uint32_t>(img.height) + GFX_GS_PAGE_HEIGHT_PSM32 - 1) / GFX_GS_PAGE_HEIGHT_PSM32;
-                uint32_t pages = pagesW * pagesH;
-                if (img.width > GFX_MAX_TEXTURE_WIDTH || img.height > GFX_MAX_TEXTURE_HEIGHT ||
-                    pages > GFX_MAX_TEXTURE_GS_PAGES)
-                {
-                    Engine_LogError("Resource: texture rejected — %dx%d (%u pages) exceeds budget "
-                                    "(max %u pages, dimension cap %dx%d) in slot %d '%s'",
-                                    img.width, img.height, pages, GFX_MAX_TEXTURE_GS_PAGES, GFX_MAX_TEXTURE_WIDTH,
-                                    GFX_MAX_TEXTURE_HEIGHT, idx, entry->key);
-                    UnloadImage(img);
-                    Internal_UnloadEntry(idx);
-                    Engine_PoolFreeMain(ctx);
-                    return;
-                }
-
-                // Hard-fail when the cumulative GS VRAM budget is exceeded.
-                // GS VRAM management is the programmer's responsibility — the engine will
-                // never silently evict a texture to make room (that would hide bugs).
-                // Call Engine_Resource_Unload() on textures that are no longer needed,
-                // then retry.
-                if (s_AllocatedGsPages + pages > GFX_GS_TEXTURE_PAGE_BUDGET)
-                {
-                    uint32_t evictablePages = 0;
-                    int32_t evictableCount = 0;
-                    Internal_CalcEvictablePages(&evictablePages, &evictableCount);
-                    Engine_LogError("Resource: GS VRAM full — cannot load %dx%d (%u pages). "
-                                    "Usage: %u/%u pages. "
-                                    "Call Engine_Resource_Unload() to free up to %u pages "
-                                    "across %d unloaded texture(s), then retry.",
-                                    img.width, img.height, pages, s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET,
-                                    evictablePages, evictableCount);
-                    UnloadImage(img);
-                    Internal_UnloadEntry(idx);
-                    Engine_PoolFreeMain(ctx);
-                    return;
-                }
-
-                entry->gsPages = pages;
-                entry->handle.texture = LoadTextureFromImage(img);
-                UnloadImage(img);
-                // Guard against silent GPU upload failures (texture.id == 0 means
-                // the hardware rejected the upload — treat as a decode failure).
-                if (entry->handle.texture.id > 0)
-                {
-                    s_AllocatedGsPages += pages;
-                    Engine_LogInfo("Texture loaded successfully. Remaining pages: %u",
-                                   (uint32_t)GFX_GS_TEXTURE_PAGE_BUDGET - s_AllocatedGsPages);
-                    entry->state = RES_STATE_READY;
-                }
-                else
-                {
-                    // entry->gsPages was written but s_AllocatedGsPages was NOT yet
-                    // incremented. Zero gsPages before Internal_UnloadEntry to prevent
-                    // the shadow counter from being incorrectly decremented.
-                    entry->gsPages = 0;
-                    Engine_LogError("Resource: GPU texture upload failed for slot %d (%s)", idx, entry->key);
-                    Internal_UnloadEntry(idx);
-                    Engine_PoolFreeMain(ctx);
-                    return;
-                }
-            }
-            else
-            {
-                Engine_LogError("Resource: failed to decode texture slot %d (%s)", idx, entry->key);
+                Engine_LogError("Resource: TIM2 parse failed for slot %d (%s)", idx, entry->key);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
             }
-        }
-        break;
-    case RES_SOUND:
-#if defined(SUPPORT_MODULE_RAUDIO)
-        {
-            Wave wave = LoadWaveFromMemory(header.ext, payload, (int)header.dataSize);
-            if (wave.data == NULL)
+
+            // A GS page is 64x32 texels at PSMCT32, 64x64 at PSMCT16.
+            const uint32_t pageW = GFX_GS_PAGE_WIDTH_PSM32;
+            const uint32_t pageH = (img.format == PixelFormat::RGBA16) ? 64u : GFX_GS_PAGE_HEIGHT_PSM32;
+            const uint32_t pagesW = (static_cast<uint32_t>(img.width) + pageW - 1) / pageW;
+            const uint32_t pagesH = (static_cast<uint32_t>(img.height) + pageH - 1) / pageH;
+            const uint32_t pages = pagesW * pagesH;
+
+            if (img.width > GFX_MAX_TEXTURE_WIDTH || img.height > GFX_MAX_TEXTURE_HEIGHT || pages > GFX_MAX_TEXTURE_GS_PAGES)
             {
-                Engine_LogError("Resource: failed to decode sound slot %d (%s)", idx, entry->key);
+                Engine_LogError("Resource: texture rejected — %dx%d (%u pages) exceeds budget "
+                                "(max %u pages, dimension cap %dx%d) in slot %d '%s'",
+                                img.width, img.height, pages, GFX_MAX_TEXTURE_GS_PAGES, GFX_MAX_TEXTURE_WIDTH,
+                                GFX_MAX_TEXTURE_HEIGHT, idx, entry->key);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
             }
-            entry->handle.sound = LoadSoundFromWave(wave);
-            UnloadWave(wave);
+
+            if (s_AllocatedGsPages + pages > GFX_GS_TEXTURE_PAGE_BUDGET)
+            {
+                uint32_t evictablePages = 0;
+                int32_t evictableCount = 0;
+                Internal_CalcEvictablePages(&evictablePages, &evictableCount);
+                Engine_LogError("Resource: GS VRAM full — cannot load %dx%d (%u pages). Usage: %u/%u pages. "
+                                "Call Engine_Resource_Unload() to free up to %u pages across %d texture(s), then retry.",
+                                img.width, img.height, pages, s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET,
+                                evictablePages, evictableCount);
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
+            }
+
+            Renderer* renderer = Engine_GetRenderer();
+            const uint32_t texId = renderer ? renderer->UploadTexture(img.pixels, img.width, img.height, img.format) : 0u;
+            if (texId == 0)
+            {
+                // gsPages was not yet committed to the shadow counter, so no rollback needed.
+                Engine_LogError("Resource: GPU texture upload failed for slot %d (%s)", idx, entry->key);
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
+            }
+
+            entry->handle.texture.id = texId;
+            entry->handle.texture.width = img.width;
+            entry->handle.texture.height = img.height;
+            entry->handle.texture.format = static_cast<int>(img.format);
+            entry->gsPages = pages;
+            s_AllocatedGsPages += pages;
             entry->state = RES_STATE_READY;
-        }
-        break;
-#else
-        Engine_LogError("Resource: RES_SOUND not supported (raudio module disabled) for slot %d", idx);
-        Internal_UnloadEntry(idx);
-        Engine_PoolFreeMain(ctx);
-        return;
-#endif
-    case RES_FONT:
-        {
-            entry->handle.font = LoadFontFromMemory(header.ext, payload, (int)header.dataSize, 32, nullptr, 0);
-            if (entry->handle.font.texture.id > 0)
-            {
-                entry->state = RES_STATE_READY;
-            }
-            else
-            {
-                Engine_LogError("Resource: failed to decode font slot %d (%s)", idx, entry->key);
-                Internal_UnloadEntry(idx);
-                Engine_PoolFreeMain(ctx);
-                return;
-            }
+            Engine_LogInfo("Texture loaded (%dx%d). Remaining pages: %u", img.width, img.height,
+                           static_cast<uint32_t>(GFX_GS_TEXTURE_PAGE_BUDGET) - s_AllocatedGsPages);
         }
         break;
     case RES_MODEL:
-        // Models should never arrive here — they are loaded synchronously
-        Engine_LogError("Resource: unexpected async model load for slot %d", idx);
-        Internal_UnloadEntry(idx);
+        {
+            // Models are baked to separated, unindexed vertex arrays. Their texture
+            // dependencies were queued by Internal_ParseHeaderAndLoadDeps above;
+            // materials store the dep resource handles and are resolved to live
+            // textures at draw time.
+            if (!Model_LoadBaked(payload, static_cast<size_t>(payloadSize), &entry->handle.model,
+                                 Internal_ResolveModelTexture, entry))
+            {
+                Engine_LogError("Resource: baked model load failed for slot %d (%s)", idx, entry->key);
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
+            }
+            entry->state = RES_STATE_READY;
+        }
         break;
+    case RES_SOUND:
+    case RES_FONT:
+        Engine_LogError("Resource: type %u unsupported (fonts/sound were dropped with raylib) for slot %d (%s)",
+                        header.type, idx, entry->key);
+        Internal_UnloadEntry(idx);
+        Engine_PoolFreeMain(ctx);
+        return;
     default:
-        // Should never reach here if validation above is correct, but defensive
         Engine_LogError("Resource: unknown type %u for slot %d (%s)", header.type, idx, entry->key);
         Internal_UnloadEntry(idx);
-        break;
+        Engine_PoolFreeMain(ctx);
+        return;
     }
 
     Engine_PoolFreeMain(ctx);
@@ -566,23 +546,9 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
         entry->deps[d].generation = 0;
     }
 
-    // Synchronous path for models (no FromMemory variant in Raylib)
-    if (type == RES_MODEL)
-    {
-        entry->handle.model = LoadModel(path);
-        if (entry->handle.model.meshCount > 0)
-        {
-            entry->state = RES_STATE_READY;
-        }
-        else
-        {
-            Engine_LogError("Resource: LoadModel failed for '%s'", path);
-            entry->state = RES_STATE_EMPTY;
-            return -1;
-        }
-        return slot;
-    }
-
+    // All resource types stream through the async IO path. The header's declared
+    // type drives decoding (TIM2 for textures, baked blob for models); the .ps2a
+    // dependency list is loaded first so a model's textures are already queued.
     // Async path: allocate a context from the pool, then stream
     ResourceLoadContext* ctx = static_cast<ResourceLoadContext *>(Engine_PoolAllocMain());
     if (!ctx)
@@ -640,13 +606,8 @@ void* Engine_Resource_Get(int32_t handle)
     case RES_MODEL:
         return &entry->handle.model;
     case RES_SOUND:
-#if defined(SUPPORT_MODULE_RAUDIO)
-        return &entry->handle.sound;
-#else
-        return nullptr;
-#endif
     case RES_FONT:
-        return &entry->handle.font;
+        return nullptr; // unsupported (dropped with raylib)
     }
     return nullptr;
 }
@@ -686,7 +647,7 @@ void Engine_Resource_UnloadAll()
     {
         if (s_Entries[i].state != RES_STATE_EMPTY)
         {
-            Internal_UnloadRaylibHandle(&s_Entries[i]);
+            Internal_UnloadHandle(&s_Entries[i]);
             memset(&s_Entries[i], 0, sizeof(ResourceEntry));
             s_Entries[i].state = RES_STATE_EMPTY;
         }
