@@ -31,6 +31,17 @@ struct UIDrawEntry
     float scale;
 };
 
+// Separated (stride-0) geometry arrays for one primitive shape. Both renderer
+// backends consume these: the PS2GL renderer compiles them into ps2gl display
+// lists; the GIFTAG renderer transforms + packs them into GS packets directly.
+struct PrimitiveArrays
+{
+    const float* verts; // 3 floats per vertex
+    const float* norms; // 3 floats per vertex
+    const float* uvs; // 2 floats per vertex
+    uint32_t vertexCount;
+};
+
 class DrawLists
 {
     PrimitiveDrawEntry untexturedPrims[GFX_MAX_DRAW_LIST_LENGTH];
@@ -43,13 +54,17 @@ class DrawLists
     uint16_t uiCount = 0;
     int32_t skyboxResourceId = -1;
 
-    Camera3D camera3D{};
+    // Fixed 3D camera slots; exactly one is active (rendered) per frame.
+    Camera3D cameras3D[GFX_MAX_CAMERAS_3D]{};
+    uint8_t activeCamera3D = 0;
+    // Single 2D / UI camera.
     Camera2D camera2D{};
 
     DrawStats m_lastStats{};
 
     // Separated vertex / normal / UV arrays extracted from MODEL_* at init.
-    // Pointers into the renderer arena buffer; persistent for display list lifetime.
+    // Pointers into the renderer arena buffer; persistent for the primitive
+    // geometry lifetime. Backend-neutral — no GL/GS handles live here.
     float* m_cubeVerts = nullptr;
     float* m_cubeNorms = nullptr;
     float* m_cubeUVs = nullptr;
@@ -60,14 +75,9 @@ class DrawLists
     float* m_cylNorms = nullptr;
     float* m_cylUVs = nullptr;
 
-    // ps2gl display list handles — one per primitive type.
-    // Compiled once at startup; the DMA packet is cached on first glCallList.
-    unsigned int m_dlCube = 0;
-    unsigned int m_dlSphere = 0;
-    unsigned int m_dlCylinder = 0;
-
-    // Compile display lists from separated geometry arrays.
-    void CompilePrimitiveDLists(float* megaBatch);
+    // De-interleave MODEL_* (stride-8: xyz|nxyz|uv) into the separated arrays
+    // sub-allocated from the given renderer arena buffer.
+    void ExtractPrimitiveGeometry(float* megaBatch);
 
 public:
     DrawLists();
@@ -77,11 +87,12 @@ public:
     DrawLists& operator=(const DrawLists&) = delete;
     DrawLists& operator=(DrawLists&&) = delete;
 
-    // Initialise OpenGL display lists using the given pre-allocated geometry buffer.
-    // Must be called once after the GL context is ready.
+    // Populate the separated primitive geometry arrays from the given
+    // pre-allocated arena buffer. Backend-neutral: performs no GL/GS calls.
+    // Call once before the renderer compiles/uploads primitive geometry.
     void Init(float* megaBatch);
 
-    // Free OpenGL display list resources.
+    // No GPU resources are owned here; kept for symmetry with the renderer.
     void Shutdown();
 
     bool AddPrimitive(const PrimitiveDrawEntry& entry);
@@ -89,13 +100,16 @@ public:
     bool AddUIDraw(const UIDrawEntry& entry);
     bool SetSkyboxTexture(int32_t skyboxTextureId);
 
-    void SetActiveCamera3D(const Camera3D& camera);
+    // Camera control (fixed-slot model).
+    void SetCamera3D(CameraID id, const Camera3D& camera); // write one slot
+    void SetActiveCamera3D(CameraID id); // choose the active slot
     void SetActiveCamera2D(const Camera2D& camera);
+    CameraID GetActiveCamera3DIndex() const { return static_cast<CameraID>(activeCamera3D); }
 
     void Reset(bool resetSkybox = false);
 
-    // Return the display list handle for a given primitive type.
-    unsigned int GetListForType(Primitive3D type) const;
+    // Separated geometry accessor for the given primitive type.
+    PrimitiveArrays GetPrimitiveArrays(Primitive3D type) const;
 
     // Getters for Renderer
     const PrimitiveDrawEntry* GetUntexturedPrims() const { return untexturedPrims; }
@@ -111,7 +125,7 @@ public:
     uint16_t GetUICount() const { return uiCount; }
 
     int32_t GetSkyboxResourceId() const { return skyboxResourceId; }
-    const Camera3D& GetCamera3D() const { return camera3D; }
+    const Camera3D& GetCamera3D() const { return cameras3D[activeCamera3D]; } // active slot
     const Camera2D& GetCamera2D() const { return camera2D; }
 
     DrawStats GetLastStats() const { return m_lastStats; }
