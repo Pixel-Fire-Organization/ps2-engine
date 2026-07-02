@@ -16,8 +16,18 @@ endif()
 set(REGION "PAL" CACHE STRING "Target region (PAL or NTSC)")
 set_property(CACHE REGION PROPERTY STRINGS "PAL" "NTSC")
 
-# Use Raylib as graphics pipeline
-add_definitions(-DUSE_RAYLIB)
+# Renderer backend selection. PS2GL drives the GS via the ps2gl library; GIFTAG
+# builds GS packets directly with the PS2SDK packet2/draw libraries. Chosen at
+# configure time and propagated as a compile define the engine reads.
+set(RENDERER_BACKEND "PS2GL" CACHE STRING "Renderer backend (PS2GL or GIFTAG)")
+set_property(CACHE RENDERER_BACKEND PROPERTY STRINGS "PS2GL" "GIFTAG")
+if(RENDERER_BACKEND STREQUAL "GIFTAG")
+    add_definitions(-DRENDERER_BACKEND_GIFTAG=1)
+    message(STATUS "Renderer backend: GIFTAG (direct GS packets)")
+else()
+    add_definitions(-DRENDERER_BACKEND_PS2GL=1)
+    message(STATUS "Renderer backend: PS2GL (ps2gl)")
+endif()
 
 if(NOT REGION STREQUAL "PAL" AND NOT REGION STREQUAL "NTSC")
     message(FATAL_ERROR "REGION must be PAL or NTSC, but found: '${REGION}'")
@@ -122,13 +132,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         # 2. Thirdparty cached libraries — deleting them forces CMake's
         #    add_custom_command to re-trigger the full thirdparty build next time.
         COMMAND ${CMAKE_COMMAND} -E rm -f
-            "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src/libraylib.a"
             "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
-        # 3. Raylib source objects (the raylib Makefile tracks these itself).
-        COMMAND ${CMAKE_COMMAND} -E env
-            "PS2DEV=${_CLEAN_PS2DEV}" "PS2SDK=${_CLEAN_PS2SDK}" "PATH=${_CLEAN_PATH}"
-            ${CMAKE_MAKE_PROGRAM} -C "${CMAKE_SOURCE_DIR}/thirdparty/raylib/src" clean
-        # 4. ps2gl source objects.
+        # 3. ps2gl source objects.
         COMMAND ${CMAKE_COMMAND} -E env
             "PS2DEV=${_CLEAN_PS2DEV}" "PS2SDK=${_CLEAN_PS2SDK}" "PATH=${_CLEAN_PATH}"
             ${CMAKE_MAKE_PROGRAM} -C "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl" clean
@@ -172,7 +177,6 @@ if(DEFINED ENV{PS2DEV})
         "CompileFlags:\n"
         "  Add:\n"
         "    - \"-I${_CLANGD_ENG_PATH}/engine/include\"\n"
-        "    - \"-I${_CLANGD_ENG_PATH}/thirdparty/raylib/src\"\n"
         "    - \"-I${_CLANGD_ENG_PATH}/thirdparty/ps2gl/include\"\n"
         "    - \"-I${_CLANGD_ENG_PATH}/thirdparty/lua\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/ee/include\"\n"
@@ -181,6 +185,7 @@ if(DEFINED ENV{PS2DEV})
         "    - \"-D_PS2\"\n"
         "    - \"-D_EE\"\n"
         "    - \"-DPLATFORM_PLAYSTATION2\"\n"
+        "    - \"-DRENDERER_BACKEND_PS2GL\"\n"
         "\n"
         "  CompilationDatabase: build\n"
     )
