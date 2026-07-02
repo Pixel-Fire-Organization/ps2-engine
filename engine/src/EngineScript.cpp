@@ -35,19 +35,18 @@ typedef enum
 } RenderMode;
 
 static RenderMode s_CurrentRenderMode = RENDER_MODE_NONE;
-static double s_LastMode3DEnterTime = -1.0;
-static double s_LastMode2DEnterTime = -1.0;
 
 // ---------------------------------------------------------------------------
-// Camera registry — fixed-size slot arrays with per-slot LFU tracking
+// Camera registry — a fixed set of hardcoded slots. Slots are never evicted;
+// scripts configure/move/rotate them and pick which one is the active (rendered)
+// 3D camera. Exactly one 3D camera is active per frame. s_Camera*Count is how
+// many make_camera_* calls have been issued (bounded by the slot count).
 // ---------------------------------------------------------------------------
 static Camera3D s_Cameras3D[SCRIPTING_MAX_CAMERAS_3D];
-static bool s_Camera3DActive[SCRIPTING_MAX_CAMERAS_3D];
-static uint32_t s_Camera3DLastUsed[SCRIPTING_MAX_CAMERAS_3D];
+static int s_Camera3DCount = 0;
 
 static Camera2D s_Cameras2D[SCRIPTING_MAX_CAMERAS_2D];
-static bool s_Camera2DActive[SCRIPTING_MAX_CAMERAS_2D];
-static uint32_t s_Camera2DLastUsed[SCRIPTING_MAX_CAMERAS_2D];
+static int s_Camera2DCount = 0;
 
 static uint32_t s_FrameCount = 0;
 
@@ -275,10 +274,8 @@ void Engine_Script_Close()
     // Reset render-mode and camera state
     s_CurrentRenderMode = RENDER_MODE_NONE;
     s_FrameCount = 0;
-    for (int i = 0; i < SCRIPTING_MAX_CAMERAS_3D; i++)
-        s_Camera3DActive[i] = false;
-    for (int i = 0; i < SCRIPTING_MAX_CAMERAS_2D; i++)
-        s_Camera2DActive[i] = false;
+    s_Camera3DCount = 0;
+    s_Camera2DCount = 0;
 }
 
 int Engine_Script_Load(const void* data, size_t size)
@@ -376,29 +373,9 @@ void Engine_Script_EndCurrentMode()
 
 void Engine_Script_FrameTick()
 {
+    // Camera slots are fixed and never evicted, so this just advances the frame
+    // counter (used by the perf logger and other subsystems).
     s_FrameCount++;
-
-    // Evict any 3D camera slot that has been idle for too long.
-    for (int i = 0; i < SCRIPTING_MAX_CAMERAS_3D; i++)
-    {
-        if (s_Camera3DActive[i] && (s_FrameCount - s_Camera3DLastUsed[i]) >= SCRIPTING_CAM_IDLE_FRAMES_EVICT)
-        {
-            Engine_LogInfo("[Script] Camera3D slot %d evicted after %u idle frames", i,
-                           s_FrameCount - s_Camera3DLastUsed[i]);
-            s_Camera3DActive[i] = false;
-        }
-    }
-
-    // Evict any 2D camera slot that has been idle for too long.
-    for (int i = 0; i < SCRIPTING_MAX_CAMERAS_2D; i++)
-    {
-        if (s_Camera2DActive[i] && (s_FrameCount - s_Camera2DLastUsed[i]) >= SCRIPTING_CAM_IDLE_FRAMES_EVICT)
-        {
-            Engine_LogInfo("[Script] Camera2D slot %d evicted after %u idle frames", i,
-                           s_FrameCount - s_Camera2DLastUsed[i]);
-            s_Camera2DActive[i] = false;
-        }
-    }
 }
 
 uint32_t Engine_Script_GetFrameCount() { return s_FrameCount; }
@@ -416,22 +393,15 @@ uint32_t Engine_Script_GetFrameCount() { return s_FrameCount; }
 // projection: 0 = CAMERA_PERSPECTIVE, 1 = CAMERA_ORTHOGRAPHIC
 static int Lua_Graphics_MakeCamera3D(lua_State* L)
 {
-    // Find a free slot
-    int slot = -1;
-    for (int i = 0; i < SCRIPTING_MAX_CAMERAS_3D; i++)
+    // Fixed slots: assign the next unused slot (bounded by SCRIPTING_MAX_CAMERAS_3D).
+    // Slots are never evicted; scripts keep and reuse the returned handle.
+    if (s_Camera3DCount >= SCRIPTING_MAX_CAMERAS_3D)
     {
-        if (!s_Camera3DActive[i])
-        {
-            slot = i;
-            break;
-        }
-    }
-    if (slot < 0)
-    {
-        Engine_LogError("[Script] make_camera_3d: no free slots (max %d)", SCRIPTING_MAX_CAMERAS_3D);
+        Engine_LogError("[Script] make_camera_3d: all %d fixed camera slots are in use", SCRIPTING_MAX_CAMERAS_3D);
         lua_pushinteger(L, -1);
         return 1;
     }
+    const int slot = s_Camera3DCount++;
 
     Camera3D cam;
     cam.position = Vector3{static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)),
@@ -444,8 +414,11 @@ static int Lua_Graphics_MakeCamera3D(lua_State* L)
     cam.projection = static_cast<int>(luaL_checkinteger(L, 11));
 
     s_Cameras3D[slot] = cam;
-    s_Camera3DActive[slot] = true;
-    s_Camera3DLastUsed[slot] = s_FrameCount;
+
+    // Seed the renderer's matching slot so the camera is ready to activate.
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->SetCamera3D(static_cast<CameraID>(slot), cam);
 
     lua_pushinteger(L, slot);
     return 1;
@@ -456,21 +429,13 @@ static int Lua_Graphics_MakeCamera3D(lua_State* L)
 //                         rotation, zoom)      -> handle (int) or -1 on error
 static int Lua_Graphics_MakeCamera2D(lua_State* L)
 {
-    int slot = -1;
-    for (int i = 0; i < SCRIPTING_MAX_CAMERAS_2D; i++)
+    if (s_Camera2DCount >= SCRIPTING_MAX_CAMERAS_2D)
     {
-        if (!s_Camera2DActive[i])
-        {
-            slot = i;
-            break;
-        }
-    }
-    if (slot < 0)
-    {
-        Engine_LogError("[Script] make_camera_2d: no free slots (max %d)", SCRIPTING_MAX_CAMERAS_2D);
+        Engine_LogError("[Script] make_camera_2d: all %d fixed camera slots are in use", SCRIPTING_MAX_CAMERAS_2D);
         lua_pushinteger(L, -1);
         return 1;
     }
+    const int slot = s_Camera2DCount++;
 
     Camera2D cam;
     cam.offset = Vector2{static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2))};
@@ -479,8 +444,6 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
     cam.zoom = static_cast<float>(luaL_checknumber(L, 6));
 
     s_Cameras2D[slot] = cam;
-    s_Camera2DActive[slot] = true;
-    s_Camera2DLastUsed[slot] = s_FrameCount;
 
     lua_pushinteger(L, slot);
     return 1;
@@ -491,16 +454,16 @@ static int Lua_Graphics_MakeCamera2D(lua_State* L)
 // ---------------------------------------------------------------------------
 
 // graphics.update_camera_3d(handle, pos_x, pos_y, pos_z, target_x, target_y, target_z)
-// Updates the position and look-at target of an existing 3D camera slot in-place.
-// The up vector and projection are preserved.  Call this every frame before begin_mode_3d
-// when driving the camera with analogue input.
+// Moves/re-aims a fixed 3D camera slot in-place. The up vector and projection are
+// preserved. Rotation is expressed by moving the look-at target. Safe to call
+// every frame when driving the camera with analogue input.
 static int Lua_Graphics_UpdateCamera3D(lua_State* L)
 {
     int32_t handle = luaL_checkinteger(L, 1);
 
-    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_3D || !s_Camera3DActive[handle])
+    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_3D)
     {
-        Engine_LogError("[Script] update_camera_3d: invalid or evicted handle %d", handle);
+        Engine_LogError("[Script] update_camera_3d: invalid handle %d", handle);
         return 0;
     }
 
@@ -510,50 +473,36 @@ static int Lua_Graphics_UpdateCamera3D(lua_State* L)
     s_Cameras3D[handle].target =
         Vector3{static_cast<float>(luaL_checknumber(L, 5)), static_cast<float>(luaL_checknumber(L, 6)),
                 static_cast<float>(luaL_checknumber(L, 7))};
-    s_Camera3DLastUsed[handle] = s_FrameCount;
 
-    // Push updated camera to the renderer so Render() uses the latest state
-    if (s_CurrentRenderMode == RENDER_MODE_3D)
-    {
-        Renderer* r = Engine_GetRenderer();
-        if (r)
-            r->SetActiveCamera3D(handle, s_Cameras3D[handle]);
-    }
+    // Always push the pose to the renderer's slot — it's the render camera when
+    // this slot is the active one, and a harmless slot update otherwise.
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->SetCamera3D(static_cast<CameraID>(handle), s_Cameras3D[handle]);
     return 0;
 }
 
 // graphics.begin_mode_3d(handle)
-// Re-entry guard: if already in 3D and < SCRIPTING_MODE_REENTRY_COOLDOWN_SEC
-// has elapsed since the last entry, the call is a no-op to avoid redundant
-// EndMode3D/BeginMode3D pairs. Otherwise re-enters with the supplied camera.
+// Selects which fixed camera slot is the active (rendered) 3D camera. Exactly
+// one 3D camera is rendered per frame.
 static int Lua_Graphics_BeginMode3D(lua_State* L)
 {
     int32_t handle = (int32_t)luaL_checkinteger(L, 1);
 
-    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_3D || !s_Camera3DActive[handle])
+    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_3D)
     {
-        Engine_LogError("[Script] begin_mode_3d: invalid or evicted handle %d", handle);
+        Engine_LogError("[Script] begin_mode_3d: invalid handle %d", handle);
         return 0;
-    }
-
-    if (s_CurrentRenderMode == RENDER_MODE_3D)
-    {
-        double elapsed = GetTime() - s_LastMode3DEnterTime;
-        if (elapsed < SCRIPTING_MODE_REENTRY_COOLDOWN_SEC)
-            return 0;
-    }
-    else if (s_CurrentRenderMode == RENDER_MODE_2D)
-    {
-        s_CurrentRenderMode = RENDER_MODE_NONE;
     }
 
     Renderer* r = Engine_GetRenderer();
     if (r)
-        r->SetActiveCamera3D(handle, s_Cameras3D[handle]);
+    {
+        r->SetCamera3D(static_cast<CameraID>(handle), s_Cameras3D[handle]);
+        r->SetActiveCamera3D(static_cast<CameraID>(handle));
+    }
 
     s_CurrentRenderMode = RENDER_MODE_3D;
-    s_LastMode3DEnterTime = GetTime();
-    s_Camera3DLastUsed[handle] = s_FrameCount;
     return 0;
 }
 
@@ -561,30 +510,17 @@ static int Lua_Graphics_BeginMode2D(lua_State* L)
 {
     int32_t handle = luaL_checkinteger(L, 1);
 
-    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_2D || !s_Camera2DActive[handle])
+    if (handle < 0 || handle >= SCRIPTING_MAX_CAMERAS_2D)
     {
-        Engine_LogError("[Script] begin_mode_2d: invalid or evicted handle %d", handle);
+        Engine_LogError("[Script] begin_mode_2d: invalid handle %d", handle);
         return 0;
-    }
-
-    if (s_CurrentRenderMode == RENDER_MODE_2D)
-    {
-        double elapsed = GetTime() - s_LastMode2DEnterTime;
-        if (elapsed < SCRIPTING_MODE_REENTRY_COOLDOWN_SEC)
-            return 0;
-    }
-    else if (s_CurrentRenderMode == RENDER_MODE_3D)
-    {
-        s_CurrentRenderMode = RENDER_MODE_NONE;
     }
 
     Renderer* r = Engine_GetRenderer();
     if (r)
-        r->SetActiveCamera2D(handle, s_Cameras2D[handle]);
+        r->SetActiveCamera2D(s_Cameras2D[handle]);
 
     s_CurrentRenderMode = RENDER_MODE_2D;
-    s_LastMode2DEnterTime = GetTime();
-    s_Camera2DLastUsed[handle] = s_FrameCount;
     return 0;
 }
 
@@ -598,7 +534,7 @@ static int Lua_Engine_Log(lua_State* L)
 
 static int Lua_Engine_GetTime(lua_State* L)
 {
-    lua_pushnumber(L, static_cast<lua_Number>(GetTime()));
+    lua_pushnumber(L, static_cast<lua_Number>(Engine_GetTotalTime()));
     return 1;
 }
 
@@ -706,7 +642,14 @@ static int Lua_Graphics_Clear(lua_State* L)
         lua_geti(L, 1, 4);
         unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_pop(L, 4);
-        ClearBackground(Color{r, g, b, a});
+        UNUSED_VAR(a);
+
+        Renderer* rRenderer = Engine_GetRenderer();
+        if (rRenderer)
+        {
+            Color3 color{static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f};
+            rRenderer->ClearFrame(color);
+        }
     }
     return 0;
 }
@@ -729,8 +672,14 @@ static int Lua_Graphics_DrawRect(lua_State* L)
         lua_geti(L, 5, 4);
         unsigned char a = static_cast<unsigned char>(lua_tointeger(L, -1));
         lua_pop(L, 4);
-        DrawRectangle(static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h),
-                      Color{r, g, b, a});
+        UNUSED_VAR(a);
+
+        Renderer* rRenderer = Engine_GetRenderer();
+        if (rRenderer)
+        {
+            Color3 color{static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f};
+            rRenderer->DrawRect2D(static_cast<int32_t>(x), static_cast<int32_t>(y), static_cast<int32_t>(w), static_cast<int32_t>(h), color);
+        }
     }
     return 0;
 }
@@ -824,7 +773,9 @@ static int Lua_Graphics_DrawGrid(lua_State* L)
     int slices = static_cast<int>(luaL_checknumber(L, 1));
     float spacing = static_cast<float>(luaL_checknumber(L, 2));
 
-    DrawGrid(slices, spacing);
+    Renderer* rRenderer = Engine_GetRenderer();
+    if (rRenderer)
+        rRenderer->DrawGrid(slices, spacing);
     return 0;
 }
 
