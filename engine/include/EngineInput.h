@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <raylib.h>
+#include "graphics/Types.h"
 
 #ifdef __cplusplus
 extern "C" {

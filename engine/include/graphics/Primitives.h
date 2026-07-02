@@ -2,50 +2,7 @@
 #include <cstdint>
 
 #include "Constants.h"
-
-#ifdef USE_RAYLIB
-    #include "raylib.h"
-#else
-// When USE_RAYLIB is off (native GIF-tag renderer), provide minimal type stubs
-// so engine headers remain self-contained without pulling in raylib.
-
-// Vector2, 2 components
-typedef struct Vector2
-{
-    float x;
-    float y;
-} Vector2;
-// Vector3, 3 components
-typedef struct Vector3
-{
-    float x;
-    float y;
-    float z;
-} Vector3;
-// Vector4, 4 components
-typedef struct Vector4
-{
-    float x;
-    float y;
-    float z;
-    float w;
-} Vector4;
-// Quaternion, 4 components (Vector4 alias)
-typedef Vector4 Quaternion;
-// Matrix, 4x4 components, column major, OpenGL style, right-handed
-typedef struct Matrix
-{
-    float m0, m4, m8, m12;
-    float m1, m5, m9, m13;
-    float m2, m6, m10, m14;
-    float m3, m7, m11, m15;
-} Matrix;
-// Color, 4 components, R8G8B8A8 (32bit)
-typedef struct Color
-{
-    unsigned char r, g, b, a;
-} Color;
-#endif
+#include "Types.h"
 
 enum class Primitive3D : uint8_t
 {
@@ -86,4 +43,10 @@ public:
     void SetPosition(const Vector3&);
     void SetRotation(const Vector3&);
     void SetScale(const Vector3&);
+};
+
+enum class RendererType
+{
+    OpenGL, // PS2GL renderer (ps2gl / GL 1.1 subset)
+    Tag // GIFTAG renderer (direct GS packets via packet2/draw)
 };

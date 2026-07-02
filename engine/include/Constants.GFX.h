@@ -37,10 +37,22 @@
 
 #define GFX_MAX_DRAW_LIST_LENGTH 1024
 
+// Fixed 3D camera slots. Exactly one is the active render camera per frame;
+// scripts move/rotate slots on demand and select which one is active.
+#define GFX_MAX_CAMERAS_3D 4
+
 // ps2gl CurPacket is 65,000 qwords shared by all render paths. See docs/rendering/PS2GL_FUNCTIONS.md.
 #define GFX_PGL_MAIN_PACKET_QWORDS 65000 // kDmaPacketMaxQwordLength (ps2gl)
 #define GFX_QWORDS_PER_DRAWCALL 82 // per glCallList with state change
 #define GFX_DRAW_CALL_BUDGET 720 // combined limit — primitives + model meshes
+
+// GIFTAG renderer (direct GS packet path) per-frame budgets. Unlike the PS2GL
+// path, vertices are transformed on the EE (via math3d) and written straight
+// into a GIF/DMA packet, so the limit is packet capacity, not draw calls.
+// Tunable starting points; the renderer drops excess geometry loudly (never a
+// silent DMA overrun). The packet is double-buffered (one in flight per frame).
+#define GFX_GIFTAG_MAX_VERTS 8000 // per-frame transformed-vertex cap
+#define GFX_GIFTAG_PACKET_QWORDS 24576 // per-frame DMA packet capacity (~384 KB ×2)
 
 // glDrawElements is a hard mError() in ps2gl; indexed meshes are skipped.
 #define GFX_MAX_MODEL_MESH_COUNT 8 // max meshes per model in DList cache
