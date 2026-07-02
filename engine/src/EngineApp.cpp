@@ -342,23 +342,22 @@ void EngineUpdate()
     Engine_Update();
     float dt = Engine_GetDeltaTime();
 
-    BeginDrawing();
+    // 1. Scripting Phase
+    Engine_Script_UpdateAll(dt);
+    Engine_Script_EndCurrentMode();
+    scriptEndTime = (double)clock() / CLOCKS_PER_SEC;
+
+    // 2. Renderer Phase (CPU-side transforms)
+    Renderer* r = Engine_GetRenderer();
+    if (r && r->IsInitialized())
     {
-        // 1. Scripting Phase
-        Engine_Script_UpdateAll(dt);
-        Engine_Script_EndCurrentMode();
-        scriptEndTime = (double)clock() / CLOCKS_PER_SEC;
-
-        // 2. Renderer Phase (CPU-side transforms)
-        Renderer* r = Engine_GetRenderer();
-        if (r && r->IsInitialized())
-            r->Render();
-
+        r->BeginFrame();
+        r->Render();
         Engine_DrawDebugOverlay();
+        r->EndFrame();
     }
 
     renderEndTime = (double)clock() / CLOCKS_PER_SEC;
-    EndDrawing(); // 3. GPU Sync Phase
 
     double frameEndTime = (double)clock() / CLOCKS_PER_SEC;
 
@@ -375,7 +374,7 @@ void EngineUpdate()
     Engine_Script_FrameTick();
 }
 
-bool EngineExited() { return WindowShouldClose() || s_ExitRequested; }
+bool EngineExited() { return s_ExitRequested; }
 
 void EngineStop() { Engine_Close(); }
 

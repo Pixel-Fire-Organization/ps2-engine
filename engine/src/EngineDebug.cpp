@@ -4,10 +4,11 @@
 #include <ctime>
 #include <float.h>
 #include <malloc.h>
-#include <raylib.h>
 #include "Engine.h"
 #include "EngineInput.h"
 #include "graphics/DrawList.h"
+#include "graphics/Renderer.h"
+#include "graphics/Renderer.h"
 
 static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
                                           "+,-./01234\n" /* 43-52  */
@@ -64,7 +65,6 @@ static void CustomLog(int logLevel, const char* text, va_list args)
 
 void Engine_InitDebug()
 {
-    SetTraceLogCallback(CustomLog);
     Engine_LogInfo("Engine Debug initialized.");
 }
 
@@ -86,39 +86,30 @@ void Engine_LogError(const char* text, ...)
 
 void Engine_DrawDebugOverlay()
 {
-    if (!s_DebugOverlayVisible)
-        return;
-
-    DrawFPS(10, 10);
-
-    DrawText("System: PS2 Raylib Engine", 10, 30, 20, GREEN);
-    Engine_DrawAsciiTable();
+    Renderer* r = Engine_GetRenderer();
+    if (r)
+        r->DrawDebugOverlay();
 }
 
-void Engine_DrawAsciiTable() { DrawText(ASCII_TABLE_STR, 10, 60, 20, RED); }
+void Engine_DrawAsciiTable() {}
 
 void Engine_Panic(const char* message)
 {
 #ifdef DEBUG
     Engine_LogError("!!! PS2 PANIC !!! %s", message);
 
-    if (!Engine_Is_GFX_Initialized())
+    // Draw a red panic screen with the active renderer (PS2GL or GIFTAG). Both
+    // implement the BeginFrame/ClearFrame/DrawRect2D/EndFrame panic path.
+    Renderer* currentRenderer = Engine_GetRenderer();
+    if (currentRenderer && currentRenderer->IsInitialized())
     {
-        InitWindow(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, "PS2 Engine");
-    }
-
-    while (!IsWindowReady())
-        ;
-
-    while (!WindowShouldClose())
-    {
-        BeginDrawing();
-        ClearBackground(RED);
-        DrawText("PS2 ENGINE PANIC", PANIC_UI_PADDING, PANIC_UI_PADDING, PANIC_UI_FONT_SIZE_TITLE, WHITE);
-        DrawText("UNRECOVERABLE ERROR:", PANIC_UI_PADDING, 100, PANIC_UI_FONT_SIZE_SUBTITLE, YELLOW);
-        DrawText(message, PANIC_UI_PADDING, 140, PANIC_UI_FONT_SIZE_BODY, WHITE);
-        DrawText("HALTING EMOTION ENGINE...", PANIC_UI_PADDING, 200, PANIC_UI_FONT_SIZE_FOOTER, LIGHTGRAY);
-        EndDrawing();
+        while (true)
+        {
+            currentRenderer->BeginFrame();
+            currentRenderer->ClearFrame(Color3{1.0f, 0.0f, 0.0f});
+            currentRenderer->DrawRect2D(PANIC_UI_PADDING, PANIC_UI_PADDING, 320, 80, Color3{1.0f, 1.0f, 1.0f});
+            currentRenderer->EndFrame();
+        }
     }
 #else
     UNUSED_VAR(message);
