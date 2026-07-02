@@ -3,6 +3,13 @@
 #include "graphics/Renderer.h"
 #include <cstddef>
 
+// Renderer backend selection. Chosen at build time via a CMake compile define
+// (-DRENDERER_BACKEND_PS2GL or -DRENDERER_BACKEND_GIFTAG). Default to the PS2GL
+// backend if neither was supplied so a bare compile still links a renderer.
+#if !defined(RENDERER_BACKEND_PS2GL) && !defined(RENDERER_BACKEND_GIFTAG)
+    #define RENDERER_BACKEND_PS2GL 1
+#endif
+
 typedef struct
 {
     const char* windowTitle;

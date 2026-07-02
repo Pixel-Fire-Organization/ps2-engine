@@ -1,14 +1,20 @@
 #include <cstdlib>
 #include <malloc.h>
-#include <raylib.h>
 #include "Engine.h"
 
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include "EngineInput.h"
-#include "graphics/RaylibRenderer.h"
 #include "graphics/Renderer.h"
+
+// Select the renderer backend at compile time. EngineCore.h (via Engine.h above)
+// defaults RENDERER_BACKEND_PS2GL when no backend define was supplied.
+#ifdef RENDERER_BACKEND_GIFTAG
+    #include "graphics/TagRenderer.h"
+#else
+    #include "graphics/GLRenderer.h"
+#endif
 
 static void* s_UnifiedArenaBlock = nullptr;
 static Renderer* g_Renderer = nullptr;
@@ -54,7 +60,18 @@ bool Engine_Init(EngineConfig config)
     Engine_PoolInitMain(poolMem, MEM_POOL_MAIN_SIZE, MEM_POOL_CHUNK_SIZE);
     Engine_LogInfo("Segmented Arena Allocated: %zu bytes", totalArenaSize);
 
-    g_Renderer = new RaylibRenderer(config);
+#ifdef RENDERER_BACKEND_GIFTAG
+    g_Renderer = new TagRenderer(config);
+    Engine_LogInfo("Engine initialized with GIFTAG renderer.");
+#else
+    g_Renderer = new GLRenderer(config);
+    Engine_LogInfo("Engine initialized with PS2GL renderer.");
+#endif
+    if (!g_Renderer || !g_Renderer->IsInitialized())
+    {
+        Engine_Panic("Renderer failed to initialize");
+        return false;
+    }
 
     Engine_LogInfo("Initializing Game pad at port 0");
     if (!InitPad(0, true))
