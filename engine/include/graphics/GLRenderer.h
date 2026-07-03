@@ -14,6 +14,10 @@ class GLRenderer final : public Renderer
     // True between BeginFrame() and EndFrame() — i.e. inside the ps2gl geometry
     // block. Guards ClearFrame(): a clear may only be recorded while a block is open.
     bool m_inFrame = false;
+    // Set until the first frame has been dispatched. pglFinishRenderingGeometry
+    // waits on a completion semaphore that only a prior pglRenderGeometry signals,
+    // so it must be skipped on the very first EndFrame or it would block forever.
+    bool m_firstFrame = true;
 
     float* m_megaBatch = nullptr;
 

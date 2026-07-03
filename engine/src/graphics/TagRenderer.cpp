@@ -174,8 +174,13 @@ TagRenderer::TagRenderer(const EngineConfig& config)
     dma_channel_initialize(DMA_CHANNEL_GIF, nullptr, 0);
     dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
-    m_geom = packet2_create(GFX_GIFTAG_PACKET_QWORDS, P2_TYPE_NORMAL, P2_MODE_CHAIN, 0);
-    m_env = packet2_create(64, P2_TYPE_NORMAL, P2_MODE_CHAIN, 0);
+    // P2_MODE_NORMAL: both packets are flat GIFtag+data content (no embedded
+    // DMA chain tags), sent as a single contiguous transfer to the GIF channel.
+    // P2_MODE_CHAIN would require each block to start with a dma_tag_t, which
+    // we do not write — using it here would make the DMAC misparse our GIFtags
+    // as chain tags.
+    m_geom = packet2_create(GFX_GIFTAG_PACKET_QWORDS, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
+    m_env = packet2_create(64, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
     if (!m_geom || !m_env)
     {
         Engine_LogError("TagRenderer: failed to create packets.");
@@ -183,10 +188,10 @@ TagRenderer::TagRenderer(const EngineConfig& config)
     }
 
     // --- transform scratch ---
-    m_clip = static_cast<float*>(memalign(16, sizeof(float) * 4 * GFX_GIFTAG_MAX_VERTS));
     m_xyz = static_cast<xyz_t*>(memalign(16, sizeof(xyz_t) * GFX_GIFTAG_MAX_VERTS));
     m_srcIdx = static_cast<uint32_t*>(memalign(16, sizeof(uint32_t) * GFX_GIFTAG_MAX_VERTS));
-    if (!m_clip || !m_xyz || !m_srcIdx)
+    m_q = static_cast<float*>(memalign(16, sizeof(float) * GFX_GIFTAG_MAX_VERTS));
+    if (!m_xyz || !m_srcIdx || !m_q)
     {
         Engine_Panic("TagRenderer: out of memory for transform scratch");
         return;
@@ -214,12 +219,12 @@ void TagRenderer::Shutdown()
     if (m_env)
         packet2_free(m_env);
     m_geom = m_env = nullptr;
-    free(m_clip);
     free(m_xyz);
     free(m_srcIdx);
-    m_clip = nullptr;
+    free(m_q);
     m_xyz = nullptr;
     m_srcIdx = nullptr;
+    m_q = nullptr;
     m_drawLists.Shutdown();
     graph_shutdown();
     m_initialized = false;
@@ -279,7 +284,7 @@ void TagRenderer::BeginFrame()
 
     // Draw environment for the current back buffer + clear.
     packet2_update(m_geom, draw_setup_environment(m_geom->next, 0, &m_frame[m_drawBuffer], &m_z));
-    packet2_update(m_geom, draw_primitive_xyzoffset(m_geom->next, 0, 2048 - (GFX_SCREEN_WIDTH / 2), 2048 - (GFX_SCREEN_HEIGHT / 2)));
+    packet2_update(m_geom, draw_primitive_xyoffset(m_geom->next, 0, 2048 - (GFX_SCREEN_WIDTH / 2), 2048 - (GFX_SCREEN_HEIGHT / 2)));
 
     const int cr = static_cast<int>(m_clearColor.r * 255.0f);
     const int cg = static_cast<int>(m_clearColor.g * 255.0f);
@@ -471,6 +476,7 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, const f
             m_xyz[emitted].y = static_cast<uint16_t>(sy * 16.0f);
             m_xyz[emitted].z = static_cast<uint32_t>((1.0f - zc) * TAG_Z_MAX); // invert for GEQUAL
             m_srcIdx[emitted] = tri + j;
+            m_q[emitted] = inv; // 1/clip.w — reused for perspective-correct ST below
             ++emitted;
         }
     }
@@ -486,7 +492,8 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, const f
     const uint8_t r = static_cast<uint8_t>(color.r * 255.0f);
     const uint8_t g = static_cast<uint8_t>(color.g * 255.0f);
     const uint8_t b = static_cast<uint8_t>(color.b * 255.0f);
-    const uint64_t rgbaq = static_cast<uint64_t>(r) | (static_cast<uint64_t>(g) << 8) | (static_cast<uint64_t>(b) << 16) | (static_cast<uint64_t>(0x80) << 24) | (FloatBits(1.0f) << 32);
+    // RGB+A packed once; Q (bits 32-63) varies per vertex below.
+    const uint64_t rgbaLo = static_cast<uint64_t>(r) | (static_cast<uint64_t>(g) << 8) | (static_cast<uint64_t>(b) << 16) | (static_cast<uint64_t>(0x80) << 24);
 
     // PRIM: triangle(3), gouraud(IIP bit3), texture(TME bit4 if textured).
     const uint32_t prim = 3u | (1u << 3) | (textured ? (1u << 4) : 0u);
@@ -499,12 +506,16 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, const f
 
     for (uint32_t k = 0; k < emitted; ++k)
     {
+        const float q = m_q[k];
         if (textured)
         {
+            // GS ST mode expects S=u/w, T=v/w (i.e. pre-divided by the same Q used
+            // for the RGBAQ below); the rasterizer multiplies back by 1/Q per pixel
+            // to recover perspective-correct texture coordinates.
             const float* uv = uvs + m_srcIdx[k] * 2;
-            packet2_add_u64(m_geom, FloatBits(uv[0]) | (FloatBits(uv[1]) << 32));
+            packet2_add_u64(m_geom, FloatBits(uv[0] * q) | (FloatBits(uv[1] * q) << 32));
         }
-        packet2_add_u64(m_geom, rgbaq);
+        packet2_add_u64(m_geom, rgbaLo | (FloatBits(q) << 32));
         uint64_t xyzWord;
         std::memcpy(&xyzWord, &m_xyz[k], sizeof(xyzWord));
         packet2_add_u64(m_geom, xyzWord);
@@ -532,7 +543,16 @@ void TagRenderer::BindTexture(uint32_t textureId)
     tb.info.components = TEXTURE_COMPONENTS_RGBA;
     tb.info.function = TEXTURE_FUNCTION_MODULATE;
 
-    packet2_update(m_geom, draw_texture_sampling(m_geom->next, 0, &tb));
+    lod_t lod;
+    lod.calculation = LOD_USE_K; // fixed level (no mipmaps baked yet)
+    lod.max_level = 0;
+    lod.mag_filter = LOD_MAG_LINEAR;
+    lod.min_filter = LOD_MIN_LINEAR;
+    lod.mipmap_select = LOD_MIPMAP_REGISTER;
+    lod.l = 0;
+    lod.k = 0.0f;
+
+    packet2_update(m_geom, draw_texture_sampling(m_geom->next, 0, &lod));
     packet2_update(m_geom, draw_texturebuffer(m_geom->next, 0, &tb, nullptr));
 }
 

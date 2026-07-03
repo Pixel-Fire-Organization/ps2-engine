@@ -39,9 +39,9 @@ class TagRenderer final : public Renderer
     packet2_t* m_env = nullptr;
 
     // EE transform scratch (sized to the per-frame vertex cap).
-    float* m_clip = nullptr; // 4 floats (clip x/y/z/w) per source vertex
     xyz_t* m_xyz = nullptr; // GS fixed-point xyz per emitted vertex
     uint32_t* m_srcIdx = nullptr; // source vertex index per emitted vertex (for UVs)
+    float* m_q = nullptr; // 1/clip.w per emitted vertex — GS perspective-correct factor
 
     // Simple GS-VRAM bump allocator for textures (words), after frame/z buffers.
     uint32_t m_vramTexNext = 0;
