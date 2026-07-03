@@ -8,7 +8,17 @@
 #include "EngineInput.h"
 #include "graphics/DrawList.h"
 #include "graphics/Renderer.h"
-#include "graphics/Renderer.h"
+
+// Internal log severity levels for CustomLog(). Previously these matched
+// raylib's TraceLogLevel by name (CustomLog was installed as its trace
+// callback); now that raylib is gone they are just this file's own scheme.
+enum
+{
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARNING,
+    LOG_ERROR
+};
 
 static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
                                           "+,-./01234\n" /* 43-52  */

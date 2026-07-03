@@ -314,11 +314,19 @@ void GLRenderer::EndFrame()
 {
     FlushRects2D();
 
+    // Order matches the ps2glut reference loop. ps2gl double-buffers the DMA
+    // packet: pglRenderGeometry() sends LastPacket, and pglSwapBuffers() is what
+    // moves the packet we just recorded (CurPacket) into LastPacket — so Render
+    // must come AFTER Swap. pglFinishRenderingGeometry() waits on the previous
+    // frame's completion signal, so it is skipped on the very first frame (nothing
+    // has been dispatched yet) to avoid blocking forever.
     pglEndGeometry();
-    pglRenderGeometry();
-    pglFinishRenderingGeometry(PGL_DONT_FORCE_IMMEDIATE_STOP);
+    if (!m_firstFrame)
+        pglFinishRenderingGeometry(PGL_DONT_FORCE_IMMEDIATE_STOP);
+    m_firstFrame = false;
     pglWaitForVSync();
     pglSwapBuffers();
+    pglRenderGeometry();
     m_inFrame = false;
 }
 
