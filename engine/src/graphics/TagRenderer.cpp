@@ -302,6 +302,7 @@ void TagRenderer::BeginFrame()
 {
     m_inFrame = true;
     m_frameVertsUsed = 0;
+    m_frameDroppedObjects = 0;
     m_lastBoundTex = 0;
     m_frameStats = DrawStats{};
 
@@ -322,6 +323,9 @@ void TagRenderer::BeginFrame()
 void TagRenderer::EndFrame()
 {
     FlushRects2D();
+
+    if (m_frameDroppedObjects > 0)
+        Engine_LogError("TagRenderer: dropped %u object(s) this frame (geometry budget exceeded).", m_frameDroppedObjects);
 
     // Finish this frame's chain (GS FINISH signal at the end).
     packet2_update(m_geom, draw_finish(m_geom->next));
@@ -495,8 +499,7 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, int com
     if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS)
         || !PacketHasSpace(WorstCaseQwords(vertexCount)))
     {
-        Engine_LogError("TagRenderer: geometry budget exceeded (verts %u, packet %u qw); dropping object.",
-            m_frameVertsUsed, static_cast<unsigned>(m_geom->next - m_geom->base));
+        ++m_frameDroppedObjects; // logged once per frame in EndFrame, not per object
         m_frameStats.trisCulled += vertexCount / 3;
         return;
     }
@@ -753,8 +756,7 @@ void TagRenderer::DrawStrip(const float mvp[16], const float* verts, int compone
     if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS)
         || !PacketHasSpace(WorstCaseQwords(vertexCount)))
     {
-        Engine_LogError("TagRenderer: geometry budget exceeded (verts %u, packet %u qw); dropping strip.",
-            m_frameVertsUsed, static_cast<unsigned>(m_geom->next - m_geom->base));
+        ++m_frameDroppedObjects; // logged once per frame in EndFrame, not per object
         m_frameStats.trisCulled += vertexCount - 2;
         return;
     }

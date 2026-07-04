@@ -108,6 +108,7 @@ class TagRenderer final : public Renderer
     uint16_t m_rect2DCount = 0;
 
     uint16_t m_frameVertsUsed = 0;
+    uint16_t m_frameDroppedObjects = 0; // objects dropped this frame (budget); logged once/frame
 
     // EE backface culling for the triangle-list path (primitives + list-topology
     // models). Strips are left uncull ed — the GS Z-rejects their backfaces.

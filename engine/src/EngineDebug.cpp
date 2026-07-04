@@ -149,6 +149,17 @@ void Engine_PerfLogger_Tick()
     if (!s_PerfLoggerEnabled)
         return;
 
+    // Heartbeat: one compact line every 50 frames (~1/s at 50fps). After a hang
+    // the last heartbeat pins the frame/time of death and shows the heap trend.
+    const uint32_t frame = Engine_Script_GetFrameCount();
+    if (frame != 0 && (frame % 50u) == 0u)
+    {
+        size_t heapUsed = 0;
+        Engine_GetHeapStats(nullptr, &heapUsed, nullptr);
+        Engine_LogInfo("[HB] frame=%u t=%.1fs heap=%zuKB fps=%.1f",
+                       frame, Engine_GetTotalTime(), heapUsed / 1024, Engine_GetFPS());
+    }
+
     // Combo 1: L1+L2+R1+R2 (Console Snapshot)
     const bool snapshotNow =
         IsGamePadButtonPressed(0, GamePadButton::L1) && IsGamePadButtonPressed(0, GamePadButton::L2) && IsGamePadButtonPressed(0, GamePadButton::R1) && IsGamePadButtonPressed(0, GamePadButton::R2);
