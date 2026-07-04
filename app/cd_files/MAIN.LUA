@@ -139,7 +139,8 @@ function OnUpdate(dt)
             end
         end
     else
-        graphics.draw_cube(cubeX, cubeY, cubeZ, 2.0, { 220, 60, 60, 255 })
+        -- Numeric colour args (no per-frame table allocation while loading).
+        graphics.draw_cube(cubeX, cubeY, cubeZ, 2.0, 220, 60, 60)
     end
 end
 
