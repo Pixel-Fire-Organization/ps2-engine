@@ -645,6 +645,31 @@ static int Lua_Engine_LoadScript(lua_State* L)
     return 1;
 }
 
+// Read a primitive color starting at stack index `arg`. Two accepted forms:
+//   * three (optionally four) numeric args  r, g, b [, a]   — the fast path used
+//     by the hot draw loops: plain lua_tonumber reads, no table probes/pops.
+//   * a single {r, g, b [, a]} table                        — kept for scripts
+//     that still pass a color table.
+// Missing / non-numeric args default to opaque white. Components are 0..255.
+static Color3 Lua_ReadColorArgs(lua_State* L, int arg)
+{
+    Color3 color = {1.f, 1.f, 1.f};
+    if (lua_isnumber(L, arg))
+    {
+        color.r = static_cast<float>(lua_tonumber(L, arg)) / 255.f;
+        color.g = static_cast<float>(lua_tonumber(L, arg + 1)) / 255.f;
+        color.b = static_cast<float>(lua_tonumber(L, arg + 2)) / 255.f;
+    }
+    else if (lua_istable(L, arg))
+    {
+        lua_geti(L, arg, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, arg, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_geti(L, arg, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
+        lua_pop(L, 3);
+    }
+    return color;
+}
+
 // Graphics
 static int Lua_Graphics_Clear(lua_State* L)
 {
@@ -701,23 +726,14 @@ static int Lua_Graphics_DrawRect(lua_State* L)
     return 0;
 }
 
+// graphics.draw_cube(x, y, z, size [, r, g, b | {r,g,b,a}])
 static int Lua_Graphics_DrawCube(lua_State* L)
 {
     float px = static_cast<float>(luaL_checknumber(L, 1));
     float py = static_cast<float>(luaL_checknumber(L, 2));
     float pz = static_cast<float>(luaL_checknumber(L, 3));
     float sz = static_cast<float>(luaL_checknumber(L, 4));
-
-    Color3 color = {1.f, 1.f, 1.f};
-    if (lua_istable(L, 5))
-    {
-        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_pop(L, 3);
-        // alpha is ignored — Color3 has no alpha channel
-        lua_geti(L, 5, 4); lua_pop(L, 1);
-    }
+    Color3 color = Lua_ReadColorArgs(L, 5);
 
     Renderer* r = Engine_GetRenderer();
     if (r)
@@ -729,23 +745,14 @@ static int Lua_Graphics_DrawCube(lua_State* L)
     return 0;
 }
 
-// graphics.draw_sphere(x, y, z, size [, {r,g,b,a}])
+// graphics.draw_sphere(x, y, z, size [, r, g, b | {r,g,b,a}])
 static int Lua_Graphics_DrawSphere(lua_State* L)
 {
     float px = static_cast<float>(luaL_checknumber(L, 1));
     float py = static_cast<float>(luaL_checknumber(L, 2));
     float pz = static_cast<float>(luaL_checknumber(L, 3));
     float sz = static_cast<float>(luaL_checknumber(L, 4));
-
-    Color3 color = {1.f, 1.f, 1.f};
-    if (lua_istable(L, 5))
-    {
-        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_pop(L, 3);
-        lua_geti(L, 5, 4); lua_pop(L, 1);
-    }
+    Color3 color = Lua_ReadColorArgs(L, 5);
 
     Renderer* r = Engine_GetRenderer();
     if (r)
@@ -757,23 +764,14 @@ static int Lua_Graphics_DrawSphere(lua_State* L)
     return 0;
 }
 
-// graphics.draw_cylinder(x, y, z, size [, {r,g,b,a}])
+// graphics.draw_cylinder(x, y, z, size [, r, g, b | {r,g,b,a}])
 static int Lua_Graphics_DrawCylinder(lua_State* L)
 {
     float px = static_cast<float>(luaL_checknumber(L, 1));
     float py = static_cast<float>(luaL_checknumber(L, 2));
     float pz = static_cast<float>(luaL_checknumber(L, 3));
     float sz = static_cast<float>(luaL_checknumber(L, 4));
-
-    Color3 color = {1.f, 1.f, 1.f};
-    if (lua_istable(L, 5))
-    {
-        lua_geti(L, 5, 1); color.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 5, 2); color.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 5, 3); color.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_pop(L, 3);
-        lua_geti(L, 5, 4); lua_pop(L, 1);
-    }
+    Color3 color = Lua_ReadColorArgs(L, 5);
 
     Renderer* r = Engine_GetRenderer();
     if (r)
@@ -796,7 +794,7 @@ static int Lua_Graphics_DrawGrid(lua_State* L)
     return 0;
 }
 
-// graphics.draw_cube_textured(x, y, z, size, handle [, {r,g,b,a}])
+// graphics.draw_cube_textured(x, y, z, size, handle [, r, g, b | {r,g,b,a}])
 // Submits a textured cube to the renderer draw list.
 static int Lua_Graphics_DrawCubeTextured(lua_State* L)
 {
@@ -805,16 +803,7 @@ static int Lua_Graphics_DrawCubeTextured(lua_State* L)
     float pz       = static_cast<float>(luaL_checknumber(L, 3));
     float sz       = static_cast<float>(luaL_checknumber(L, 4));
     int32_t handle = static_cast<int32_t>(luaL_checkinteger(L, 5));
-
-    Color3 tint = {1.f, 1.f, 1.f};
-    if (lua_istable(L, 6))
-    {
-        lua_geti(L, 6, 1); tint.r = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 6, 2); tint.g = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_geti(L, 6, 3); tint.b = static_cast<float>(lua_tonumber(L, -1)) / 255.f;
-        lua_pop(L, 3);
-        lua_geti(L, 6, 4); lua_pop(L, 1);
-    }
+    Color3 tint = Lua_ReadColorArgs(L, 6);
 
     Renderer* r = Engine_GetRenderer();
     if (r)

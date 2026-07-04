@@ -35,10 +35,7 @@ local CFG = {
 
 local function rnd(lo, hi) return lo + math.random() * (hi - lo) end
 
--- One reusable colour scratch table per shape type avoids per-frame allocations.
-local cube_color     = {0, 0, 0, 255}
-local sphere_color   = {0, 0, 0, 255}
-local cylinder_color = {0, 0, 0, 255}
+-- Colours are passed to draw_* as numeric r,g,b args (no per-call table).
 
 local function make_flat(n, spread)
     local bx, by, bz     = {}, {}, {}
@@ -129,10 +126,8 @@ function OnUpdate(dt)
         local x   = cube_bx[i] + cube_orbitR[i] * cos_ang
         local y   = cube_by[i] + sin(t_13 + cube_phase[i]) * HEIGHT_AMP
         local z   = cube_bz[i] + cube_orbitR[i] * sin_ang
-        cube_color[1] = cube_cr[i]
-        cube_color[2] = cube_cg[i]
-        cube_color[3] = cube_cb[i]
-        draw_cube(x, y, z, cube_sz[i], cube_color)
+        -- Numeric colour args: no scratch table, no C-side table probes.
+        draw_cube(x, y, z, cube_sz[i], cube_cr[i], cube_cg[i], cube_cb[i])
     end
 
     -- -----------------------------------------------------------------------
@@ -150,10 +145,7 @@ function OnUpdate(dt)
         local x   = sph_bx[i] + sph_orbitR[i] * (2 * sin_ang * cos_ang)  -- sin(2*ang)
         local y   = sph_by[i] + cos(t_09 + sph_phase[i]) * HEIGHT_AMP * 0.7
         local z   = sph_bz[i] + sph_orbitR[i] * sin_ang
-        sphere_color[1] = sph_cr[i]
-        sphere_color[2] = sph_cg[i]
-        sphere_color[3] = sph_cb[i]
-        draw_sphere(x, y, z, sph_sz[i], sphere_color)
+        draw_sphere(x, y, z, sph_sz[i], sph_cr[i], sph_cg[i], sph_cb[i])
     end
 
     -- -----------------------------------------------------------------------
@@ -169,9 +161,6 @@ function OnUpdate(dt)
         local x   = cyl_bx[i] + cyl_orbitR[i] * cos_ang
         local y   = cyl_by[i] + sin(t_22 + cyl_phase[i]) * HEIGHT_AMP * 1.4
         local z   = cyl_bz[i] + cyl_orbitR[i] * sin(ang * 0.5)
-        cylinder_color[1] = cyl_cr[i]
-        cylinder_color[2] = cyl_cg[i]
-        cylinder_color[3] = cyl_cb[i]
-        draw_cylinder(x, y, z, cyl_sz[i], cylinder_color)
+        draw_cylinder(x, y, z, cyl_sz[i], cyl_cr[i], cyl_cg[i], cyl_cb[i])
     end
 end
