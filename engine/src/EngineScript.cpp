@@ -136,6 +136,23 @@ static void Heap_Free(void* base, size_t capacity, void* ptr)
         block->size += static_cast<uint32_t>((HEAP_HEADER_SIZE + static_cast<size_t>(nextBlock->size)));
         next = (uint8_t*)block + HEAP_HEADER_SIZE + static_cast<size_t>(block->size);
     }
+
+    // Backward coalescing: the blocks are an implicit list with no back-pointer,
+    // so walk from base to find `block`'s predecessor and absorb `block` into it
+    // if it is free. Without this, freeing in forward order leaves the heap
+    // fragmented and Heap_Alloc can fail with free space still available.
+    uint8_t* cursor = static_cast<uint8_t*>(base);
+    BlockHeader* prev = nullptr;
+    while (cursor + HEAP_HEADER_SIZE <= end)
+    {
+        BlockHeader* cur = reinterpret_cast<BlockHeader *>(cursor);
+        if (cur == block)
+            break;
+        prev = cur;
+        cursor += HEAP_HEADER_SIZE + static_cast<size_t>(cur->size);
+    }
+    if (prev && prev->free)
+        prev->size += static_cast<uint32_t>(HEAP_HEADER_SIZE + static_cast<size_t>(block->size));
 }
 
 static void* Heap_Realloc(void* base, size_t capacity, void* ptr, size_t osize, size_t nsize)

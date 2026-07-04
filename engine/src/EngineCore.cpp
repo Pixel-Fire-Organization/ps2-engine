@@ -130,6 +130,12 @@ void Engine_Update()
     s_EngineDeltaTime = (float)(currentTime - s_EngineLastTime);
     s_EngineLastTime = currentTime;
 
+    // clock() is 32-bit microseconds and wraps to 0 after ~71.6 min, which would
+    // otherwise make one frame's dt a huge negative number (teleporting anything
+    // that integrates dt). Clamp to a non-negative, sane step across the wrap.
+    if (s_EngineDeltaTime < 0.0f)
+        s_EngineDeltaTime = 0.0f;
+
     if (s_EngineDeltaTime > 0)
     {
         s_EngineFPS = 1.0f / s_EngineDeltaTime;
