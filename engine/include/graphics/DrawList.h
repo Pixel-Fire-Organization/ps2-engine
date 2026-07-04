@@ -7,7 +7,13 @@ struct DrawStats
 {
     uint16_t primitiveCount; // primitives rendered last frame
     uint16_t modelCount; // model mesh draw calls last frame (one per unindexed mesh)
-    uint16_t uniqueTextures; // unique texture IDs bound last frame (0 = untextured batch counts as 1 if any)
+    uint16_t entriesCulled; // draw entries rejected before submission (frustum cull)
+    uint16_t texBinds; // TEX0/glBindTexture writes issued last frame
+    uint32_t trisSubmitted; // triangles actually emitted to the GS / ps2gl
+    uint32_t trisCulled; // triangles dropped (near-plane, frustum, backface)
+    uint32_t vertsTransformed; // vertices run through the transform path
+    uint32_t packetQwordsUsed; // GIFTAG: geometry packet fill; PS2GL: 0
+    float gsWaitMs; // time the EE spent blocked on GS/vsync inside EndFrame
 };
 
 struct PrimitiveDrawEntry
@@ -75,6 +81,10 @@ class DrawLists
     float* m_cylNorms = nullptr;
     float* m_cylUVs = nullptr;
 
+    // Object-space bounding-sphere radius (max |v|) per primitive shape,
+    // computed from the MODEL_* tables at Init. Used for frustum culling.
+    float m_primBaseRadius[3] = {0.0f, 0.0f, 0.0f}; // cube, sphere, cylinder
+
     // De-interleave MODEL_* (stride-8: xyz|nxyz|uv) into the separated arrays
     // sub-allocated from the given renderer arena buffer.
     void ExtractPrimitiveGeometry(float* megaBatch);
@@ -106,10 +116,19 @@ public:
     void SetActiveCamera2D(const Camera2D& camera);
     CameraID GetActiveCamera3DIndex() const { return static_cast<CameraID>(activeCamera3D); }
 
+    // Sort textured primitives by texture id and models by resource id so the
+    // backends bind each texture once per run instead of per draw. Safe for the
+    // opaque + Z-tested pass; translucency (when added) needs its own ordering.
+    void SortForSubmission();
+
     void Reset(bool resetSkybox = false);
 
     // Separated geometry accessor for the given primitive type.
     PrimitiveArrays GetPrimitiveArrays(Primitive3D type) const;
+
+    // Object-space bounding-sphere radius for the given primitive type
+    // (centered at the object origin; scale it by the entry's max scale).
+    float GetPrimitiveBaseRadius(Primitive3D type) const;
 
     // Getters for Renderer
     const PrimitiveDrawEntry* GetUntexturedPrims() const { return untexturedPrims; }

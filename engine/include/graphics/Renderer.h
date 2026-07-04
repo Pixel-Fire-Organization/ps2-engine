@@ -44,9 +44,10 @@ public:
     virtual void SetActiveCamera2D(const Camera2D& camera) = 0;
 
     // --- Texture upload / release ---
-    // Upload decoded pixels to GS VRAM and return a backend handle (0 = failure).
-    // `pixels` must be 16-byte aligned; `format` selects the GS pixel storage mode.
-    virtual uint32_t UploadTexture(const void* pixels, int width, int height, PixelFormat format) = 0;
+    // Upload a decoded texture (level-0..N pixels + optional CLUT) to GS VRAM
+    // and return a backend handle (0 = failure). Pixel pointers must be 16-byte
+    // aligned; `format` selects the GS pixel storage mode.
+    virtual uint32_t UploadTexture(const TextureUpload& upload) = 0;
     // Free the GS VRAM (and any backend bookkeeping) for a previously uploaded texture.
     virtual void ReleaseTexture(uint32_t handle) = 0;
 

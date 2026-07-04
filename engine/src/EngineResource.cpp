@@ -298,12 +298,28 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
                 return;
             }
 
-            // A GS page is 64x32 texels at PSMCT32, 64x64 at PSMCT16.
-            const uint32_t pageW = GFX_GS_PAGE_WIDTH_PSM32;
-            const uint32_t pageH = (img.format == PixelFormat::RGBA16) ? 64u : GFX_GS_PAGE_HEIGHT_PSM32;
-            const uint32_t pagesW = (static_cast<uint32_t>(img.width) + pageW - 1) / pageW;
-            const uint32_t pagesH = (static_cast<uint32_t>(img.height) + pageH - 1) / pageH;
-            const uint32_t pages = pagesW * pagesH;
+            // GS page dimensions vary by pixel storage mode: 64x32 @ PSMCT32,
+            // 64x64 @ PSMCT16, 128x64 @ PSMT8. Sum pages over all mip levels;
+            // PAL8 adds one page for the CLUT.
+            uint32_t pageW, pageH;
+            switch (img.format)
+            {
+            case PixelFormat::RGBA16:
+                pageW = 64u; pageH = 64u; break;
+            case PixelFormat::PAL8:
+                pageW = 128u; pageH = 64u; break;
+            default:
+                pageW = GFX_GS_PAGE_WIDTH_PSM32; pageH = GFX_GS_PAGE_HEIGHT_PSM32; break;
+            }
+            uint32_t pages = 0;
+            for (uint8_t lvl = 0; lvl < img.mipCount; ++lvl)
+            {
+                const uint32_t w = (img.width >> lvl) ? static_cast<uint32_t>(img.width >> lvl) : 1u;
+                const uint32_t h = (img.height >> lvl) ? static_cast<uint32_t>(img.height >> lvl) : 1u;
+                pages += ((w + pageW - 1) / pageW) * ((h + pageH - 1) / pageH);
+            }
+            if (img.format == PixelFormat::PAL8)
+                pages += 1u; // CLUT
 
             if (img.width > GFX_MAX_TEXTURE_WIDTH || img.height > GFX_MAX_TEXTURE_HEIGHT || pages > GFX_MAX_TEXTURE_GS_PAGES)
             {
@@ -330,8 +346,17 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
                 return;
             }
 
+            TextureUpload upload{};
+            for (int lvl = 0; lvl < TEX_MAX_MIP_LEVELS; ++lvl)
+                upload.levelPtr[lvl] = img.levelPtr[lvl];
+            upload.mipCount = img.mipCount;
+            upload.width = img.width;
+            upload.height = img.height;
+            upload.format = img.format;
+            upload.clut = img.clut;
+
             Renderer* renderer = Engine_GetRenderer();
-            const uint32_t texId = renderer ? renderer->UploadTexture(img.pixels, img.width, img.height, img.format) : 0u;
+            const uint32_t texId = renderer ? renderer->UploadTexture(upload) : 0u;
             if (texId == 0)
             {
                 // gsPages was not yet committed to the shadow counter, so no rollback needed.
