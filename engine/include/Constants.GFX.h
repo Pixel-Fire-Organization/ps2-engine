@@ -37,6 +37,11 @@
 
 #define GFX_MAX_DRAW_LIST_LENGTH 1024
 
+// Shared clip-plane distances — both backends must build the same frustum so
+// CPU-side culling matches what the GS rasterizes.
+#define GFX_NEAR_PLANE 0.1f
+#define GFX_FAR_PLANE 1000.0f
+
 // Fixed 3D camera slots. Exactly one is the active render camera per frame;
 // scripts move/rotate slots on demand and select which one is active.
 #define GFX_MAX_CAMERAS_3D 4
@@ -47,12 +52,18 @@
 #define GFX_DRAW_CALL_BUDGET 720 // combined limit — primitives + model meshes
 
 // GIFTAG renderer (direct GS packet path) per-frame budgets. Unlike the PS2GL
-// path, vertices are transformed on the EE (via math3d) and written straight
-// into a GIF/DMA packet, so the limit is packet capacity, not draw calls.
-// Tunable starting points; the renderer drops excess geometry loudly (never a
-// silent DMA overrun). The packet is double-buffered (one in flight per frame).
-#define GFX_GIFTAG_MAX_VERTS 8000 // per-frame transformed-vertex cap
-#define GFX_GIFTAG_PACKET_QWORDS 24576 // per-frame DMA packet capacity (~384 KB ×2)
+// path, vertices are transformed on the EE and written straight into a GIF/DMA
+// packet, so the limit is packet capacity, not draw calls. The two geometry
+// packets are double-buffered: while the GS drains frame N, the EE builds frame
+// N+1 into the other packet. The renderer drops excess geometry loudly (never a
+// silent DMA overrun).
+//   Textured strip vertex = ST+RGBAQ+XYZ2 = 3 regs = 1.5 qw; 61440 qw ≈ 40k
+//   textured verts, ~960 KB per packet. packet2 qword count is u16 (<= 65535).
+#define GFX_GIFTAG_PACKET_QWORDS 61440 // per-packet DMA capacity (~960 KB)
+#define GFX_GIFTAG_PACKET_BUFFERS 2 // double-buffered geometry packets
+#define GFX_GIFTAG_MAX_VERTS 40000 // per-frame transformed-vertex cap (scratch bound)
+#define GFX_GIFTAG_XFORM_BATCH 1024 // verts per VU0 batch transform (Stage B3)
+#define GFX_GIFTAG_PACKET_MARGIN_QW 64 // headroom left free per packet
 
 // glDrawElements is a hard mError() in ps2gl; indexed meshes are skipped.
 #define GFX_MAX_MODEL_MESH_COUNT 8 // max meshes per model in DList cache

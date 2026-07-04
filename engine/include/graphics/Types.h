@@ -64,7 +64,24 @@ enum class PixelFormat : uint8_t
 {
     RGBA32, // 32-bit R8G8B8A8 — GS PSMCT32
     RGBA16, // 16-bit R5G5B5A1 — GS PSMCT16
+    PAL8, // 8-bit indexed (GS PSMT8) + 256-entry R8G8B8A8 CLUT
 };
+
+// Maximum mip levels a texture may carry (level 0 + up to 6 downsamples).
+#define TEX_MAX_MIP_LEVELS 7
+
+// One texture ready for GS upload: level-0..N pixel pointers, dimensions, pixel
+// format, and (PAL8 only) a 256-entry linear R8G8B8A8 CLUT. Pointers are into
+// the decoded TIM2 blob and must stay valid until UploadTexture returns.
+typedef struct TextureUpload
+{
+    const void* levelPtr[TEX_MAX_MIP_LEVELS]; // per-level pixel pointers; [0] required
+    uint8_t mipCount; // 1..TEX_MAX_MIP_LEVELS
+    int width; // level-0 width
+    int height; // level-0 height
+    PixelFormat format;
+    const void* clut; // 256 x u32 R8G8B8A8, null unless PAL8
+} TextureUpload;
 
 // --- Camera ------------------------------------------------------------
 
@@ -116,17 +133,26 @@ typedef struct Image
 
 // --- Mesh / Material / Model -------------------------------------------
 
-// Mesh, separated (stride-0) unindexed triangle arrays as required by ps2gl and
-// used directly by the GIFTAG packet builder. `indices` is always null for
-// baked models but retained so existing "indices != nullptr → unsupported"
-// guards remain valid.
+// Mesh primitive topology.
+#define MESH_TOPOLOGY_LIST 0
+#define MESH_TOPOLOGY_STRIP 1
+
+// Mesh, separated (stride-0) triangle arrays as required by ps2gl and used
+// directly by the GIFTAG packet builder. `indices` is always null for baked
+// models but retained so existing "indices != nullptr → unsupported" guards
+// remain valid. Positions are `vertexComponents` floats each (3 for primitives
+// and legacy v1 models, 4 for baked v2 — a 16-byte stride for VU0 / VIF).
 typedef struct Mesh
 {
-    int vertexCount; // number of vertices (triangleCount * 3)
-    float* vertices; // 3 floats per vertex
+    int vertexCount; // number of vertices (list: triangleCount*3; strip: incl. degenerates)
+    float* vertices; // vertexComponents floats per vertex
     float* normals; // 3 floats per vertex (may be null)
     float* texcoords; // 2 floats per vertex (may be null)
     unsigned short* indices; // always null for baked models
+    Vector3 boundsCenter; // object-space bounding-sphere center
+    float boundsRadius; // object-space bounding-sphere radius
+    unsigned char topology; // MESH_TOPOLOGY_LIST or MESH_TOPOLOGY_STRIP
+    unsigned char vertexComponents; // floats per position (3 or 4)
 } Mesh;
 
 #define MATERIAL_MAP_DIFFUSE 0
@@ -156,4 +182,6 @@ typedef struct Model
     Mesh* meshes; // meshes array
     Material* materials; // materials array
     int* meshMaterial; // material index per mesh (may be null → material 0)
+    Vector3 boundsCenter; // object-space bounding sphere over all meshes
+    float boundsRadius;
 } Model;

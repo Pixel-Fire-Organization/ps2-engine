@@ -20,6 +20,7 @@ add_library(ps2_engine STATIC
         src/graphics/ModelLoad.cpp
         src/graphics/Transform3D.cpp
         src/graphics/DrawList.cpp
+        src/graphics/Frustum.cpp
 
         # Headers
         include/Engine.h
@@ -40,6 +41,7 @@ add_library(ps2_engine STATIC
         include/graphics/Types.h
         include/graphics/UI.h
         include/graphics/DrawList.h
+        include/graphics/Frustum.h
         include/graphics/GLRenderer.h
         include/graphics/TagRenderer.h
         include/graphics/tim2.h

@@ -2,6 +2,7 @@
 
 #include "DrawList.h"
 #include "EngineCore.h"
+#include "Frustum.h"
 #include "Renderer.h"
 
 // PS2GL renderer — renders through the ps2gl library (an OpenGL 1.1 subset that
@@ -45,18 +46,38 @@ class GLRenderer final : public Renderer
     uint16_t m_rect2DCount = 0;
 
     uint16_t m_frameDrawCallsUsed = 0;
-    uint16_t m_framePrimCount = 0;
-    uint16_t m_frameModelMeshCount = 0;
+
+    // Per-frame throughput counters; snapshotted into DrawLists at EndFrame so
+    // the PerfLogger sees a complete frame (including the measured GS wait).
+    DrawStats m_frameStats{};
+
+    // CPU-side view frustum for this frame, rebuilt in Render() from the same
+    // fovy/near/far fed to glFrustum so culling matches what the GS draws.
+    FrustumPlanes m_frustum{};
 
     struct ModelDListEntry
     {
         int32_t resourceId = -1;
         unsigned int handles[GFX_MAX_MODEL_MESH_COUNT];
+        int vertexCounts[GFX_MAX_MODEL_MESH_COUNT]; // for triangle throughput stats
+        uint8_t topologies[GFX_MAX_MODEL_MESH_COUNT]; // MESH_TOPOLOGY_* per mesh
         uint8_t meshCount = 0;
     };
 
     ModelDListEntry m_modelDListCache[GFX_MAX_CACHED_MODELS]{};
     uint8_t m_modelDListCacheCount = 0;
+
+    // Retained copies of uploaded texture pixels. ps2gl keeps the caller's
+    // glTexImage2D pointer and re-reads it when a texture is evicted from GS
+    // VRAM, but the resource loader hands us pixels in a shared, recycled IO
+    // buffer — so we copy them into our own allocation and free it on release.
+    static constexpr uint16_t GL_MAX_TEXTURES = 64;
+    struct GLTexEntry
+    {
+        unsigned int name; // GL texture name (0 = free slot)
+        void* pixels; // owned copy handed to glTexImage2D
+    };
+    GLTexEntry m_texRegistry[GL_MAX_TEXTURES]{};
 
     ModelDListEntry* FindOrCompileModelDLists(const Model* model, int32_t resourceId);
     void ClearModelDListCache();
@@ -109,7 +130,7 @@ public:
     void SetActiveCamera3D(CameraID id) override;
     void SetActiveCamera2D(const Camera2D& camera) override;
 
-    uint32_t UploadTexture(const void* pixels, int width, int height, PixelFormat format) override;
+    uint32_t UploadTexture(const TextureUpload& upload) override;
     void ReleaseTexture(uint32_t handle) override;
 
     bool IsInitialized() const override;

@@ -16,10 +16,24 @@
 //   BakedMeshEntry   [meshCount]
 //   BakedMaterialEntry [materialCount]
 //   <geometry payload>   (referenced by absolute byte offset from file start)
+//
+// Version 2 changes vs. version 1:
+//   * Positions are baked as vec4 (x, y, z, 1) — a 16-byte stride that feeds
+//     glVertexPointer(4,...), VU0 calculate_vertices, and (later) VIF UNPACK
+//     V4-32 in place with no per-frame repack.
+//   * Each mesh may be a triangle STRIP (degenerate-stitched, one strip/mesh)
+//     or a triangle LIST (fallback), selected by `topology`.
+//   * Each mesh carries a baked object-space bounding sphere for frustum cull.
+// The loader still accepts version 1 (vec3 list geometry, bounds derived at load).
 // ---------------------------------------------------------------------------
 
 #define BAKED_MODEL_MAGIC 0x324D4B42u // "BKM2" little-endian
-#define BAKED_MODEL_VERSION 1u
+#define BAKED_MODEL_VERSION 2u
+#define BAKED_MODEL_VERSION_LEGACY 1u
+
+// Mesh primitive topology (matches MESH_TOPOLOGY_* in Types.h).
+#define BAKED_TOPOLOGY_LIST 0u
+#define BAKED_TOPOLOGY_STRIP 1u
 
 struct BakedModelHeader
 {
@@ -29,7 +43,8 @@ struct BakedModelHeader
     uint32_t materialCount;
 };
 
-struct BakedMeshEntry
+// Version 1 mesh entry (24 bytes) — vec3 positions, triangle list only.
+struct BakedMeshEntryV1
 {
     uint32_t vertexCount; // triangleCount * 3 (unindexed)
     uint32_t materialIndex; // index into the material table (0 if none)
@@ -37,6 +52,20 @@ struct BakedMeshEntry
     uint32_t normsOffset; // byte offset to 3*float*vertexCount (0 = none)
     uint32_t uvsOffset; // byte offset to 2*float*vertexCount (0 = none)
     uint32_t reserved;
+};
+
+// Version 2 mesh entry (48 bytes) — vec4 positions, strip-or-list + bounds.
+struct BakedMeshEntry
+{
+    uint32_t vertexCount; // strip: total incl. degenerates; list: triangleCount*3
+    uint32_t materialIndex; // index into the material table (0 if none)
+    uint32_t vertsOffset; // byte offset to 4*float*vertexCount (x,y,z,1) (required)
+    uint32_t normsOffset; // byte offset to 3*float*vertexCount (0 = none)
+    uint32_t uvsOffset; // byte offset to 2*float*vertexCount (0 = none)
+    uint32_t topology; // BAKED_TOPOLOGY_LIST or BAKED_TOPOLOGY_STRIP
+    float boundsCenter[3]; // object-space bounding-sphere center
+    float boundsRadius; // object-space bounding-sphere radius
+    uint32_t reserved[2];
 };
 
 struct BakedMaterialEntry

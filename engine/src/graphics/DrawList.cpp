@@ -1,5 +1,8 @@
 #include "../include/graphics/DrawList.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include "../include/graphics/PrimitiveGeometry.h"
 #include "EngineDebug.h"
 
@@ -94,7 +97,36 @@ void DrawLists::ExtractPrimitiveGeometry(float* megaBatch)
     extract(MODEL_SPHERE, PRIMITIVE_SPHERE_VERTEX_COUNT, m_sphereVerts, m_sphereNorms, m_sphereUVs);
     extract(MODEL_CYLINDER, PRIMITIVE_CYLINDER_VERTEX_COUNT, m_cylVerts, m_cylNorms, m_cylUVs);
 
+    // Bounding-sphere radius per shape (max |v| — primitives are origin-centered).
+    auto maxRadius = [](const float* verts, uint32_t count) {
+        float best = 0.0f;
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const float* v = verts + i * 3;
+            const float l2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+            if (l2 > best)
+                best = l2;
+        }
+        return std::sqrt(best);
+    };
+    m_primBaseRadius[0] = maxRadius(m_cubeVerts, PRIMITIVE_CUBE_VERTEX_COUNT);
+    m_primBaseRadius[1] = maxRadius(m_sphereVerts, PRIMITIVE_SPHERE_VERTEX_COUNT);
+    m_primBaseRadius[2] = maxRadius(m_cylVerts, PRIMITIVE_CYLINDER_VERTEX_COUNT);
+
     Engine_LogInfo("DrawLists: Separated primitive geometry extracted (cube/sphere/cylinder).");
+}
+
+float DrawLists::GetPrimitiveBaseRadius(Primitive3D type) const
+{
+    switch (type)
+    {
+    case Primitive3D::Sphere:
+        return m_primBaseRadius[1];
+    case Primitive3D::Cylinder:
+        return m_primBaseRadius[2];
+    default:
+        return m_primBaseRadius[0];
+    }
 }
 
 PrimitiveArrays DrawLists::GetPrimitiveArrays(Primitive3D type) const
@@ -189,6 +221,20 @@ void DrawLists::SetActiveCamera3D(CameraID id)
 }
 
 void DrawLists::SetActiveCamera2D(const Camera2D& camera) { camera2D = camera; }
+
+void DrawLists::SortForSubmission()
+{
+    if (texturedCount > 1)
+    {
+        std::sort(texturedPrims, texturedPrims + texturedCount,
+                  [](const PrimitiveDrawEntry& a, const PrimitiveDrawEntry& b) { return a.textureId < b.textureId; });
+    }
+    if (modelCount > 1)
+    {
+        std::sort(models, models + modelCount,
+                  [](const ModelDrawEntry& a, const ModelDrawEntry& b) { return a.resourceId < b.resourceId; });
+    }
+}
 
 void DrawLists::Reset(const bool resetSkybox)
 {

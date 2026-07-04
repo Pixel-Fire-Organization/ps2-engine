@@ -219,20 +219,24 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] Script Logic      : %5.2f ms", logicMs);
     Engine_LogInfo("[PERF] C++ Render        : %5.2f ms", renderMs);
     Engine_LogInfo("[PERF] GPU Wait (Vsync)  : %5.2f ms", waitMs);
+    Engine_LogInfo("[PERF] GS Wait (EndFrame): %5.2f ms", ds.gsWaitMs);
     Engine_LogInfo("[PERF] Total Frame Time  : %5.2f ms", totalMs);
 
-    // Estimates based on vertex throughput (40k vert mega-batch = ~30% VU1/DMA load at 60fps)
-    uint32_t totalVerts = ds.primitiveCount * 120; // Avg verts per prim
-    float dmaBytes = (totalVerts * 32.0f) / 1024.0f; // 32 bytes per vertex (pos+norm+tex+color)
-
-    Engine_LogInfo("[PERF] DMA Payload       : %.1f KB", dmaBytes);
-    Engine_LogInfo("[PERF] VU1 Transform     : %.1f %%", (totalVerts / 80000.0f) * 100.0f);
-    Engine_LogInfo("[PERF] IOP / SPU2        : [IDLE]");
+    Engine_LogInfo("[PERF] --- Renderer Throughput (measured) ---");
+    Engine_LogInfo("[PERF] Tris submitted    : %u", ds.trisSubmitted);
+    Engine_LogInfo("[PERF] Tris culled       : %u", ds.trisCulled);
+    Engine_LogInfo("[PERF] Verts transformed : %u", ds.vertsTransformed);
+    Engine_LogInfo("[PERF] Texture binds     : %u", ds.texBinds);
+    if (ds.packetQwordsUsed > 0)
+    {
+        Engine_LogInfo("[PERF] GIF packet        : %u / %u qwords (%.1f KB)", ds.packetQwordsUsed,
+            static_cast<unsigned>(GFX_GIFTAG_PACKET_QWORDS), (ds.packetQwordsUsed * 16.0f) / 1024.0f);
+    }
 
     Engine_LogInfo("[PERF] --- Draw Lists ---");
     Engine_LogInfo("[PERF] Primitives        : %u / %d", ds.primitiveCount, GFX_MAX_DRAW_LIST_LENGTH);
     Engine_LogInfo("[PERF] Models            : %u / %d", ds.modelCount, GFX_MAX_DRAW_LIST_LENGTH);
-    Engine_LogInfo("[PERF] Texture batches   : %u", ds.uniqueTextures);
+    Engine_LogInfo("[PERF] Entries culled    : %u", ds.entriesCulled);
 
     Engine_LogInfo("[PERF] --- Camera State ---");
     Engine_LogInfo("[PERF] Pos               : (%.2f, %.2f, %.2f)", cam.position.x, cam.position.y, cam.position.z);

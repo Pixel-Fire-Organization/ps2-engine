@@ -35,6 +35,9 @@ constexpr size_t TIM2_PIC_HEADER_SIZE = 0x30;
 // TIM2 imageType values we accept.
 constexpr uint8_t TIM2_IMGTYPE_RGBA16 = 0x01; // A1B5G5R5
 constexpr uint8_t TIM2_IMGTYPE_RGBA32 = 0x03; // A8B8G8R8
+constexpr uint8_t TIM2_IMGTYPE_IDTEX8 = 0x05; // 8-bit indexed + CLUT
+
+inline size_t Align16(size_t n) { return (n + 15u) & ~static_cast<size_t>(15u); }
 } // namespace
 
 bool Tim2_Parse(const void* data, size_t size, Tim2Image* out)
@@ -79,32 +82,41 @@ bool Tim2_Parse(const void* data, size_t size, Tim2Image* out)
     const uint16_t imageWidth = ReadU16(pic + 20);
     const uint16_t imageHeight = ReadU16(pic + 22);
 
-    if (clutSize != 0)
-    {
-        Engine_LogError("TIM2: paletted images are not supported (clutSize=%u).", clutSize);
-        return false;
-    }
-    if (mipmapCount > 1)
-    {
-        Engine_LogError("TIM2: mipmaps are not supported (mipmapCount=%u).", mipmapCount);
-        return false;
-    }
-
     PixelFormat fmt;
+    uint32_t bpp; // bytes per texel for the image levels
     switch (imageType)
     {
     case TIM2_IMGTYPE_RGBA32:
         fmt = PixelFormat::RGBA32;
+        bpp = 4;
         break;
     case TIM2_IMGTYPE_RGBA16:
         fmt = PixelFormat::RGBA16;
+        bpp = 2;
+        break;
+    case TIM2_IMGTYPE_IDTEX8:
+        fmt = PixelFormat::PAL8;
+        bpp = 1;
         break;
     default:
         Engine_LogError("TIM2: unsupported imageType 0x%02X.", imageType);
         return false;
     }
 
-    // Image data starts headerSize bytes into the picture block.
+    const uint8_t mipCount = (mipmapCount == 0) ? 1 : mipmapCount;
+    if (mipCount > TEX_MAX_MIP_LEVELS)
+    {
+        Engine_LogError("TIM2: too many mip levels (%u > %d).", mipCount, TEX_MAX_MIP_LEVELS);
+        return false;
+    }
+    if (fmt == PixelFormat::PAL8 && clutSize < 256u * 4u)
+    {
+        Engine_LogError("TIM2: PAL8 image missing CLUT (clutSize=%u).", clutSize);
+        return false;
+    }
+
+    // Image data starts headerSize bytes into the picture block. Levels are
+    // stored contiguously largest-first, each 16-byte aligned (see pack_assets.py).
     const size_t imgOffset = picBase + headerSize;
     if (headerSize < TIM2_PIC_HEADER_SIZE || imgOffset + imageSize > size)
     {
@@ -112,7 +124,36 @@ bool Tim2_Parse(const void* data, size_t size, Tim2Image* out)
         return false;
     }
 
-    out->pixels = base + imgOffset;
+    std::memset(out->levelPtr, 0, sizeof(out->levelPtr));
+    size_t off = 0;
+    for (uint8_t lvl = 0; lvl < mipCount; ++lvl)
+    {
+        const uint32_t w = (imageWidth >> lvl) ? static_cast<uint32_t>(imageWidth >> lvl) : 1u;
+        const uint32_t h = (imageHeight >> lvl) ? static_cast<uint32_t>(imageHeight >> lvl) : 1u;
+        if (off + static_cast<size_t>(w) * h * bpp > imageSize)
+        {
+            Engine_LogError("TIM2: mip level %u out of bounds.", lvl);
+            return false;
+        }
+        out->levelPtr[lvl] = base + imgOffset + off;
+        off += Align16(static_cast<size_t>(w) * h * bpp);
+    }
+
+    // CLUT (PAL8) follows the image payload.
+    out->clut = nullptr;
+    if (fmt == PixelFormat::PAL8)
+    {
+        const size_t clutOffset = imgOffset + imageSize;
+        if (clutOffset + 256u * 4u > size)
+        {
+            Engine_LogError("TIM2: CLUT out of bounds.");
+            return false;
+        }
+        out->clut = base + clutOffset;
+    }
+
+    out->pixels = out->levelPtr[0];
+    out->mipCount = mipCount;
     out->width = imageWidth;
     out->height = imageHeight;
     out->format = fmt;

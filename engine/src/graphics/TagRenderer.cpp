@@ -5,15 +5,18 @@
 
 #include <cmath>
 #include <cstring>
+#include <ctime>
 #include <malloc.h>
 
 extern "C"
 {
 #include <dma.h>
 #include <gs_psm.h>
+#include <math3d.h>
 #include <packet2_utils.h>
 }
 
+#include "../include/graphics/Frustum.h"
 #include "../include/graphics/PrimitiveGeometry.h"
 #include "EngineDebug.h"
 #include "EngineMemory.h"
@@ -23,9 +26,11 @@ extern "C"
 namespace
 {
 constexpr float TAG_DEG_TO_RAD = 0.017453292519943295f;
-constexpr float TAG_NEAR = 0.1f;
-constexpr float TAG_FAR = 1000.0f;
 constexpr float TAG_W_EPS = 0.001f; // near-plane reject threshold on clip.w
+// Sign selecting which screen-space winding is a back face. +1 culls positive
+// signed area (front faces are CCW-in-NDC, negative area after the viewport
+// Y-flip). Flip to -1 if a validated scene renders inside-out.
+constexpr float TAG_BACKFACE_SIGN = 1.0f;
 constexpr float TAG_Z_MAX = 16777215.0f; // 24-bit usable Z range (GS_ZBUF_32)
 
 // GS register indices (for GIF REGLIST descriptors).
@@ -53,55 +58,23 @@ inline uint64_t FloatBits(float f)
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Matrix helpers (column-major, OpenGL convention — same as the PS2GL path).
+// Matrix helpers. View / projection / multiply come from the shared Frustum
+// helpers (column-major, OpenGL convention) so the CPU cull frustum matches
+// the rasterized geometry. Only the model matrix (with rotation/scale) is local.
 // ---------------------------------------------------------------------------
-void TagRenderer::Mult4x4(float out[16], const float a[16], const float b[16])
+namespace
 {
-    float tmp[16];
-    for (int c = 0; c < 4; ++c)
-        for (int r = 0; r < 4; ++r)
-            tmp[c * 4 + r] = a[0 * 4 + r] * b[c * 4 + 0] + a[1 * 4 + r] * b[c * 4 + 1] + a[2 * 4 + r] * b[c * 4 + 2] + a[3 * 4 + r] * b[c * 4 + 3];
-    std::memcpy(out, tmp, sizeof(tmp));
-}
-
-void TagRenderer::BuildProjMatrix(float out[16]) const
+// Compose the view-projection matrix for a camera. Single source of truth for
+// Render / RenderModels / RenderSkybox.
+void BuildViewProj(const Camera3D& camera, float vp[16])
 {
+    float view[16], proj[16];
+    Frustum_BuildLookAt(view, camera);
     const float aspect = static_cast<float>(GFX_SCREEN_WIDTH) / static_cast<float>(GFX_SCREEN_HEIGHT);
-    const float top = TAG_NEAR * std::tan(45.0f * 0.5f * TAG_DEG_TO_RAD);
-    const float right = top * aspect;
-
-    std::memset(out, 0, sizeof(float) * 16);
-    out[0] = TAG_NEAR / right;
-    out[5] = TAG_NEAR / top;
-    out[10] = -(TAG_FAR + TAG_NEAR) / (TAG_FAR - TAG_NEAR);
-    out[11] = -1.0f;
-    out[14] = -(2.0f * TAG_FAR * TAG_NEAR) / (TAG_FAR - TAG_NEAR);
+    Frustum_BuildPerspective(proj, camera.fovy, aspect, GFX_NEAR_PLANE, GFX_FAR_PLANE);
+    Frustum_Mult4x4(vp, proj, view);
 }
-
-void TagRenderer::BuildViewMatrix(float out[16], const Camera3D& camera) const
-{
-    auto sub = [](const Vector3& a, const Vector3& b) { return Vector3{a.x - b.x, a.y - b.y, a.z - b.z}; };
-    auto cross = [](const Vector3& a, const Vector3& b) {
-        return Vector3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-    };
-    auto dot = [](const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
-    auto norm = [](const Vector3& v) {
-        const float l2 = v.x * v.x + v.y * v.y + v.z * v.z;
-        if (l2 <= 0.0f)
-            return Vector3{0.0f, 0.0f, 0.0f};
-        const float inv = 1.0f / std::sqrt(l2);
-        return Vector3{v.x * inv, v.y * inv, v.z * inv};
-    };
-
-    const Vector3 fwd = norm(sub(camera.target, camera.position));
-    const Vector3 side = norm(cross(fwd, camera.up));
-    const Vector3 up = cross(side, fwd);
-
-    out[0] = side.x; out[4] = side.y; out[8] = side.z; out[12] = -dot(side, camera.position);
-    out[1] = up.x; out[5] = up.y; out[9] = up.z; out[13] = -dot(up, camera.position);
-    out[2] = -fwd.x; out[6] = -fwd.y; out[10] = -fwd.z; out[14] = dot(fwd, camera.position);
-    out[3] = 0.0f; out[7] = 0.0f; out[11] = 0.0f; out[15] = 1.0f;
-}
+} // namespace
 
 void TagRenderer::BuildModelMatrix(float out[16], const Vector3& pos, const Vector3& rot, const Vector3& scl)
 {
@@ -165,23 +138,55 @@ TagRenderer::TagRenderer(const EngineConfig& config)
     m_z.mask = 0;
     m_z.address = graph_vram_allocate(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_ZBUF_32, GRAPH_ALIGN_PAGE);
 
+    // Claim the rest of GS VRAM as a texture heap managed by our own first-fit
+    // free-list. graph returns a valid page-aligned base; we sub-allocate within.
+    {
+        const int fbWords = graph_vram_size(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_PSM_32, GRAPH_ALIGN_PAGE);
+        const int zWords = graph_vram_size(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_ZBUF_32, GRAPH_ALIGN_PAGE);
+        int remaining = GRAPH_VRAM_MAX_WORDS - (2 * fbWords + zWords) - GRAPH_ALIGN_PAGE; // page of slack
+        if (remaining < 0)
+            remaining = 0;
+        // Request the block as PSMCT32 (1 word/texel), 64 texels wide.
+        const int heapH = remaining / 64;
+        m_texHeapBase = (heapH > 0) ? static_cast<uint32_t>(graph_vram_allocate(64, heapH, GS_PSM_32, GRAPH_ALIGN_PAGE)) : 0u;
+        m_texHeapWords = (m_texHeapBase != 0u) ? static_cast<uint32_t>(heapH * 64) : 0u;
+        if (m_texHeapWords > 0)
+        {
+            m_vramExtents[0] = VramExtent{m_texHeapBase, m_texHeapWords, false};
+            m_vramExtentCount = 1;
+            Engine_LogInfo("TagRenderer: texture VRAM heap %u words (~%u KB) at 0x%X",
+                           m_texHeapWords, (m_texHeapWords * 4) / 1024, m_texHeapBase);
+        }
+        else
+        {
+            Engine_LogError("TagRenderer: no GS VRAM left for texture heap.");
+        }
+    }
+
     // --- video mode + initial display buffer ---
     graph_set_mode(GRAPH_MODE_INTERLACED, pal ? GRAPH_MODE_PAL : GRAPH_MODE_NTSC, GRAPH_MODE_FIELD, GRAPH_DISABLE);
-    graph_set_framebuffer_filtered(m_frame[0].address, m_frame[0].width, m_frame[0].psm, 0, 0);
+    // Display buffer 1 initially so the first frame (which draws into buffer 0)
+    // is never shown mid-render; EndFrame flips to it once the GS finishes.
+    graph_set_framebuffer_filtered(m_frame[1].address, m_frame[1].width, m_frame[1].psm, 0, 0);
     graph_enable_output();
+    m_drawBuffer = 0;
+    m_displayBuffer = 1;
 
     // --- DMA + packets ---
     dma_channel_initialize(DMA_CHANNEL_GIF, nullptr, 0);
     dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
-    // P2_MODE_NORMAL: both packets are flat GIFtag+data content (no embedded
-    // DMA chain tags), sent as a single contiguous transfer to the GIF channel.
+    // P2_MODE_NORMAL: packets are flat GIFtag+data content (no embedded DMA
+    // chain tags), sent as a single contiguous transfer to the GIF channel.
     // P2_MODE_CHAIN would require each block to start with a dma_tag_t, which
-    // we do not write — using it here would make the DMAC misparse our GIFtags
-    // as chain tags.
-    m_geom = packet2_create(GFX_GIFTAG_PACKET_QWORDS, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
+    // we do not write. Two geometry packets are double-buffered so the EE can
+    // build frame N+1 while the GS drains frame N.
+    for (int i = 0; i < GFX_GIFTAG_PACKET_BUFFERS; ++i)
+        m_geomBuf[i] = packet2_create(GFX_GIFTAG_PACKET_QWORDS, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
+    m_geomIndex = 0;
+    m_geom = m_geomBuf[0];
     m_env = packet2_create(64, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
-    if (!m_geom || !m_env)
+    if (!m_geomBuf[0] || !m_geomBuf[1] || !m_env)
     {
         Engine_LogError("TagRenderer: failed to create packets.");
         return;
@@ -191,11 +196,16 @@ TagRenderer::TagRenderer(const EngineConfig& config)
     m_xyz = static_cast<xyz_t*>(memalign(16, sizeof(xyz_t) * GFX_GIFTAG_MAX_VERTS));
     m_srcIdx = static_cast<uint32_t*>(memalign(16, sizeof(uint32_t) * GFX_GIFTAG_MAX_VERTS));
     m_q = static_cast<float*>(memalign(16, sizeof(float) * GFX_GIFTAG_MAX_VERTS));
-    if (!m_xyz || !m_srcIdx || !m_q)
+    m_clipBatch = memalign(16, sizeof(VECTOR) * GFX_GIFTAG_XFORM_BATCH);
+    m_vecBatch = memalign(16, sizeof(VECTOR) * GFX_GIFTAG_XFORM_BATCH);
+    if (!m_xyz || !m_srcIdx || !m_q || !m_clipBatch || !m_vecBatch)
     {
         Engine_Panic("TagRenderer: out of memory for transform scratch");
         return;
     }
+
+    // Decide whether the VU0 batch transform matches our column-major convention.
+    SelfTestVu0Transform();
 
     // Separated primitive geometry lives in the renderer arena; reserve it, then
     // let DrawLists de-interleave the MODEL_* tables into it.
@@ -214,17 +224,32 @@ TagRenderer::TagRenderer(const EngineConfig& config)
 
 void TagRenderer::Shutdown()
 {
-    if (m_geom)
-        packet2_free(m_geom);
+    // Drain any frame still owned by the GS before freeing its packet.
+    if (m_framePending)
+    {
+        dma_channel_wait(DMA_CHANNEL_GIF, 0);
+        draw_wait_finish();
+        m_framePending = false;
+    }
+    for (int i = 0; i < GFX_GIFTAG_PACKET_BUFFERS; ++i)
+    {
+        if (m_geomBuf[i])
+            packet2_free(m_geomBuf[i]);
+        m_geomBuf[i] = nullptr;
+    }
     if (m_env)
         packet2_free(m_env);
     m_geom = m_env = nullptr;
     free(m_xyz);
     free(m_srcIdx);
     free(m_q);
+    free(m_clipBatch);
+    free(m_vecBatch);
     m_xyz = nullptr;
     m_srcIdx = nullptr;
     m_q = nullptr;
+    m_clipBatch = nullptr;
+    m_vecBatch = nullptr;
     m_drawLists.Shutdown();
     graph_shutdown();
     m_initialized = false;
@@ -277,8 +302,8 @@ void TagRenderer::BeginFrame()
 {
     m_inFrame = true;
     m_frameVertsUsed = 0;
-    m_framePrimCount = 0;
-    m_frameModelMeshCount = 0;
+    m_lastBoundTex = 0;
+    m_frameStats = DrawStats{};
 
     packet2_reset(m_geom, 0);
 
@@ -298,17 +323,35 @@ void TagRenderer::EndFrame()
 {
     FlushRects2D();
 
-    // Finish + dispatch this frame's chain.
+    // Finish this frame's chain (GS FINISH signal at the end).
     packet2_update(m_geom, draw_finish(m_geom->next));
+    m_frameStats.packetQwordsUsed = static_cast<uint32_t>(m_geom->next - m_geom->base);
+
+    // Retire the previously kicked frame before touching the display. Building
+    // this frame (script + EE transform) already overlapped the GS drawing it,
+    // so this wait is only whatever GS time did not fit under that work.
+    const double waitStart = static_cast<double>(clock()) / CLOCKS_PER_SEC;
+    if (m_framePending)
+    {
+        dma_channel_wait(DMA_CHANNEL_GIF, 0); // previous packet fully transferred
+        draw_wait_finish(); // GS finished drawing the previous frame
+        graph_wait_vsync();
+        // Show the previous frame (its buffer is no longer being drawn).
+        graph_set_framebuffer_filtered(m_frame[m_displayBuffer].address, m_frame[m_displayBuffer].width,
+                                       m_frame[m_displayBuffer].psm, 0, 0);
+    }
+    m_frameStats.gsWaitMs = static_cast<float>((static_cast<double>(clock()) / CLOCKS_PER_SEC - waitStart) * 1000.0);
+
+    // Kick this frame's chain WITHOUT waiting — the GS draws it while the EE
+    // builds the next frame into the other packet.
     dma_channel_send_packet2(m_geom, DMA_CHANNEL_GIF, 1);
-    dma_channel_wait(DMA_CHANNEL_GIF, 0);
-    draw_wait_finish();
+    m_framePending = true;
+    m_displayBuffer = m_drawBuffer; // shown at the next EndFrame, once GS finishes
+    m_drawBuffer ^= 1; // next frame draws into the other buffer
+    m_geomIndex ^= 1; // and builds into the other packet (its DMA is complete)
+    m_geom = m_geomBuf[m_geomIndex];
 
-    graph_wait_vsync();
-    // Display the buffer we just drew; draw into the other next frame.
-    graph_set_framebuffer_filtered(m_frame[m_drawBuffer].address, m_frame[m_drawBuffer].width, m_frame[m_drawBuffer].psm, 0, 0);
-    m_drawBuffer ^= 1;
-
+    m_drawLists.SetLastStats(m_frameStats);
     m_inFrame = false;
 }
 
@@ -373,16 +416,17 @@ void TagRenderer::DrawGrid(int32_t slices, float spacing)
 
 void TagRenderer::Render()
 {
-    float view[16], proj[16], vp[16];
-    BuildViewMatrix(view, m_drawLists.GetCamera3D());
-    BuildProjMatrix(proj);
-    Mult4x4(vp, proj, view); // clip = P * V * (M * v)
+    m_drawLists.SortForSubmission();
+
+    const Camera3D& camera = m_drawLists.GetCamera3D();
+    float vp[16];
+    BuildViewProj(camera, vp); // clip = P * V * (M * v)
+    FrustumPlanes frustum;
+    Frustum_FromViewProj(&frustum, vp);
 
     RenderSkybox(m_drawLists);
 
-    // Store vp so Render* helpers can compose with each object's model matrix.
-    // (Passed explicitly via the DrawTriangles path below.)
-    // Primitives:
+    // Primitives (inlined here because it needs the composed view-projection).
     {
         DrawLists& lists = m_drawLists;
         const uint16_t uCount = lists.GetUntexturedCount();
@@ -391,12 +435,23 @@ void TagRenderer::Render()
         const PrimitiveDrawEntry* tPrims = lists.GetTexturedPrims();
 
         auto drawPrim = [&](const PrimitiveDrawEntry& e, uint32_t texId) {
+            // Frustum cull against the shape's object-space bounding sphere.
+            Vector3 wc;
+            float wr;
+            Frustum_WorldSphere(e.transform.GetPosition(), e.transform.GetScale(),
+                                Vector3{0.0f, 0.0f, 0.0f}, lists.GetPrimitiveBaseRadius(e.type), &wc, &wr);
+            if (!Frustum_SphereVisible(&frustum, wc, wr))
+            {
+                ++m_frameStats.entriesCulled;
+                return;
+            }
+
             const PrimitiveArrays arr = lists.GetPrimitiveArrays(e.type);
             float model[16], mvp[16];
             BuildModelMatrix(model, e.transform.GetPosition(), e.transform.GetRotation(), e.transform.GetScale());
-            Mult4x4(mvp, vp, model);
-            DrawTriangles(mvp, arr.verts, texId ? arr.uvs : nullptr, arr.vertexCount, e.color, texId);
-            ++m_framePrimCount;
+            Frustum_Mult4x4(mvp, vp, model);
+            DrawTriangles(mvp, arr.verts, 3, texId ? arr.uvs : nullptr, arr.vertexCount, e.color, texId);
+            ++m_frameStats.primitiveCount;
         };
 
         for (uint16_t i = 0; i < uCount; ++i)
@@ -413,27 +468,36 @@ void TagRenderer::Render()
     }
 
     RenderModels(m_drawLists);
-
-    DrawStats stats{};
-    stats.primitiveCount = m_framePrimCount;
-    stats.modelCount = m_frameModelMeshCount;
-    m_drawLists.SetLastStats(stats);
-
     RenderUI(m_drawLists);
     m_drawLists.Reset(false);
 }
 
+// Worst-case qwords to emit `vertexCount` textured verts: 1 qw for the
+// GIFtag+reglist header plus 3 regs/vert = 1.5 qw/vert, rounded up.
+static inline uint32_t WorstCaseQwords(uint32_t vertexCount)
+{
+    return 2u + (vertexCount * 3u + 1u) / 2u;
+}
+
+bool TagRenderer::PacketHasSpace(uint32_t qwNeeded) const
+{
+    const uint32_t used = static_cast<uint32_t>(m_geom->next - m_geom->base);
+    return used + qwNeeded + GFX_GIFTAG_PACKET_MARGIN_QW <= static_cast<uint32_t>(GFX_GIFTAG_PACKET_QWORDS);
+}
+
 // Transform + emit one unindexed triangle list.
-void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, const float* uvs,
+void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs,
                                 uint32_t vertexCount, Color3 color, uint32_t textureId)
 {
     if (!verts || vertexCount < 3)
         return;
 
-    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS))
+    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS)
+        || !PacketHasSpace(WorstCaseQwords(vertexCount)))
     {
-        Engine_LogError("TagRenderer: vertex budget exceeded (%u + %u > %u); dropping object.",
-            m_frameVertsUsed, vertexCount, static_cast<unsigned>(GFX_GIFTAG_MAX_VERTS));
+        Engine_LogError("TagRenderer: geometry budget exceeded (verts %u, packet %u qw); dropping object.",
+            m_frameVertsUsed, static_cast<unsigned>(m_geom->next - m_geom->base));
+        m_frameStats.trisCulled += vertexCount / 3;
         return;
     }
 
@@ -442,44 +506,58 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, const f
 
     for (uint32_t tri = 0; tri + 2 < vertexCount; tri += 3)
     {
-        float cw[3];
-        float nx[3], ny[3], nz[3];
+        float sx[3], sy[3], inv3[3];
+        uint32_t zc[3];
         bool ok = true;
         for (int j = 0; j < 3; ++j)
         {
-            const float* v = verts + (tri + j) * 3;
+            const float* v = verts + (tri + j) * components;
             const float x = v[0], y = v[1], z = v[2];
             const float clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
             const float clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
             const float clipZ = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
             const float clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
             if (clipW <= TAG_W_EPS)
+            {
                 ok = false;
-            cw[j] = clipW;
-            nx[j] = clipX;
-            ny[j] = clipY;
-            nz[j] = clipZ;
+                break;
+            }
+            const float inv = 1.0f / clipW;
+            sx[j] = (clipX * inv * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
+            sy[j] = (1.0f - (clipY * inv * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
+            const float ndcZ = clipZ * inv * 0.5f + 0.5f; // 0 near .. 1 far
+            zc[j] = static_cast<uint32_t>((1.0f - ndcZ) * TAG_Z_MAX); // invert for GEQUAL
+            inv3[j] = inv;
         }
         if (!ok)
             continue; // crude whole-triangle near-plane cull (no clipping yet)
 
+        // Backface cull in screen space (list path only). Front faces are CCW in
+        // NDC (the PS2GL backend renders this same geometry with GL_CULL_FACE +
+        // GL_CCW); the viewport Y-flip negates the signed area, so front faces
+        // have area < 0 here. Cull the rest.
+        if (m_backfaceCull)
+        {
+            const float area = (sx[1] - sx[0]) * (sy[2] - sy[0]) - (sx[2] - sx[0]) * (sy[1] - sy[0]);
+            if (area * TAG_BACKFACE_SIGN > 0.0f)
+                continue;
+        }
+
         for (int j = 0; j < 3; ++j)
         {
-            const float inv = 1.0f / cw[j];
-            const float ndcX = nx[j] * inv;
-            const float ndcY = ny[j] * inv;
-            const float ndcZ = nz[j] * inv;
-            const float sx = (ndcX * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
-            const float sy = (1.0f - (ndcY * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
-            const float zc = ndcZ * 0.5f + 0.5f; // 0 near .. 1 far
-            m_xyz[emitted].x = static_cast<uint16_t>(sx * 16.0f);
-            m_xyz[emitted].y = static_cast<uint16_t>(sy * 16.0f);
-            m_xyz[emitted].z = static_cast<uint32_t>((1.0f - zc) * TAG_Z_MAX); // invert for GEQUAL
+            m_xyz[emitted].x = static_cast<uint16_t>(sx[j] * 16.0f);
+            m_xyz[emitted].y = static_cast<uint16_t>(sy[j] * 16.0f);
+            m_xyz[emitted].z = zc[j];
             m_srcIdx[emitted] = tri + j;
-            m_q[emitted] = inv; // 1/clip.w — reused for perspective-correct ST below
+            m_q[emitted] = inv3[j]; // 1/clip.w — reused for perspective-correct ST below
             ++emitted;
         }
     }
+
+    const uint32_t trisIn = vertexCount / 3;
+    m_frameStats.vertsTransformed += trisIn * 3;
+    m_frameStats.trisSubmitted += emitted / 3;
+    m_frameStats.trisCulled += trisIn - emitted / 3;
 
     if (emitted == 0)
         return;
@@ -526,6 +604,225 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, const f
         packet2_add_u64(m_geom, 0);
 }
 
+// Init-time check: does math3d's VU0 calculate_vertices reproduce the exact
+// clip coordinates our scalar path computes (same column-major convention)?
+// Only then is the batch path safe to enable; otherwise we keep the scalar path.
+void TagRenderer::SelfTestVu0Transform()
+{
+    m_useVu0 = false;
+
+    Camera3D cam{};
+    cam.position = Vector3{3.0f, 4.0f, 5.0f};
+    cam.target = Vector3{0.0f, 0.0f, 0.0f};
+    cam.up = Vector3{0.0f, 1.0f, 0.0f};
+    cam.fovy = 60.0f;
+    cam.projection = CAMERA_PERSPECTIVE;
+
+    float vp[16], model[16], mvp[16];
+    BuildViewProj(cam, vp);
+    BuildModelMatrix(model, Vector3{1.0f, 2.0f, 3.0f}, Vector3{10.0f, 20.0f, 30.0f}, Vector3{1.0f, 1.0f, 1.0f});
+    Frustum_Mult4x4(mvp, vp, model);
+
+    static const float testV[3][3] = {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.5f, 0.5f, 2.0f}};
+    MATRIX m;
+    std::memcpy(m, mvp, sizeof(MATRIX));
+    VECTOR in[3], out[3];
+    for (int i = 0; i < 3; ++i)
+    {
+        in[i][0] = testV[i][0];
+        in[i][1] = testV[i][1];
+        in[i][2] = testV[i][2];
+        in[i][3] = 1.0f;
+    }
+    calculate_vertices(out, 3, in, m);
+
+    auto close = [](float a, float b) {
+        float d = a - b;
+        if (d < 0.0f) d = -d;
+        float ma = (a < 0.0f) ? -a : a;
+        return d <= 0.01f * (1.0f + ma);
+    };
+    bool match = true;
+    for (int i = 0; i < 3 && match; ++i)
+    {
+        const float x = testV[i][0], y = testV[i][1], z = testV[i][2];
+        const float cx = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+        const float cy = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+        const float cz = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
+        const float cw = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+        if (!(close(out[i][0], cx) && close(out[i][1], cy) && close(out[i][2], cz) && close(out[i][3], cw)))
+            match = false;
+    }
+    m_useVu0 = match;
+    Engine_LogInfo("TagRenderer: VU0 batch transform %s (self-test %s).",
+                   match ? "ENABLED" : "disabled", match ? "passed" : "failed");
+}
+
+// Transform `count` strip vertices to GS fixed-point screen space, writing
+// m_xyz[i] and m_q[i] (m_q<=0 marks a vertex behind the near plane). Uses the
+// VU0 batch path when the self-test enabled it, else scalar.
+void TagRenderer::TransformStrip(const float mvp[16], const float* verts, int components, uint32_t count)
+{
+    if (m_useVu0)
+    {
+        MATRIX m;
+        std::memcpy(m, mvp, sizeof(MATRIX));
+        VECTOR* clip = static_cast<VECTOR*>(m_clipBatch);
+        VECTOR* vin = static_cast<VECTOR*>(m_vecBatch);
+
+        for (uint32_t base = 0; base < count; base += GFX_GIFTAG_XFORM_BATCH)
+        {
+            const uint32_t n = (count - base < GFX_GIFTAG_XFORM_BATCH) ? (count - base) : GFX_GIFTAG_XFORM_BATCH;
+            VECTOR* input;
+            if (components == 4)
+            {
+                // Baked vec4 arrays are 16-byte aligned — feed VU0 in place.
+                input = reinterpret_cast<VECTOR*>(const_cast<float*>(verts + static_cast<size_t>(base) * 4));
+            }
+            else
+            {
+                for (uint32_t j = 0; j < n; ++j)
+                {
+                    const float* v = verts + static_cast<size_t>(base + j) * components;
+                    vin[j][0] = v[0];
+                    vin[j][1] = v[1];
+                    vin[j][2] = v[2];
+                    vin[j][3] = 1.0f;
+                }
+                input = vin;
+            }
+
+            calculate_vertices(clip, static_cast<int>(n), input, m);
+
+            for (uint32_t j = 0; j < n; ++j)
+            {
+                const float clipW = clip[j][3];
+                if (clipW <= TAG_W_EPS)
+                {
+                    m_q[base + j] = 0.0f;
+                    continue;
+                }
+                const float inv = 1.0f / clipW;
+                const float sx = (clip[j][0] * inv * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
+                const float sy = (1.0f - (clip[j][1] * inv * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
+                const float zc = clip[j][2] * inv * 0.5f + 0.5f;
+                m_xyz[base + j].x = static_cast<uint16_t>(sx * 16.0f);
+                m_xyz[base + j].y = static_cast<uint16_t>(sy * 16.0f);
+                m_xyz[base + j].z = static_cast<uint32_t>((1.0f - zc) * TAG_Z_MAX);
+                m_q[base + j] = inv;
+            }
+        }
+        return;
+    }
+
+    // Scalar fallback.
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const float* v = verts + static_cast<size_t>(i) * components;
+        const float x = v[0], y = v[1], z = v[2];
+        const float clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+        const float clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+        const float clipZ = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
+        const float clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+        if (clipW <= TAG_W_EPS)
+        {
+            m_q[i] = 0.0f;
+            continue;
+        }
+        const float inv = 1.0f / clipW;
+        const float sx = (clipX * inv * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
+        const float sy = (1.0f - (clipY * inv * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
+        const float zc = clipZ * inv * 0.5f + 0.5f;
+        m_xyz[i].x = static_cast<uint16_t>(sx * 16.0f);
+        m_xyz[i].y = static_cast<uint16_t>(sy * 16.0f);
+        m_xyz[i].z = static_cast<uint32_t>((1.0f - zc) * TAG_Z_MAX);
+        m_q[i] = inv;
+    }
+}
+
+// Transform + emit one triangle strip. Vertices are transformed once; the strip
+// is split into maximal runs of >= 3 consecutive near-plane-visible vertices,
+// one GIF REGLIST (PRIM strip) per run. Winding parity is irrelevant on the GS
+// (no backface hardware), so runs need no parity fixup.
+void TagRenderer::DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs,
+                            uint32_t vertexCount, Color3 color, uint32_t textureId)
+{
+    if (!verts || vertexCount < 3)
+        return;
+
+    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS)
+        || !PacketHasSpace(WorstCaseQwords(vertexCount)))
+    {
+        Engine_LogError("TagRenderer: geometry budget exceeded (verts %u, packet %u qw); dropping strip.",
+            m_frameVertsUsed, static_cast<unsigned>(m_geom->next - m_geom->base));
+        m_frameStats.trisCulled += vertexCount - 2;
+        return;
+    }
+
+    const bool textured = (uvs != nullptr && textureId != 0);
+
+    // Transform every vertex to GS fixed-point screen space once (VU0 batch when
+    // available, else scalar). m_q holds 1/clip.w and doubles as the visibility
+    // flag (> 0 == in front of the near plane; 0 breaks the strip run there).
+    TransformStrip(mvp, verts, components, vertexCount);
+    m_frameStats.vertsTransformed += vertexCount;
+
+    if (textured)
+        BindTexture(textureId);
+
+    const uint8_t r = static_cast<uint8_t>(color.r * 255.0f);
+    const uint8_t g = static_cast<uint8_t>(color.g * 255.0f);
+    const uint8_t b = static_cast<uint8_t>(color.b * 255.0f);
+    const uint64_t rgbaLo = static_cast<uint64_t>(r) | (static_cast<uint64_t>(g) << 8) | (static_cast<uint64_t>(b) << 16) | (static_cast<uint64_t>(0x80) << 24);
+
+    // PRIM: triangle strip(4), gouraud(IIP bit3), texture(TME bit4 if textured).
+    const uint32_t prim = 4u | (1u << 3) | (textured ? (1u << 4) : 0u);
+    const uint32_t nreg = textured ? 3u : 2u;
+    const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8))
+                                      : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
+
+    uint32_t emittedTotal = 0;
+    uint32_t submittedTris = 0;
+    uint32_t i = 0;
+    while (i < vertexCount)
+    {
+        while (i < vertexCount && m_q[i] <= 0.0f)
+            ++i;
+        const uint32_t start = i;
+        while (i < vertexCount && m_q[i] > 0.0f)
+            ++i;
+        const uint32_t runLen = i - start;
+        if (runLen < 3)
+            continue;
+
+        packet2_add_u64(m_geom, GifTagLo(runLen, prim, nreg, true));
+        packet2_add_u64(m_geom, reglist);
+        for (uint32_t k = start; k < i; ++k)
+        {
+            const float q = m_q[k];
+            if (textured)
+            {
+                const float* uv = uvs + k * 2;
+                packet2_add_u64(m_geom, FloatBits(uv[0] * q) | (FloatBits(uv[1] * q) << 32));
+            }
+            packet2_add_u64(m_geom, rgbaLo | (FloatBits(q) << 32));
+            uint64_t xyzWord;
+            std::memcpy(&xyzWord, &m_xyz[k], sizeof(xyzWord));
+            packet2_add_u64(m_geom, xyzWord);
+        }
+        if (((runLen * nreg) & 1u) != 0u)
+            packet2_add_u64(m_geom, 0);
+
+        emittedTotal += runLen;
+        submittedTris += runLen - 2;
+    }
+
+    m_frameVertsUsed += emittedTotal;
+    m_frameStats.trisSubmitted += submittedTris;
+    // A full strip has (vertexCount - 2) triangles; the shortfall was near-plane culled.
+    m_frameStats.trisCulled += (vertexCount - 2) - submittedTris;
+}
+
 void TagRenderer::BindTexture(uint32_t textureId)
 {
     if (textureId == 0 || textureId > TAG_MAX_TEXTURES)
@@ -533,6 +830,14 @@ void TagRenderer::BindTexture(uint32_t textureId)
     const TexEntry& t = m_textures[textureId - 1];
     if (!t.inUse)
         return;
+
+    // Draws are texture-sorted, so a run of same-texture draws needs only one
+    // TEX0/TEX1 write.
+    if (textureId == m_lastBoundTex)
+        return;
+    m_lastBoundTex = textureId;
+
+    ++m_frameStats.texBinds;
 
     texbuffer_t tb;
     tb.address = t.gsAddr;
@@ -543,17 +848,47 @@ void TagRenderer::BindTexture(uint32_t textureId)
     tb.info.components = TEXTURE_COMPONENTS_RGBA;
     tb.info.function = TEXTURE_FUNCTION_MODULATE;
 
+    // draw_mipmap1 covers levels 1..3; clamp the sampled range to what it sets.
+    const uint8_t maxLevel = (t.mipCount > 4) ? 3 : ((t.mipCount > 0) ? t.mipCount - 1 : 0);
+    const bool mipped = (maxLevel > 0);
+
     lod_t lod;
-    lod.calculation = LOD_USE_K; // fixed level (no mipmaps baked yet)
-    lod.max_level = 0;
+    lod.calculation = mipped ? LOD_FORMULAIC : LOD_USE_K;
+    lod.max_level = maxLevel;
     lod.mag_filter = LOD_MAG_LINEAR;
-    lod.min_filter = LOD_MIN_LINEAR;
+    lod.min_filter = mipped ? LOD_MIN_LINE_MIPMAP_LINE : LOD_MIN_LINEAR;
     lod.mipmap_select = LOD_MIPMAP_REGISTER;
     lod.l = 0;
     lod.k = 0.0f;
 
     packet2_update(m_geom, draw_texture_sampling(m_geom->next, 0, &lod));
-    packet2_update(m_geom, draw_texturebuffer(m_geom->next, 0, &tb, nullptr));
+
+    // PAL8 textures carry a CLUT; RGBA formats pass null.
+    clutbuffer_t clut;
+    clutbuffer_t* clutPtr = nullptr;
+    if (t.psm == GS_PSM_8 && t.clutAddr != 0u)
+    {
+        clut.address = t.clutAddr;
+        clut.psm = GS_PSM_32;
+        clut.storage_mode = CLUT_STORAGE_MODE1;
+        clut.start = 0;
+        clut.load_method = CLUT_LOAD;
+        clutPtr = &clut;
+    }
+    packet2_update(m_geom, draw_texturebuffer(m_geom->next, 0, &tb, clutPtr));
+
+    if (mipped)
+    {
+        mipmap_t mm;
+        mm.address1 = static_cast<int>(t.mipAddr[1]);
+        mm.address2 = static_cast<int>((maxLevel >= 2) ? t.mipAddr[2] : t.mipAddr[1]);
+        mm.address3 = static_cast<int>((maxLevel >= 3) ? t.mipAddr[3] : t.mipAddr[1]);
+        // Per-level TBW in 64-texel units (GS MIPTBP convention).
+        mm.width1 = static_cast<char>(((t.width >> 1) + 63) / 64);
+        mm.width2 = static_cast<char>(((t.width >> 2) + 63) / 64);
+        mm.width3 = static_cast<char>(((t.width >> 3) + 63) / 64);
+        packet2_update(m_geom, draw_mipmap1(m_geom->next, 0, &mm));
+    }
 }
 
 void TagRenderer::RenderSkybox(const DrawLists& lists)
@@ -568,15 +903,18 @@ void TagRenderer::RenderSkybox(const DrawLists& lists)
     // Camera-centered cube. Uses the shared cube geometry; drawn first so the
     // scene overwrites it. (Depth handling for the skybox is a verification TODO.)
     const Camera3D& camera = lists.GetCamera3D();
-    float view[16], proj[16], vp[16], model[16], mvp[16];
-    BuildViewMatrix(view, camera);
-    BuildProjMatrix(proj);
-    Mult4x4(vp, proj, view);
+    float vp[16], model[16], mvp[16];
+    BuildViewProj(camera, vp);
     BuildModelMatrix(model, camera.position, Vector3{0, 0, 0}, Vector3{500.0f, 500.0f, 500.0f});
-    Mult4x4(mvp, vp, model);
+    Frustum_Mult4x4(mvp, vp, model);
 
+    // The skybox cube is viewed from the inside, so its faces are all
+    // back-facing — disable backface culling for this draw.
+    const bool savedCull = m_backfaceCull;
+    m_backfaceCull = false;
     const PrimitiveArrays cube = lists.GetPrimitiveArrays(Primitive3D::Cube);
-    DrawTriangles(mvp, cube.verts, cube.uvs, cube.vertexCount, Color3{1.0f, 1.0f, 1.0f}, tex->id);
+    DrawTriangles(mvp, cube.verts, 3, cube.uvs, cube.vertexCount, Color3{1.0f, 1.0f, 1.0f}, tex->id);
+    m_backfaceCull = savedCull;
 }
 
 void TagRenderer::RenderPrimitives(DrawLists& lists)
@@ -592,10 +930,10 @@ void TagRenderer::RenderModels(const DrawLists& lists)
     if (mCount == 0)
         return;
 
-    float view[16], proj[16], vp[16];
-    BuildViewMatrix(view, lists.GetCamera3D());
-    BuildProjMatrix(proj);
-    Mult4x4(vp, proj, view);
+    float vp[16];
+    BuildViewProj(lists.GetCamera3D(), vp);
+    FrustumPlanes frustum;
+    Frustum_FromViewProj(&frustum, vp);
 
     const ModelDrawEntry* entries = lists.GetModels();
     uint16_t meshDraws = 0;
@@ -607,9 +945,20 @@ void TagRenderer::RenderModels(const DrawLists& lists)
         if (!model)
             continue;
 
+        // Frustum cull against the model's merged bounding sphere.
+        Vector3 wc;
+        float wr;
+        Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(),
+                            model->boundsCenter, model->boundsRadius, &wc, &wr);
+        if (!Frustum_SphereVisible(&frustum, wc, wr))
+        {
+            ++m_frameStats.entriesCulled;
+            continue;
+        }
+
         float mm[16], mvp[16];
         BuildModelMatrix(mm, entry.transform.GetPosition(), entry.transform.GetRotation(), entry.transform.GetScale());
-        Mult4x4(mvp, vp, mm);
+        Frustum_Mult4x4(mvp, vp, mm);
 
         for (int meshIdx = 0; meshIdx < model->meshCount; ++meshIdx)
         {
@@ -631,22 +980,107 @@ void TagRenderer::RenderModels(const DrawLists& lists)
                 }
             }
 
-            DrawTriangles(mvp, mesh.vertices, texId ? mesh.texcoords : nullptr,
-                          static_cast<uint32_t>(mesh.vertexCount), Color3{1.0f, 1.0f, 1.0f}, texId);
+            const int components = (mesh.vertexComponents == 4) ? 4 : 3;
+            const float* uv = texId ? mesh.texcoords : nullptr;
+            if (mesh.topology == MESH_TOPOLOGY_STRIP)
+                DrawStrip(mvp, mesh.vertices, components, uv, static_cast<uint32_t>(mesh.vertexCount), Color3{1.0f, 1.0f, 1.0f}, texId);
+            else
+                DrawTriangles(mvp, mesh.vertices, components, uv, static_cast<uint32_t>(mesh.vertexCount), Color3{1.0f, 1.0f, 1.0f}, texId);
             ++meshDraws;
         }
     }
 
-    m_frameModelMeshCount = meshDraws;
+    m_frameStats.modelCount = meshDraws;
 }
 
 void TagRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }
 
 // ---------------------------------------------------------------------------
-// Textures — upload to GS VRAM and bind. VRAM is bump-allocated via graph; per
-// texture release does not reclaim VRAM in this first cut (verification TODO).
+// GS-VRAM first-fit free-list (64-word aligned). graph_vram_free is FIFO-only,
+// so textures evicted out of order would corrupt it; this manages the heap block
+// claimed at construction instead.
 // ---------------------------------------------------------------------------
-uint32_t TagRenderer::UploadTexture(const void* pixels, int width, int height, PixelFormat format)
+namespace
+{
+inline uint32_t Align64(uint32_t words) { return (words + 63u) & ~63u; }
+} // namespace
+
+uint32_t TagRenderer::VramAlloc(uint32_t words)
+{
+    words = Align64(words);
+    if (words == 0)
+        return 0;
+
+    for (int i = 0; i < m_vramExtentCount; ++i)
+    {
+        VramExtent& e = m_vramExtents[i];
+        if (e.used || e.words < words)
+            continue;
+
+        const uint32_t addr = e.addr;
+        if (e.words == words)
+        {
+            e.used = true;
+            return addr;
+        }
+        // Split: shrink this extent to the remainder, add a used extent in front.
+        if (m_vramExtentCount >= TAG_MAX_VRAM_EXTENTS)
+            return 0; // no room to track the split
+        e.addr += words;
+        e.words -= words;
+        VramExtent& used = m_vramExtents[m_vramExtentCount++];
+        used.addr = addr;
+        used.words = words;
+        used.used = true;
+        return addr;
+    }
+    return 0;
+}
+
+void TagRenderer::VramFree(uint32_t addr)
+{
+    if (addr == 0)
+        return;
+    for (int i = 0; i < m_vramExtentCount; ++i)
+    {
+        if (m_vramExtents[i].addr == addr && m_vramExtents[i].used)
+        {
+            m_vramExtents[i].used = false;
+            break;
+        }
+    }
+    // Coalesce any adjacent free extents (O(n^2), n small).
+    bool merged = true;
+    while (merged)
+    {
+        merged = false;
+        for (int i = 0; i < m_vramExtentCount; ++i)
+        {
+            if (m_vramExtents[i].used)
+                continue;
+            for (int j = 0; j < m_vramExtentCount; ++j)
+            {
+                if (i == j || m_vramExtents[j].used)
+                    continue;
+                if (m_vramExtents[i].addr + m_vramExtents[i].words == m_vramExtents[j].addr)
+                {
+                    m_vramExtents[i].words += m_vramExtents[j].words;
+                    m_vramExtents[j] = m_vramExtents[--m_vramExtentCount];
+                    merged = true;
+                    break;
+                }
+            }
+            if (merged)
+                break;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Textures — upload all mip levels (+ CLUT for PAL8) into one contiguous heap
+// extent so release reclaims the VRAM in any order.
+// ---------------------------------------------------------------------------
+uint32_t TagRenderer::UploadTexture(const TextureUpload& upload)
 {
     int slot = -1;
     for (int i = 0; i < TAG_MAX_TEXTURES; ++i)
@@ -663,26 +1097,89 @@ uint32_t TagRenderer::UploadTexture(const void* pixels, int width, int height, P
         return 0;
     }
 
-    const int psm = (format == PixelFormat::RGBA16) ? GS_PSM_16 : GS_PSM_32;
-    const uint32_t gsAddr = graph_vram_allocate(width, height, psm, GRAPH_ALIGN_BLOCK);
-    if (gsAddr == 0u || gsAddr == static_cast<uint32_t>(-1))
+    const int width = upload.width;
+    const int height = upload.height;
+    int psm;
+    switch (upload.format)
     {
-        Engine_LogError("TagRenderer: GS VRAM alloc failed for %dx%d texture.", width, height);
+    case PixelFormat::RGBA16: psm = GS_PSM_16; break;
+    case PixelFormat::PAL8: psm = GS_PSM_8; break;
+    default: psm = GS_PSM_32; break;
+    }
+
+    const uint8_t mipCount = (upload.mipCount == 0) ? 1 : upload.mipCount;
+    const bool hasClut = (upload.format == PixelFormat::PAL8 && upload.clut != nullptr);
+
+    // Size the extent: every mip level (64-word aligned) plus the CLUT.
+    uint32_t totalWords = 0;
+    uint32_t levelWords[TEX_MAX_MIP_LEVELS] = {0};
+    for (uint8_t lvl = 0; lvl < mipCount; ++lvl)
+    {
+        const int w = (width >> lvl) ? (width >> lvl) : 1;
+        const int h = (height >> lvl) ? (height >> lvl) : 1;
+        levelWords[lvl] = Align64(static_cast<uint32_t>(graph_vram_size(w, h, psm, GRAPH_ALIGN_BLOCK)));
+        totalWords += levelWords[lvl];
+    }
+    const uint32_t clutWords = hasClut ? Align64(static_cast<uint32_t>(graph_vram_size(16, 16, GS_PSM_32, GRAPH_ALIGN_BLOCK))) : 0u;
+    totalWords += clutWords;
+
+    const uint32_t base = VramAlloc(totalWords);
+    if (base == 0)
+    {
+        Engine_LogError("TagRenderer: texture VRAM heap full (need %u words).", totalWords);
         return 0;
     }
 
-    // Upload the pixels via a one-shot image transfer.
-    packet2_reset(m_env, 0);
-    packet2_update(m_env, draw_texture_transfer(m_env->next, const_cast<void*>(pixels), width, height, psm, gsAddr, width));
-    packet2_update(m_env, draw_texture_flush(m_env->next));
-    dma_channel_send_packet2(m_env, DMA_CHANNEL_GIF, 1);
+    TexEntry& te = m_textures[slot];
+    te = TexEntry{};
+    te.vramBase = base;
+
+    // A geometry packet may be DMA'ing during the async resource-load phase; the
+    // env packet shares the GIF channel, so wait for any in-flight transfer.
     dma_channel_wait(DMA_CHANNEL_GIF, 0);
 
-    m_textures[slot].inUse = true;
-    m_textures[slot].gsAddr = gsAddr;
-    m_textures[slot].width = width;
-    m_textures[slot].height = height;
-    m_textures[slot].psm = psm;
+    // Transfer each mip level to its slice of the extent.
+    uint32_t offset = 0;
+    for (uint8_t lvl = 0; lvl < mipCount; ++lvl)
+    {
+        const int w = (width >> lvl) ? (width >> lvl) : 1;
+        const int h = (height >> lvl) ? (height >> lvl) : 1;
+        const uint32_t addr = base + offset;
+        te.mipAddr[lvl] = addr;
+        offset += levelWords[lvl];
+
+        packet2_reset(m_env, 0);
+        packet2_update(m_env, draw_texture_transfer(m_env->next, const_cast<void*>(upload.levelPtr[lvl]), w, h, psm, static_cast<int>(addr), w));
+        packet2_update(m_env, draw_texture_flush(m_env->next));
+        dma_channel_send_packet2(m_env, DMA_CHANNEL_GIF, 1);
+        dma_channel_wait(DMA_CHANNEL_GIF, 0);
+    }
+
+    // PAL8: swizzle the 256-entry CLUT into GS CSM1 block order, upload as 16x16 PSMCT32.
+    if (hasClut)
+    {
+        const uint32_t clutAddr = base + offset;
+        const uint32_t* src = static_cast<const uint32_t*>(upload.clut);
+        uint32_t swz[256];
+        for (int i = 0; i < 256; ++i)
+        {
+            const int j = (i & 0xE7) | ((i & 0x10) >> 1) | ((i & 0x08) << 1);
+            swz[j] = src[i];
+        }
+        packet2_reset(m_env, 0);
+        packet2_update(m_env, draw_texture_transfer(m_env->next, swz, 16, 16, GS_PSM_32, static_cast<int>(clutAddr), 16));
+        packet2_update(m_env, draw_texture_flush(m_env->next));
+        dma_channel_send_packet2(m_env, DMA_CHANNEL_GIF, 1);
+        dma_channel_wait(DMA_CHANNEL_GIF, 0);
+        te.clutAddr = clutAddr;
+    }
+
+    te.inUse = true;
+    te.gsAddr = te.mipAddr[0];
+    te.mipCount = mipCount;
+    te.width = width;
+    te.height = height;
+    te.psm = psm;
 
     return static_cast<uint32_t>(slot + 1);
 }
@@ -691,9 +1188,12 @@ void TagRenderer::ReleaseTexture(uint32_t handle)
 {
     if (handle == 0 || handle > TAG_MAX_TEXTURES)
         return;
-    // NOTE: GS VRAM is not individually reclaimed here (bump allocator). The
-    // slot is freed for reuse; VRAM is recovered on Shutdown/graph re-init.
-    m_textures[handle - 1].inUse = false;
+    TexEntry& te = m_textures[handle - 1];
+    if (te.inUse)
+        VramFree(te.vramBase); // reclaim the whole extent (mips + CLUT)
+    te.inUse = false;
+    if (m_lastBoundTex == handle)
+        m_lastBoundTex = 0;
 }
 
 void TagRenderer::SetCamera3D(CameraID id, const Camera3D& camera) { m_drawLists.SetCamera3D(id, camera); }
