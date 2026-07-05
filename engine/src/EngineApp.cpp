@@ -54,7 +54,7 @@ bool EngineStart(const char* resourceLocationToken)
 void EngineUpdate()
 {
     static double frameStartTime = 0;
-    static double scriptEndTime = 0;
+    static double gameLogicEndTime = 0;
     static double renderEndTime = 0;
 
     frameStartTime = (double)clock() / CLOCKS_PER_SEC;
@@ -62,10 +62,9 @@ void EngineUpdate()
     Engine_Update();
     float dt = Engine_GetDeltaTime();
 
-    // 1. Gameplay Phase (C++). Measured as the "Logic" bucket — the same slot
-    //    the Lua OnUpdate used to occupy, so the perf dump stays comparable.
+    // 1. Gameplay Phase (C++) — the game module's per-frame update + draw submission.
     GameUpdate(dt);
-    scriptEndTime = (double)clock() / CLOCKS_PER_SEC;
+    gameLogicEndTime = (double)clock() / CLOCKS_PER_SEC;
 
     // 2. Renderer Phase (CPU-side transforms)
     Renderer* r = Engine_GetRenderer();
@@ -82,11 +81,11 @@ void EngineUpdate()
     double frameEndTime = (double)clock() / CLOCKS_PER_SEC;
 
     // Detailed Stats Reporting
-    // CPU Logic = Start to ScriptEnd
-    // CPU Render = ScriptEnd to RenderEnd (Mega-batching)
+    // Game Logic = Start to GameLogicEnd
+    // C++ Render = GameLogicEnd to RenderEnd (Mega-batching)
     // GS Wait = RenderEnd to Vblank/Finish
-    Engine_ReportFrameStats((float)(scriptEndTime - frameStartTime), // Logic
-                            (float)(renderEndTime - scriptEndTime), // Render
+    Engine_ReportFrameStats((float)(gameLogicEndTime - frameStartTime), // Logic
+                            (float)(renderEndTime - gameLogicEndTime), // Render
                             (float)(frameEndTime - renderEndTime) // Wait
     );
 

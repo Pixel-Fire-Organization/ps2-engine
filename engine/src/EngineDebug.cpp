@@ -227,7 +227,7 @@ void Engine_PerfLogger_Tick()
     float waitMs = Engine_GetWaitTime() * 1000.0f;
     float totalMs = logicMs + renderMs + waitMs;
 
-    Engine_LogInfo("[PERF] Script Logic      : %5.2f ms", logicMs);
+    Engine_LogInfo("[PERF] Game Logic        : %5.2f ms", logicMs);
     Engine_LogInfo("[PERF] C++ Render        : %5.2f ms", renderMs);
     Engine_LogInfo("[PERF] GPU Wait (Vsync)  : %5.2f ms", waitMs);
     Engine_LogInfo("[PERF] GS Wait (EndFrame): %5.2f ms", ds.gsWaitMs);
