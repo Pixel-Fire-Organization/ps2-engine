@@ -1,6 +1,6 @@
-﻿# Asset Descriptor Directory (`app/cd_files/RAYLIB/`)
+﻿# Asset Descriptor Directory (`game/cd_files/ASSETS/`)
 
-This directory contains **source assets** (images, models, fonts, sounds) and their **JSON descriptor files**. During the build, `scripts/pack_assets.py` reads every `.json` file here and compiles each pair into a binary `.ps2a` file written to `app/cd_files/rassets/`.
+This directory contains **source assets** (images, models, fonts, sounds) and their **JSON descriptor files**. During the build, `tools/pack_assets.py` reads every `.json` file here and compiles each pair into a binary `.ps2a` file written to `game/cd_files/rassets/`.
 
 The generated `.ps2a` files are automatically included in the bootable ISO at `cdrom0:\RASSETS\`.
 
@@ -107,10 +107,10 @@ Packing runs **automatically during the CMake build**. To run it manually:
 
 ```bash
 # From the project root (WSL / Linux)
-python3 scripts/pack_assets.py
+python3 tools/pack_assets.py
 
 # Override source/output directories
-python3 scripts/pack_assets.py --src app/cd_files/RAYLIB --dst app/cd_files/rassets
+python3 tools/pack_assets.py --src game/cd_files/ASSETS --dst game/cd_files/rassets
 ```
 
 ---

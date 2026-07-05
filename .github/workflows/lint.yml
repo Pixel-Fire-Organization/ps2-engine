@@ -48,7 +48,7 @@ jobs:
               --enable=all \
               --inconclusive \
               --xml --xml-version=2 \
-              --suppress=*:thirdparty/* \
+              --suppress=*:external/* \
               --suppress=missingIncludeSystem \
               --suppress=missingInclude \
               --suppress=unmatchedSuppression \

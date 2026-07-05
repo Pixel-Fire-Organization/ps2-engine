@@ -1,7 +1,7 @@
 # ISO Generation
 
 The build system assembles a bootable PS2 disc image (`.iso`) from the compiled ELF, a generated `SYSTEM.CNF`, and the
-contents of `app/cd_files/` — minus any entries on the **ISO content blacklist**.
+contents of `game/cd_files/` — minus any entries on the **ISO content blacklist**.
 
 ---
 
@@ -10,11 +10,11 @@ contents of `app/cd_files/` — minus any entries on the **ISO content blacklist
 The `generate-iso` CMake target performs the following steps in order:
 
 1. **Wipe** the staging directory (`<build>/iso_root/`) to eliminate stale files from previous builds.
-2. **Copy** `app/cd_files/` into the staging directory, honouring the [ISO Content Blacklist](#iso-content-blacklist).
+2. **Copy** `game/cd_files/` into the staging directory, honouring the [ISO Content Blacklist](#iso-content-blacklist).
 3. **Copy** the compiled ELF into the staging directory as `${APP_SERIAL}` (see [USERETAILNAME](#useretailname-option)
    below).
 4. **Copy** the auto-generated `SYSTEM.CNF` into the staging directory.
-5. **Run** `mkisofs` / `genisoimage` to produce `exec/<APP_ISO_NAME>.iso`.
+5. **Run** `mkisofs` / `genisoimage` to produce `dist/<APP_ISO_NAME>.iso`.
 
 > **Requirement**: `genisoimage` (which provides `mkisofs`) must be installed and on `PATH`.  
 > If it is not found, `generate-iso` still exists as a no-op target so `build.sh --target generate-iso` does not fail.
@@ -59,21 +59,21 @@ cmake -DUSERETAILNAME=ON -DAPP_SERIAL=SLES_508.77 ...
 Place any file or directory that must be present on the PS2 disc inside:
 
 ```
-app/cd_files/
+game/cd_files/
 ```
 
 All contents are automatically staged into the ISO **unless** they are listed in
 the [ISO Content Blacklist](#iso-content-blacklist).
 
-> **Note**: Raw asset source files (JSON, PNGs, etc.) live in `app/cd_files/RAYLIB/`.  
-> They are compiled to `.ps2a` by `pack-assets` and written to `app/cd_files/rassets/`.  
+> **Note**: Raw asset source files (JSON, PNGs, etc.) live in `game/cd_files/RAYLIB/`.  
+> They are compiled to `.ps2a` by `pack-assets` and written to `game/cd_files/rassets/`.  
 > Only `rassets/` needs to be on disc; `RAYLIB/` is excluded by the blacklist.
 
 ---
 
 ## ISO Content Blacklist
 
-The blacklist prevents specific files or directories inside `app/cd_files/` from being included in the disc image. It is
+The blacklist prevents specific files or directories inside `game/cd_files/` from being included in the disc image. It is
 defined near the top of `app/CMakeLists.txt`:
 
 ```cmake
@@ -115,11 +115,11 @@ No other files need to be modified. The next build will exclude the new entry fr
 
 ## Implementation Detail
 
-The copy-with-exclusion step is handled by `scripts/copy_iso_files.cmake`. It receives `SRC`, `DST`, and `BLACKLIST` as
+The copy-with-exclusion step is handled by `tools/copy_iso_files.cmake`. It receives `SRC`, `DST`, and `BLACKLIST` as
 CMake `-D` variables and uses CMake's built-in `file(COPY ... PATTERN ... EXCLUDE)` to apply the blacklist:
 
 ```cmake
-# scripts/copy_iso_files.cmake
+# tools/copy_iso_files.cmake
 set(_exclude_args)
 foreach (_item IN LISTS BLACKLIST)
     list(APPEND _exclude_args PATTERN "${_item}" EXCLUDE)
@@ -132,10 +132,10 @@ This keeps the logic self-contained and avoids any dependency on shell utilities
 
 ---
 
-## Debug Builds — `exec/iso_contents/`
+## Debug Builds — `dist/iso_contents/`
 
 When building with `DEBUG=ON` targeting PS2 (`CMAKE_SYSTEM_NAME STREQUAL "Generic"`), the staged ISO directory is
-additionally copied to `exec/iso_contents/` after the ISO is generated. This lets you inspect exactly what ended up on
+additionally copied to `dist/iso_contents/` after the ISO is generated. This lets you inspect exactly what ended up on
 the disc without mounting the image.
 
 

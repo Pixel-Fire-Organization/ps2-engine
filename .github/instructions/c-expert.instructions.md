@@ -52,4 +52,4 @@
 - **Designated Initializers**: Valid and encouraged in C99 (`.field = value`). Forbidden in C++11 — use plain member
   assignment instead.
 - **Clang-Format**: The repo `.clang-format` at root is authoritative. **ALWAYS** follow it. Never run it over
-  `thirdparty/`. Wrap data tables and mesh arrays with `// clang-format off` / `// clang-format on`.
+  `external/`. Wrap data tables and mesh arrays with `// clang-format off` / `// clang-format on`.

@@ -273,7 +273,7 @@ Cells marked ❌ cannot be loaded at all (exceed the 64-page budget).*
 
 ### Source Files
 
-Place raw assets in `app/cd_files/RAYLIB/` as pairs:
+Place raw assets in `game/cd_files/RAYLIB/` as pairs:
 
 - `<name>.json` — metadata descriptor
 - `<name>.<ext>` — raw source file (`.jpg`, `.png`, `.obj`, `.gltf`, `.ogg`, `.ttf`, etc.)
@@ -317,11 +317,11 @@ format using Pillow before embedding it in the `.ps2a` file. This means:
 Run the packer (automatically called by CMake during build):
 
 ```bash
-python3 scripts/pack_assets.py
+python3 tools/pack_assets.py
 ```
 
-This reads all `.json` files from `app/cd_files/RAYLIB/`, compiles each into a `.ps2a` file, and writes them to
-`app/cd_files/rassets/`. The ISO build pipeline (`app/CMakeLists.txt`) copies `cd_files/` into the ISO root, so
+This reads all `.json` files from `game/cd_files/RAYLIB/`, compiles each into a `.ps2a` file, and writes them to
+`game/cd_files/rassets/`. The ISO build pipeline (`app/CMakeLists.txt`) copies `cd_files/` into the ISO root, so
 `rassets/*.ps2a` files are available at `cdrom0:\RASSETS\<NAME>.PS2A;1` on the PS2.
 
 ---
@@ -347,7 +347,7 @@ When `Engine_Level_Unload` is called:
 
 ## Usage Example
 
-> **App layer**: Do not call `Engine_Resource_Load` / `Engine_Resource_Get` directly from `app/src/main.c`. Use the Lua
+> **App layer**: Do not call `Engine_Resource_Load` / `Engine_Resource_Get` directly from `game/src/main.c`. Use the Lua
 `resources` table instead. See `docs/Scripting/Core/resources.md`.
 
 ```lua

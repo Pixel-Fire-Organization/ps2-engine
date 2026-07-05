@@ -6,10 +6,10 @@ cmake_install.cmake
 Makefile
 
 # Engine resources
-resources/maps/autosave/**
+assets/maps/autosave/**
 
 # Executables Outputs and Release Folders
-exec/
+dist/
 bin/
 
 # Object Files and Static Libraries
@@ -40,4 +40,7 @@ Thumbs.db
 build_log.txt
 
 # PCSX2 artefacts
-emu/**
+.pcsx2/**
+
+# Python bytecode cache
+__pycache__/

@@ -21,7 +21,7 @@ sudo apt install -y build-essential cmake git make patch wget texinfo flex bison
 ```
 
 > `genisoimage` provides the `mkisofs` utility used by the engine's build system to generate bootable `.iso` files.
-> `python3-pil` (Pillow) is used by `scripts/pack_assets.py` to decode images for QOI transcoding (strongly recommended for TEXTURE assets).
+> `python3-pil` (Pillow) is used by `tools/pack_assets.py` to decode images for QOI transcoding (strongly recommended for TEXTURE assets).
 
 ---
 

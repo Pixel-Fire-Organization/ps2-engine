@@ -1,13 +1,10 @@
-[submodule "thirdparty/ps2gl"]
-	path = thirdparty/ps2gl
-	url = https://github.com/raylib4Consoles/ps2gl
-[submodule "thirdparty/raylib"]
-	path = thirdparty/raylib
-	url = https://github.com/raylib4Consoles/raylib
-	branch = work
-[submodule "thirdparty/lua"]
-	path = thirdparty/lua
+[submodule "external/ps2gl"]
+	path = external/ps2gl
+	url = https://github.com/Pixel-Fire-Organization/ps2gl
+	branch = develop
+[submodule "external/lua"]
+	path = external/lua
 	url = https://github.com/lua/lua.git
-[submodule "thirdparty/ps2stuff"]
-	path = thirdparty/ps2stuff
+[submodule "external/ps2stuff"]
+	path = external/ps2stuff
 	url = https://github.com/ps2dev/ps2stuff.git
