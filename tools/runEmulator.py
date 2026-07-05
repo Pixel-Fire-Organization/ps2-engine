@@ -57,7 +57,8 @@ def main():
             result = subprocess.run(["wslpath", "-w", file_path], capture_output=True, text=True, check=True)
             file_final = result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
+            # If wslpath is unavailable or conversion fails, fall back to the original path.
+            file_final = file_path
 
     print(f"=== Launching PCSX2 ({sys.platform}) ===")
     print(f"PCSX2: {pcsx2_path}")
