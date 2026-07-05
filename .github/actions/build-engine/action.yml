@@ -28,6 +28,10 @@ runs:
           apk add --no-cache gcompat
         fi
 
+    - name: Trust workspace for git (container runs as root; workspace owned by host user)
+      shell: sh
+      run: git config --global --add safe.directory '*'
+
     - name: Build engine via Script
       shell: bash
       run: |
