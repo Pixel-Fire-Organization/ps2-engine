@@ -12,21 +12,22 @@
 #include "GameAPI.h"
 #include "SwarmSystem.h"
 
-namespace {
+namespace
+{
 
-// --- Player cube state ---
-float s_cubeX = 0.0f, s_cubeY = 0.0f, s_cubeZ = 0.0f;
-constexpr float SPEED = 4.0f; // units per second
+    // --- Player cube state ---
+    float s_cubeX = 0.0f, s_cubeY = 0.0f, s_cubeZ = 0.0f;
+    constexpr float SPEED = 4.0f; // units per second
 
-// --- Orbit camera state (spherical around the cube) ---
-float s_camYaw   = 0.0f;
-float s_camPitch = 0.4f;
-constexpr float CAM_DIST  = 20.0f;
-constexpr float CAM_SPEED = 1.8f;
+    // --- Orbit camera state (spherical around the cube) ---
+    float s_camYaw = 0.0f;
+    float s_camPitch = 0.4f;
+    constexpr float CAM_DIST = 20.0f;
+    constexpr float CAM_SPEED = 1.8f;
 
-// --- Resources / scene ---
-int  s_texHandle   = -1;
-bool s_swarmLoaded = false;
+    // --- Resources / scene ---
+    int s_texHandle = -1;
+    bool s_swarmLoaded = false;
 
 } // namespace
 
@@ -45,18 +46,31 @@ void GameUpdate(float dt)
     s_cubeX += lx * SPEED * dt;
     s_cubeZ += ly * SPEED * dt;
 
-    if (game::IsPadPressed(0, "x"))   s_cubeY += SPEED * dt;
-    if (game::IsPadPressed(0, "cir")) s_cubeY -= SPEED * dt;
-    if (game::IsPadPressed(0, "tri")) { s_cubeX = 0.0f; s_cubeY = 0.0f; s_cubeZ = 0.0f; }
-    if (game::IsPadPressed(0, "squ")) { game::Log("Square pressed — exiting"); game::Exit(); }
+    if (game::IsPadPressed(0, "x"))
+        s_cubeY += SPEED * dt;
+    if (game::IsPadPressed(0, "cir"))
+        s_cubeY -= SPEED * dt;
+    if (game::IsPadPressed(0, "tri"))
+    {
+        s_cubeX = 0.0f;
+        s_cubeY = 0.0f;
+        s_cubeZ = 0.0f;
+    }
+    if (game::IsPadPressed(0, "squ"))
+    {
+        game::Log("Square pressed — exiting");
+        game::Exit();
+    }
 
     // Right stick orbits the camera; clamp pitch so it never flips over.
     float rx = 0.0f, ry = 0.0f;
     game::GetJoyAxis(0, "right", &rx, &ry);
-    s_camYaw   += rx * CAM_SPEED * dt;
+    s_camYaw += rx * CAM_SPEED * dt;
     s_camPitch += ry * CAM_SPEED * dt;
-    if (s_camPitch > 1.45f) s_camPitch = 1.45f;
-    if (s_camPitch < 0.05f) s_camPitch = 0.05f;
+    if (s_camPitch > 1.45f)
+        s_camPitch = 1.45f;
+    if (s_camPitch < 0.05f)
+        s_camPitch = 0.05f;
 
     const float cosPitch = cosf(s_camPitch);
     const float camX = s_cubeX + CAM_DIST * cosPitch * sinf(s_camYaw);

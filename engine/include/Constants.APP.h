@@ -7,4 +7,3 @@
 
 // Maximum bytes that may be read into a single file slot (one config-arena slot).
 #define APP_MAX_FILE_DATA_SIZE (MEM_BLOCK_CONFIG_SIZE / MEM_BLOCK_CONFIG_SLOTS)
-

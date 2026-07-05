@@ -27,10 +27,7 @@ static MemoryArena g_RendererArena;
 // Global pool (Encapsulated)
 static MemoryPool g_MainPool;
 
-void Engine_PoolInitMain(void* buffer, size_t capacity, size_t chunk_size)
-{
-    Engine_PoolInit(&g_MainPool, buffer, capacity, chunk_size);
-}
+void Engine_PoolInitMain(void* buffer, size_t capacity, size_t chunk_size) { Engine_PoolInit(&g_MainPool, buffer, capacity, chunk_size); }
 
 void* Engine_PoolAllocMain() { return Engine_PoolAlloc(&g_MainPool); }
 
@@ -69,7 +66,7 @@ static void Internal_InitSlots(ArenaType type, MemoryArena* arena, uint32_t coun
         // Align the start of this specific slot
         uintptr_t aligned_start = AlignForward(reinterpret_cast<uintptr_t>(ptr), alignment);
 
-        s_Slots[type][i].ptr = reinterpret_cast<void *>(aligned_start);
+        s_Slots[type][i].ptr = reinterpret_cast<void*>(aligned_start);
         s_Slots[type][i].capacity = slot_capacity;
         s_Slots[type][i].usedSize = 0;
         s_Slots[type][i].locked = false;
@@ -80,7 +77,7 @@ static void Internal_InitSlots(ArenaType type, MemoryArena* arena, uint32_t coun
 
 void Engine_ArenasInitSegmented(void* base_ptr)
 {
-    uint8_t* ptr = static_cast<uint8_t *>(base_ptr);
+    uint8_t* ptr = static_cast<uint8_t*>(base_ptr);
 
     Engine_ArenaInit(&g_ConfigArena, ptr, MEM_BLOCK_CONFIG_SIZE);
     Internal_InitSlots(ARENA_CONFIG, &g_ConfigArena, MEM_BLOCK_CONFIG_SLOTS);
@@ -170,7 +167,7 @@ void* Engine_AddToArena(ArenaType type, size_t size, size_t alignment)
 
 void Engine_ArenaInit(MemoryArena* arena, void* backing_buffer, size_t capacity)
 {
-    arena->buffer = static_cast<uint8_t *>(backing_buffer);
+    arena->buffer = static_cast<uint8_t*>(backing_buffer);
     arena->capacity = capacity;
     arena->offset = 0;
 }
@@ -197,7 +194,7 @@ void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
     }
 
     arena->offset = shift + size;
-    return reinterpret_cast<void *>(aligned_ptr);
+    return reinterpret_cast<void*>(aligned_ptr);
 }
 
 void Engine_ArenaReset(MemoryArena* arena) { arena->offset = 0; }
@@ -270,12 +267,12 @@ void Engine_PoolReset(MemoryPool* pool)
     }
 
     size_t num_chunks = pool->capacity / pool->chunk_size;
-    pool->head = reinterpret_cast<PoolFreeNode *>(pool->buffer);
+    pool->head = reinterpret_cast<PoolFreeNode*>(pool->buffer);
     PoolFreeNode* curr = pool->head;
 
     for (size_t i = 1; i < num_chunks; ++i)
     {
-        PoolFreeNode* next_node = reinterpret_cast<PoolFreeNode *>(pool->buffer + i * pool->chunk_size);
+        PoolFreeNode* next_node = reinterpret_cast<PoolFreeNode*>(pool->buffer + i * pool->chunk_size);
         curr->next = next_node;
         curr = next_node;
     }
@@ -304,7 +301,7 @@ void Engine_PoolFree(MemoryPool* pool, void* ptr)
 
     // In a robust pool allocator, you'd verify ptr is within bounds and aligned.
     // For speed we assume it is.
-    PoolFreeNode* node = static_cast<PoolFreeNode *>(ptr);
+    PoolFreeNode* node = static_cast<PoolFreeNode*>(ptr);
     node->next = pool->head;
     pool->head = node;
 }

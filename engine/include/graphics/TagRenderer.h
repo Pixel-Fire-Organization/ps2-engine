@@ -6,11 +6,10 @@
 
 #ifdef RENDERER_BACKEND_GIFTAG
 
-extern "C"
-{
-#include <draw.h>
-#include <graph.h>
-#include <packet2.h>
+extern "C" {
+    #include <draw.h>
+    #include <graph.h>
+    #include <packet2.h>
 }
 
 // GIFTAG renderer — bypasses ps2gl and drives the GS directly. GS setup and
@@ -132,13 +131,11 @@ class TagRenderer final : public Renderer
     // Transform + emit one unindexed triangle list. `components` is the position
     // stride in floats (3 for primitives / legacy models, 4 for baked v2). uvs
     // is 2 floats/vertex or null. mvp is the combined model→clip matrix.
-    void DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs,
-                       uint32_t vertexCount, Color3 color, uint32_t textureId);
+    void DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId);
     // Transform + emit one triangle strip (PRIM type 4). Near-plane rejection
     // splits the strip into maximal runs of visible vertices, one GIF REGLIST
     // per run (the common all-visible case is a single tag).
-    void DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs,
-                   uint32_t vertexCount, Color3 color, uint32_t textureId);
+    void DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId);
     void BindTexture(uint32_t textureId);
     void FlushRects2D();
 

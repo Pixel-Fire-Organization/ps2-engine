@@ -88,8 +88,7 @@ typedef int32_t (*ModelTextureResolver)(uint32_t diffuseTexRef, void* user);
 // fresh 16-byte-aligned heap allocations (so `data` may be freed afterwards).
 // `resolver` may be null (all materials become untextured). Returns true on
 // success; call Model_FreeBaked to release everything it allocated.
-bool Model_LoadBaked(const void* data, size_t size, Model* outModel,
-                     ModelTextureResolver resolver, void* resolverUser);
+bool Model_LoadBaked(const void* data, size_t size, Model* outModel, ModelTextureResolver resolver, void* resolverUser);
 
 // Free all heap allocations made by Model_LoadBaked and zero the struct.
 // Does NOT release textures (those are owned by the resource manager).

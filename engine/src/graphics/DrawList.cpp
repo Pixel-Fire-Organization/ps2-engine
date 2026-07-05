@@ -6,25 +6,24 @@
 #include "../include/graphics/PrimitiveGeometry.h"
 #include "EngineDebug.h"
 
-DrawLists::DrawLists()
-    : untexturedPrims{}, texturedPrims{}, models{}, uiItems{}
+DrawLists::DrawLists() : untexturedPrims{}, texturedPrims{}, models{}, uiItems{}
 {
     // Initialise every 3D camera slot to the same sane default so an unset
     // active slot still renders a valid view.
     for (uint8_t i = 0; i < GFX_MAX_CAMERAS_3D; ++i)
     {
-        cameras3D[i].position   = Vector3{0.0f, 10.0f, 20.0f};
-        cameras3D[i].target     = Vector3{0.0f,  0.0f,  0.0f};
-        cameras3D[i].up         = Vector3{0.0f,  1.0f,  0.0f};
-        cameras3D[i].fovy       = 45.0f;
+        cameras3D[i].position = Vector3{0.0f, 10.0f, 20.0f};
+        cameras3D[i].target = Vector3{0.0f, 0.0f, 0.0f};
+        cameras3D[i].up = Vector3{0.0f, 1.0f, 0.0f};
+        cameras3D[i].fovy = 45.0f;
         cameras3D[i].projection = CAMERA_PERSPECTIVE;
     }
     activeCamera3D = 0;
 
-    camera2D.offset   = Vector2{0.0f, 0.0f};
-    camera2D.target   = Vector2{0.0f, 0.0f};
+    camera2D.offset = Vector2{0.0f, 0.0f};
+    camera2D.target = Vector2{0.0f, 0.0f};
     camera2D.rotation = 0.0f;
-    camera2D.zoom     = 1.0f;
+    camera2D.zoom = 1.0f;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +97,8 @@ void DrawLists::ExtractPrimitiveGeometry(float* megaBatch)
     extract(MODEL_CYLINDER, PRIMITIVE_CYLINDER_VERTEX_COUNT, m_cylVerts, m_cylNorms, m_cylUVs);
 
     // Bounding-sphere radius per shape (max |v| — primitives are origin-centered).
-    auto maxRadius = [](const float* verts, uint32_t count) {
+    auto maxRadius = [](const float* verts, uint32_t count)
+    {
         float best = 0.0f;
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -226,13 +226,11 @@ void DrawLists::SortForSubmission()
 {
     if (texturedCount > 1)
     {
-        std::sort(texturedPrims, texturedPrims + texturedCount,
-                  [](const PrimitiveDrawEntry& a, const PrimitiveDrawEntry& b) { return a.textureId < b.textureId; });
+        std::sort(texturedPrims, texturedPrims + texturedCount, [](const PrimitiveDrawEntry& a, const PrimitiveDrawEntry& b) { return a.textureId < b.textureId; });
     }
     if (modelCount > 1)
     {
-        std::sort(models, models + modelCount,
-                  [](const ModelDrawEntry& a, const ModelDrawEntry& b) { return a.resourceId < b.resourceId; });
+        std::sort(models, models + modelCount, [](const ModelDrawEntry& a, const ModelDrawEntry& b) { return a.resourceId < b.resourceId; });
     }
 }
 

@@ -3,58 +3,56 @@
 // Only compile the GIFTAG renderer body for that backend build.
 #ifdef RENDERER_BACKEND_GIFTAG
 
-#include <cmath>
-#include <cstring>
-#include <ctime>
-#include <malloc.h>
+    #include <cmath>
+    #include <cstring>
+    #include <ctime>
+    #include <malloc.h>
 
-extern "C"
-{
-#include <dma.h>
-#include <gs_psm.h>
-#include <math3d.h>
-#include <packet2_utils.h>
+extern "C" {
+    #include <dma.h>
+    #include <gs_psm.h>
+    #include <math3d.h>
+    #include <packet2_utils.h>
 }
 
-#include "../include/graphics/Frustum.h"
-#include "../include/graphics/PrimitiveGeometry.h"
-#include "EngineDebug.h"
-#include "EngineMemory.h"
-#include "EngineResource.h"
-#include "Macros.h"
+    #include "../include/graphics/Frustum.h"
+    #include "../include/graphics/PrimitiveGeometry.h"
+    #include "EngineDebug.h"
+    #include "EngineMemory.h"
+    #include "EngineResource.h"
+    #include "Macros.h"
 
 namespace
 {
-constexpr float TAG_DEG_TO_RAD = 0.017453292519943295f;
-constexpr float TAG_W_EPS = 0.001f; // near-plane reject threshold on clip.w
-// Sign selecting which screen-space winding is a back face. +1 culls positive
-// signed area (front faces are CCW-in-NDC, negative area after the viewport
-// Y-flip). Flip to -1 if a validated scene renders inside-out.
-constexpr float TAG_BACKFACE_SIGN = 1.0f;
-constexpr float TAG_Z_MAX = 16777215.0f; // 24-bit usable Z range (GS_ZBUF_32)
+    constexpr float TAG_DEG_TO_RAD = 0.017453292519943295f;
+    constexpr float TAG_W_EPS = 0.001f; // near-plane reject threshold on clip.w
+    // Sign selecting which screen-space winding is a back face. +1 culls positive
+    // signed area (front faces are CCW-in-NDC, negative area after the viewport
+    // Y-flip). Flip to -1 if a validated scene renders inside-out.
+    constexpr float TAG_BACKFACE_SIGN = 1.0f;
+    constexpr float TAG_Z_MAX = 16777215.0f; // 24-bit usable Z range (GS_ZBUF_32)
 
-// GS register indices (for GIF REGLIST descriptors).
-constexpr uint64_t GSREG_RGBAQ = 0x01;
-constexpr uint64_t GSREG_ST = 0x02;
-constexpr uint64_t GSREG_XYZ2 = 0x05;
+    // GS register indices (for GIF REGLIST descriptors).
+    constexpr uint64_t GSREG_RGBAQ = 0x01;
+    constexpr uint64_t GSREG_ST = 0x02;
+    constexpr uint64_t GSREG_XYZ2 = 0x05;
 
-// Build a GIFtag low word (see tGifTag in ps2s/gs.h for the field layout).
-inline uint64_t GifTagLo(uint32_t nloop, uint32_t prim, uint32_t nreg, bool pre)
-{
-    return (static_cast<uint64_t>(nloop) & 0x7FFF)
-        | (1ull << 15) /* EOP */
-        | (pre ? (1ull << 46) : 0ull) /* PRE */
-        | (static_cast<uint64_t>(prim) << 47) /* PRIM */
-        | (1ull << 58) /* FLG = REGLIST */
-        | (static_cast<uint64_t>(nreg & 0xF) << 60);
-}
+    // Build a GIFtag low word (see tGifTag in ps2s/gs.h for the field layout).
+    inline uint64_t GifTagLo(uint32_t nloop, uint32_t prim, uint32_t nreg, bool pre)
+    {
+        return (static_cast<uint64_t>(nloop) & 0x7FFF) | (1ull << 15) /* EOP */
+            | (pre ? (1ull << 46) : 0ull) /* PRE */
+            | (static_cast<uint64_t>(prim) << 47) /* PRIM */
+            | (1ull << 58) /* FLG = REGLIST */
+            | (static_cast<uint64_t>(nreg & 0xF) << 60);
+    }
 
-inline uint64_t FloatBits(float f)
-{
-    uint32_t b;
-    std::memcpy(&b, &f, sizeof(b));
-    return b;
-}
+    inline uint64_t FloatBits(float f)
+    {
+        uint32_t b;
+        std::memcpy(&b, &f, sizeof(b));
+        return b;
+    }
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -64,16 +62,16 @@ inline uint64_t FloatBits(float f)
 // ---------------------------------------------------------------------------
 namespace
 {
-// Compose the view-projection matrix for a camera. Single source of truth for
-// Render / RenderModels / RenderSkybox.
-void BuildViewProj(const Camera3D& camera, float vp[16])
-{
-    float view[16], proj[16];
-    Frustum_BuildLookAt(view, camera);
-    const float aspect = static_cast<float>(GFX_SCREEN_WIDTH) / static_cast<float>(GFX_SCREEN_HEIGHT);
-    Frustum_BuildPerspective(proj, camera.fovy, aspect, GFX_NEAR_PLANE, GFX_FAR_PLANE);
-    Frustum_Mult4x4(vp, proj, view);
-}
+    // Compose the view-projection matrix for a camera. Single source of truth for
+    // Render / RenderModels / RenderSkybox.
+    void BuildViewProj(const Camera3D& camera, float vp[16])
+    {
+        float view[16], proj[16];
+        Frustum_BuildLookAt(view, camera);
+        const float aspect = static_cast<float>(GFX_SCREEN_WIDTH) / static_cast<float>(GFX_SCREEN_HEIGHT);
+        Frustum_BuildPerspective(proj, camera.fovy, aspect, GFX_NEAR_PLANE, GFX_FAR_PLANE);
+        Frustum_Mult4x4(vp, proj, view);
+    }
 } // namespace
 
 void TagRenderer::BuildModelMatrix(float out[16], const Vector3& pos, const Vector3& rot, const Vector3& scl)
@@ -96,10 +94,22 @@ void TagRenderer::BuildModelMatrix(float out[16], const Vector3& pos, const Vect
     const float r21 = cx * sy * sz - sx * cz;
     const float r22 = cx * cy;
 
-    out[0] = r00 * scl.x; out[1] = r10 * scl.x; out[2] = r20 * scl.x; out[3] = 0.0f;
-    out[4] = r01 * scl.y; out[5] = r11 * scl.y; out[6] = r21 * scl.y; out[7] = 0.0f;
-    out[8] = r02 * scl.z; out[9] = r12 * scl.z; out[10] = r22 * scl.z; out[11] = 0.0f;
-    out[12] = pos.x; out[13] = pos.y; out[14] = pos.z; out[15] = 1.0f;
+    out[0] = r00 * scl.x;
+    out[1] = r10 * scl.x;
+    out[2] = r20 * scl.x;
+    out[3] = 0.0f;
+    out[4] = r01 * scl.y;
+    out[5] = r11 * scl.y;
+    out[6] = r21 * scl.y;
+    out[7] = 0.0f;
+    out[8] = r02 * scl.z;
+    out[9] = r12 * scl.z;
+    out[10] = r22 * scl.z;
+    out[11] = 0.0f;
+    out[12] = pos.x;
+    out[13] = pos.y;
+    out[14] = pos.z;
+    out[15] = 1.0f;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +164,7 @@ TagRenderer::TagRenderer(const EngineConfig& config)
         {
             m_vramExtents[0] = VramExtent{m_texHeapBase, m_texHeapWords, false};
             m_vramExtentCount = 1;
-            Engine_LogInfo("TagRenderer: texture VRAM heap %u words (~%u KB) at 0x%X",
-                           m_texHeapWords, (m_texHeapWords * 4) / 1024, m_texHeapBase);
+            Engine_LogInfo("TagRenderer: texture VRAM heap %u words (~%u KB) at 0x%X", m_texHeapWords, (m_texHeapWords * 4) / 1024, m_texHeapBase);
         }
         else
         {
@@ -315,9 +324,7 @@ void TagRenderer::BeginFrame()
     const int cr = static_cast<int>(m_clearColor.r * 255.0f);
     const int cg = static_cast<int>(m_clearColor.g * 255.0f);
     const int cb = static_cast<int>(m_clearColor.b * 255.0f);
-    packet2_update(m_geom, draw_clear(m_geom->next, 0,
-                                      2048.0f - (GFX_SCREEN_WIDTH / 2), 2048.0f - (GFX_SCREEN_HEIGHT / 2),
-                                      GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, cr, cg, cb));
+    packet2_update(m_geom, draw_clear(m_geom->next, 0, 2048.0f - (GFX_SCREEN_WIDTH / 2), 2048.0f - (GFX_SCREEN_HEIGHT / 2), GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, cr, cg, cb));
 }
 
 void TagRenderer::EndFrame()
@@ -341,8 +348,7 @@ void TagRenderer::EndFrame()
         draw_wait_finish(); // GS finished drawing the previous frame
         graph_wait_vsync();
         // Show the previous frame (its buffer is no longer being drawn).
-        graph_set_framebuffer_filtered(m_frame[m_displayBuffer].address, m_frame[m_displayBuffer].width,
-                                       m_frame[m_displayBuffer].psm, 0, 0);
+        graph_set_framebuffer_filtered(m_frame[m_displayBuffer].address, m_frame[m_displayBuffer].width, m_frame[m_displayBuffer].psm, 0, 0);
     }
     m_frameStats.gsWaitMs = static_cast<float>((static_cast<double>(clock()) / CLOCKS_PER_SEC - waitStart) * 1000.0);
 
@@ -438,12 +444,12 @@ void TagRenderer::Render()
         const PrimitiveDrawEntry* uPrims = lists.GetUntexturedPrims();
         const PrimitiveDrawEntry* tPrims = lists.GetTexturedPrims();
 
-        auto drawPrim = [&](const PrimitiveDrawEntry& e, uint32_t texId) {
+        auto drawPrim = [&](const PrimitiveDrawEntry& e, uint32_t texId)
+        {
             // Frustum cull against the shape's object-space bounding sphere.
             Vector3 wc;
             float wr;
-            Frustum_WorldSphere(e.transform.GetPosition(), e.transform.GetScale(),
-                                Vector3{0.0f, 0.0f, 0.0f}, lists.GetPrimitiveBaseRadius(e.type), &wc, &wr);
+            Frustum_WorldSphere(e.transform.GetPosition(), e.transform.GetScale(), Vector3{0.0f, 0.0f, 0.0f}, lists.GetPrimitiveBaseRadius(e.type), &wc, &wr);
             if (!Frustum_SphereVisible(&frustum, wc, wr))
             {
                 ++m_frameStats.entriesCulled;
@@ -478,10 +484,7 @@ void TagRenderer::Render()
 
 // Worst-case qwords to emit `vertexCount` textured verts: 1 qw for the
 // GIFtag+reglist header plus 3 regs/vert = 1.5 qw/vert, rounded up.
-static inline uint32_t WorstCaseQwords(uint32_t vertexCount)
-{
-    return 2u + (vertexCount * 3u + 1u) / 2u;
-}
+static inline uint32_t WorstCaseQwords(uint32_t vertexCount) { return 2u + (vertexCount * 3u + 1u) / 2u; }
 
 bool TagRenderer::PacketHasSpace(uint32_t qwNeeded) const
 {
@@ -490,14 +493,12 @@ bool TagRenderer::PacketHasSpace(uint32_t qwNeeded) const
 }
 
 // Transform + emit one unindexed triangle list.
-void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs,
-                                uint32_t vertexCount, Color3 color, uint32_t textureId)
+void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId)
 {
     if (!verts || vertexCount < 3)
         return;
 
-    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS)
-        || !PacketHasSpace(WorstCaseQwords(vertexCount)))
+    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS) || !PacketHasSpace(WorstCaseQwords(vertexCount)))
     {
         ++m_frameDroppedObjects; // logged once per frame in EndFrame, not per object
         m_frameStats.trisCulled += vertexCount / 3;
@@ -579,8 +580,7 @@ void TagRenderer::DrawTriangles(const float mvp[16], const float* verts, int com
     // PRIM: triangle(3), gouraud(IIP bit3), texture(TME bit4 if textured).
     const uint32_t prim = 3u | (1u << 3) | (textured ? (1u << 4) : 0u);
     const uint32_t nreg = textured ? 3u : 2u;
-    const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8))
-                                      : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
+    const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8)) : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
 
     packet2_add_u64(m_geom, GifTagLo(emitted, prim, nreg, true));
     packet2_add_u64(m_geom, reglist);
@@ -639,9 +639,11 @@ void TagRenderer::SelfTestVu0Transform()
     }
     calculate_vertices(out, 3, in, m);
 
-    auto close = [](float a, float b) {
+    auto close = [](float a, float b)
+    {
         float d = a - b;
-        if (d < 0.0f) d = -d;
+        if (d < 0.0f)
+            d = -d;
         float ma = (a < 0.0f) ? -a : a;
         return d <= 0.01f * (1.0f + ma);
     };
@@ -657,8 +659,7 @@ void TagRenderer::SelfTestVu0Transform()
             match = false;
     }
     m_useVu0 = match;
-    Engine_LogInfo("TagRenderer: VU0 batch transform %s (self-test %s).",
-                   match ? "ENABLED" : "disabled", match ? "passed" : "failed");
+    Engine_LogInfo("TagRenderer: VU0 batch transform %s (self-test %s).", match ? "ENABLED" : "disabled", match ? "passed" : "failed");
 }
 
 // Transform `count` strip vertices to GS fixed-point screen space, writing
@@ -747,14 +748,12 @@ void TagRenderer::TransformStrip(const float mvp[16], const float* verts, int co
 // is split into maximal runs of >= 3 consecutive near-plane-visible vertices,
 // one GIF REGLIST (PRIM strip) per run. Winding parity is irrelevant on the GS
 // (no backface hardware), so runs need no parity fixup.
-void TagRenderer::DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs,
-                            uint32_t vertexCount, Color3 color, uint32_t textureId)
+void TagRenderer::DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId)
 {
     if (!verts || vertexCount < 3)
         return;
 
-    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS)
-        || !PacketHasSpace(WorstCaseQwords(vertexCount)))
+    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS) || !PacketHasSpace(WorstCaseQwords(vertexCount)))
     {
         ++m_frameDroppedObjects; // logged once per frame in EndFrame, not per object
         m_frameStats.trisCulled += vertexCount - 2;
@@ -780,8 +779,7 @@ void TagRenderer::DrawStrip(const float mvp[16], const float* verts, int compone
     // PRIM: triangle strip(4), gouraud(IIP bit3), texture(TME bit4 if textured).
     const uint32_t prim = 4u | (1u << 3) | (textured ? (1u << 4) : 0u);
     const uint32_t nreg = textured ? 3u : 2u;
-    const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8))
-                                      : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
+    const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8)) : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
 
     uint32_t emittedTotal = 0;
     uint32_t submittedTris = 0;
@@ -950,8 +948,7 @@ void TagRenderer::RenderModels(const DrawLists& lists)
         // Frustum cull against the model's merged bounding sphere.
         Vector3 wc;
         float wr;
-        Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(),
-                            model->boundsCenter, model->boundsRadius, &wc, &wr);
+        Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(), model->boundsCenter, model->boundsRadius, &wc, &wr);
         if (!Frustum_SphereVisible(&frustum, wc, wr))
         {
             ++m_frameStats.entriesCulled;
@@ -1004,7 +1001,7 @@ void TagRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }
 // ---------------------------------------------------------------------------
 namespace
 {
-inline uint32_t Align64(uint32_t words) { return (words + 63u) & ~63u; }
+    inline uint32_t Align64(uint32_t words) { return (words + 63u) & ~63u; }
 } // namespace
 
 uint32_t TagRenderer::VramAlloc(uint32_t words)
@@ -1104,9 +1101,15 @@ uint32_t TagRenderer::UploadTexture(const TextureUpload& upload)
     int psm;
     switch (upload.format)
     {
-    case PixelFormat::RGBA16: psm = GS_PSM_16; break;
-    case PixelFormat::PAL8: psm = GS_PSM_8; break;
-    default: psm = GS_PSM_32; break;
+    case PixelFormat::RGBA16:
+        psm = GS_PSM_16;
+        break;
+    case PixelFormat::PAL8:
+        psm = GS_PSM_8;
+        break;
+    default:
+        psm = GS_PSM_32;
+        break;
     }
 
     const uint8_t mipCount = (upload.mipCount == 0) ? 1 : upload.mipCount;

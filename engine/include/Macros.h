@@ -10,10 +10,10 @@
 // Logs the unimplemented function name at runtime and returns `ret`.
 // Usage: bool Foo(void) { ENGINE_NOT_IMPLEMENTED(false); }
 // NOTE: For lua_CFunction stubs return int and push a value — write those inline.
-#define ENGINE_NOT_IMPLEMENTED(ret)                                                                                    \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        Engine_LogError("Not implemented: %s", __func__);                                                              \
-        return (ret);                                                                                                  \
-    }                                                                                                                  \
+#define ENGINE_NOT_IMPLEMENTED(ret)                                                                                                                                                                    \
+    do                                                                                                                                                                                                 \
+    {                                                                                                                                                                                                  \
+        Engine_LogError("Not implemented: %s", __func__);                                                                                                                                              \
+        return (ret);                                                                                                                                                                                  \
+    }                                                                                                                                                                                                  \
     while (0)
