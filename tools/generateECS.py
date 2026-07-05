@@ -30,7 +30,7 @@ def main():
 
     try:
         # Run the command with generator_dir as the current working directory
-        result = subprocess.run(
+        subprocess.run(
             command,
             cwd=generator_dir,
             check=True,
