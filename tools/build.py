@@ -19,7 +19,10 @@ def main():
 
     # Check if we are on Windows and not in WSL
     is_windows = sys.platform == "win32"
-    is_wsl = "microsoft" in open("/proc/version", "r").read().lower() if os.path.exists("/proc/version") else False
+    is_wsl = False
+    if os.path.exists("/proc/version"):
+        with open("/proc/version", "r") as proc_version_file:
+            is_wsl = "microsoft" in proc_version_file.read().lower()
 
     print("=== Initialising git submodules ===")
     
