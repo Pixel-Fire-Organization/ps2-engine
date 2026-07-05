@@ -59,7 +59,7 @@ The `deps` array lists the **base names** of other assets that must be loaded be
 }
 ```
 
-This tells the runtime: when loading `ENEMY.ps2a`, also load `cdrom0:\RASSETS\ENEMY_TEX.PS2A;1` first and increment its reference count. The dependency is declared once in the JSON — no changes needed in Lua.
+This tells the runtime: when loading `ENEMY.ps2a`, also load `cdrom0:\RASSETS\ENEMY_TEX.PS2A;1` first and increment its reference count. The dependency is declared once in the JSON — no changes needed in game code.
 
 - Maximum **8 dependencies** per asset.
 - Dependency names are case-insensitive at authoring time; the packer uppercases them.
@@ -115,20 +115,20 @@ python3 tools/pack_assets.py --src game/cd_files/ASSETS --dst game/cd_files/rass
 
 ---
 
-## Accessing Assets at Runtime (Lua)
+## Accessing Assets at Runtime (C++)
 
-```lua
--- Load by the disc path of the generated .ps2a
-local handle = resources.load("TEXTURE", "cdrom0:\\RASSETS\\BOX.PS2A;1")
+```cpp
+// game/src/Game.cpp
+int handle = game::LoadResource("TEXTURE", game::MakePath("RASSETS\\BOX.PS2A"));
 
-function OnUpdate(dt)
-    if resources.is_ready(handle) then
-        graphics.draw_cube_textured(0.0, 0.0, 0.0, 2.0, handle)
-    end
-end
+void GameUpdate(float dt)
+{
+    if (game::IsResourceReady(handle))
+        game::DrawCubeTextured(0.0f, 0.0f, 0.0f, 2.0f, handle);
+}
 ```
 
-See `docs/Scripting/Core/resources.md` for the full `resources` Lua API.
+See `docs/RESOURCE_MANAGER.md` and `engine/include/GameAPI.h` for the full resource-loading API.
 
 ---
 
@@ -140,7 +140,7 @@ See `docs/Scripting/Core/resources.md` for the full `resources` Lua API.
    { "type": "TEXTURE", "source": "WALL.PNG", "deps": [] }
    ```
 3. Build — the packer produces `rassets/WALL.ps2a`.
-4. In Lua: `resources.load("TEXTURE", "cdrom0:\\RASSETS\\WALL.PS2A;1")`.
+4. In C++: `game::LoadResource("TEXTURE", "cdrom0:\\RASSETS\\WALL.PS2A;1")`.
 
 ## Example: Textured Model with Dependency
 
@@ -153,4 +153,4 @@ See `docs/Scripting/Core/resources.md` for the full `resources` Lua API.
    ```json
    { "type": "MODEL", "source": "CRATE.OBJ", "deps": ["CRATE_TEX"] }
    ```
-4. In Lua: `resources.load("MODEL", "cdrom0:\\RASSETS\\CRATE.PS2A;1")` — the texture is loaded automatically as a dependency.
+4. In C++: `game::LoadResource("MODEL", "cdrom0:\\RASSETS\\CRATE.PS2A;1")` — the texture is loaded automatically as a dependency.

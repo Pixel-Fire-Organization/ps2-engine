@@ -8,7 +8,7 @@ fragmentation and maximize performance.
 
 ## 1. Specialized Arenas (Segmented Slots)
 
-**Best For**: Engine-internal data — Lua VMs, configuration, level caches.
+**Best For**: Engine-internal data — configuration, level caches.
 
 ### The Model:
 
@@ -144,7 +144,6 @@ one request is ever reading into or decoding from this buffer at a time, enforce
 4. **"I need a place to store the scoreboard config."** → `ARENA_CONFIG`
 5. **"I'm creating a temporary context for an async IO callback."** → `Engine_PoolAllocMain()`
 6. **"I'm caching level entity spawn points."** → `ARENA_LEVEL_DATA`
-7. **"I'm loading a Lua script for an NPC."** → `ARENA_SCRIPT` (via `Engine_Script_Load`)
-8. **"I need to read a raw file asynchronously."** → `Engine_IO_ReadAsync()` — data arrives in a static
+7. **"I need to read a raw file asynchronously."** → `Engine_IO_ReadAsync()` — data arrives in a static
    `s_ReadBuffers[slot]` and is valid only for the duration of the callback. Files larger than `IO_READ_BUFFER_SIZE` (
    512 KB) are rejected.

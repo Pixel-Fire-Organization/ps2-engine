@@ -8,5 +8,4 @@
 #include "EngineLevel.h"
 #include "EngineMemory.h"
 #include "EngineResource.h"
-#include "EngineScript.h"
 #include "Macros.h"

@@ -2,9 +2,6 @@
 	path = external/ps2gl
 	url = https://github.com/Pixel-Fire-Organization/ps2gl
 	branch = develop
-[submodule "external/lua"]
-	path = external/lua
-	url = https://github.com/lua/lua.git
 [submodule "external/ps2stuff"]
 	path = external/ps2stuff
 	url = https://github.com/ps2dev/ps2stuff.git

@@ -23,7 +23,6 @@ typedef struct
 // These arenas are for engine-internal subsystems only.
 typedef enum
 {
-    ARENA_SCRIPT,
     ARENA_CONFIG,
     ARENA_LEVEL_DATA,
     ARENA_RENDERER,

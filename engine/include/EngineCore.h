@@ -2,6 +2,7 @@
 
 #include "graphics/Renderer.h"
 #include <cstddef>
+#include <cstdint>
 
 // Renderer backend selection. Chosen at build time via a CMake compile define
 // (-DRENDERER_BACKEND_PS2GL or -DRENDERER_BACKEND_GIFTAG). Default to the PS2GL
@@ -37,6 +38,10 @@ void Engine_ReportFrameStats(float logicTime, float renderTime, float waitTime);
 float Engine_GetLogicTime();
 float Engine_GetRenderTime();
 float Engine_GetWaitTime();
+
+// Frame counter, incremented once per Engine_Update() call. Used by the
+// heartbeat log and perf snapshot to report frame number / detect hangs.
+uint32_t Engine_GetFrameCount();
 
 // Constructs a full filesystem path by combining the active resource location
 // token with a relative path, inserting the correct separator and version

@@ -164,7 +164,6 @@ if(DEFINED ENV{PS2DEV})
         "  Add:\n"
         "    - \"-I${_CLANGD_ENG_PATH}/engine/include\"\n"
         "    - \"-I${_CLANGD_ENG_PATH}/external/ps2gl/include\"\n"
-        "    - \"-I${_CLANGD_ENG_PATH}/external/lua\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/ee/include\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/common/include\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/ports/include\"\n"

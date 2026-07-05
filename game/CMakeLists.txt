@@ -1,4 +1,8 @@
-add_executable(${APP_EXE_NAME} EXCLUDE_FROM_ALL src/main.cpp)
+add_executable(${APP_EXE_NAME} EXCLUDE_FROM_ALL
+    src/main.cpp
+    src/Game.cpp
+    src/SwarmSystem.cpp
+)
 set_target_properties(${APP_EXE_NAME} PROPERTIES
     LINKER_LANGUAGE CXX
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/dist"
@@ -8,7 +12,6 @@ target_compile_options(${APP_EXE_NAME} PRIVATE -Wall -Wextra -Werror)
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     target_link_libraries(${APP_EXE_NAME} PRIVATE
         ps2_engine
-        lua
         ${PS2GL_LIB}
             ps2stuff dma packet2 graph draw input pad math3d gs png z m mc c -ldebug
     )
@@ -80,7 +83,7 @@ if(MKISOFS_BIN)
 
     # Always regenerate the ISO on every build, just like pack-assets.
     # Using add_custom_target (no OUTPUT) ensures the commands run unconditionally
-    # so edited Lua scripts, configs, or packed assets are always included.
+    # so edited configs or packed assets are always included.
     add_custom_target(generate-iso
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
         # Wipe and recreate the staging dir so stale files from previous builds
