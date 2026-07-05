@@ -1,18 +1,15 @@
 add_executable(${APP_EXE_NAME} EXCLUDE_FROM_ALL src/main.cpp)
 set_target_properties(${APP_EXE_NAME} PROPERTIES
     LINKER_LANGUAGE CXX
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/exec"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/dist"
 )
 target_compile_options(${APP_EXE_NAME} PRIVATE -Wall -Wextra -Werror)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
-    target_link_directories(${APP_EXE_NAME} PRIVATE
-        ${CMAKE_SOURCE_DIR}/thirdparty/ps2gl
-    )
     target_link_libraries(${APP_EXE_NAME} PRIVATE
         ps2_engine
         lua
-        ${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a
+        ${PS2GL_LIB}
             ps2stuff dma packet2 graph draw input pad math3d gs png z m mc c -ldebug
     )
 else()
@@ -22,11 +19,11 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     add_custom_command(TARGET ${APP_EXE_NAME} PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -f
-            "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
-            "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}"
-        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_SOURCE_DIR}/exec/iso_contents"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/exec"
-        COMMENT "Cleaning exec/..."
+            "${CMAKE_SOURCE_DIR}/dist/${APP_EXE_NAME}"
+            "${CMAKE_SOURCE_DIR}/dist/${APP_ISO_NAME}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_SOURCE_DIR}/dist/iso_contents"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+        COMMENT "Cleaning dist/..."
         VERBATIM
     )
     add_dependencies(${APP_EXE_NAME} ps2gl_build)
@@ -36,7 +33,7 @@ endif()
 find_program(PYTHON3_BIN python3)
 if(PYTHON3_BIN)
     add_custom_target(pack-assets
-        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/pack_assets.py"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/pack_assets.py"
             --src "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/ASSETS"
             --dst "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/rassets"
         COMMENT "Packing assets from cd_files/ASSETS -> cd_files/rassets..."
@@ -60,9 +57,9 @@ if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
             COMMAND ${CMAKE_COMMAND}
                 -D "EE_NM=${EE_NM_BIN}"
                 -D "ELF=$<TARGET_FILE:${APP_EXE_NAME}>"
-                -D "SYM=${CMAKE_SOURCE_DIR}/exec/${APP_EXE_BASENAME}.sym"
-                -P "${CMAKE_SOURCE_DIR}/scripts/gen_sym.cmake"
-            COMMENT "Generating PCSX2 debug symbols: exec/${APP_EXE_BASENAME}.sym"
+                -D "SYM=${CMAKE_SOURCE_DIR}/dist/${APP_EXE_BASENAME}.sym"
+                -P "${CMAKE_SOURCE_DIR}/tools/gen_sym.cmake"
+            COMMENT "Generating PCSX2 debug symbols: dist/${APP_EXE_BASENAME}.sym"
             VERBATIM
         )
         message(STATUS "Debug .sym generation enabled (ee-nm: ${EE_NM_BIN})")
@@ -79,13 +76,13 @@ set(ISO_CONTENT_BLACKLIST
 
 find_program(MKISOFS_BIN mkisofs)
 if(MKISOFS_BIN)
-    set(ISO_OUTPUT "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}")
+    set(ISO_OUTPUT "${CMAKE_SOURCE_DIR}/dist/${APP_ISO_NAME}")
 
     # Always regenerate the ISO on every build, just like pack-assets.
     # Using add_custom_target (no OUTPUT) ensures the commands run unconditionally
     # so edited Lua scripts, configs, or packed assets are always included.
     add_custom_target(generate-iso
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/exec"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
         # Wipe and recreate the staging dir so stale files from previous builds
         # (e.g. an old executable under a different name) never end up in the ISO.
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${ISO_STAGING_DIR}"
@@ -94,7 +91,7 @@ if(MKISOFS_BIN)
                 -D "SRC=${CMAKE_CURRENT_SOURCE_DIR}/cd_files"
                 -D "DST=${ISO_STAGING_DIR}"
                 -D "BLACKLIST=${ISO_CONTENT_BLACKLIST}"
-                -P "${CMAKE_SOURCE_DIR}/scripts/copy_iso_files.cmake"
+                -P "${CMAKE_SOURCE_DIR}/tools/copy_iso_files.cmake"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_SERIAL}"
         COMMAND ${CMAKE_COMMAND} -E copy
@@ -108,15 +105,15 @@ if(MKISOFS_BIN)
         #   the generic "CDROM" label.
         COMMAND ${MKISOFS_BIN} -l -sysid "PLAYSTATION" -V "${APP_SERIAL_LABEL}"
                 -o "${ISO_OUTPUT}" "${ISO_STAGING_DIR}"
-        COMMENT "Generating bootable PS2 iso: exec/${APP_ISO_NAME}"
+        COMMENT "Generating bootable PS2 iso: dist/${APP_ISO_NAME}"
         VERBATIM
     )
 
     if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
         add_custom_command(TARGET generate-iso POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${ISO_STAGING_DIR}" "${CMAKE_SOURCE_DIR}/exec/iso_contents"
-            COMMENT "Copying ISO contents to exec/iso_contents/..."
+                    "${ISO_STAGING_DIR}" "${CMAKE_SOURCE_DIR}/dist/iso_contents"
+            COMMENT "Copying ISO contents to dist/iso_contents/..."
             VERBATIM
         )
     endif()

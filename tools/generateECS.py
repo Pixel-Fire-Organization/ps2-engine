@@ -22,7 +22,7 @@ def main():
         "../schema.json",
         "../ECS.json",
         "../../../engine/include/ecs/Components.h",
-        "../../../thirdparty/TrenchBroom-2025.4/games/PS2Engine/PS2Engine.fgd"
+        "../../../tools/trenchbroom/games/PS2Engine/PS2Engine.fgd"
     ]
 
     print(f"Running ECS generator in {generator_dir}...")

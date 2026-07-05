@@ -3,7 +3,7 @@ import os
 import sys
 
 def main():
-    luaconf_file = os.path.join("thirdparty", "lua", "luaconf.h")
+    luaconf_file = os.path.join("external", "lua", "luaconf.h")
 
     if not os.path.isfile(luaconf_file):
         print(f"Error: Could not find {luaconf_file} — is the lua submodule initialised?")

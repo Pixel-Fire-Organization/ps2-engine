@@ -83,7 +83,7 @@
 
 The repo `.clang-format` is authoritative. **ALWAYS** follow it.
 
-- **Never** run clang-format over `thirdparty/`.
+- **Never** run clang-format over `external/`.
 
 ## Graphics Subsystem Rules
 

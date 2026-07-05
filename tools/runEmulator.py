@@ -8,7 +8,7 @@ def main():
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
     else:
-        file_path = "./exec/engine.iso"
+        file_path = "./dist/engine.iso"
 
     file_path = os.path.abspath(file_path)
 
@@ -48,7 +48,7 @@ def main():
 
     if not pcsx2_path or not os.path.exists(pcsx2_path) and not shutil.which(pcsx2_path):
         print("Error: PCSX2 not found.")
-        print("Usage: python3 scripts/runEmulator.py [FilePath] [Pcsx2Path]")
+        print("Usage: python3 tools/runEmulator.py [FilePath] [Pcsx2Path]")
         sys.exit(1)
 
     file_final = file_path

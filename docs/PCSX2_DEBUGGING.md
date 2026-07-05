@@ -2,14 +2,14 @@
 
 ## Overview
 
-When building in **debug** mode, the build system produces a structured `exec/` output
+When building in **debug** mode, the build system produces a structured `dist/` output
 with everything needed for PCSX2 inspection and debugging.
 
-## exec/ Output Layout
+## dist/ Output Layout
 
 ### Debug build
 ```
-exec/
+dist/
   engine.iso          ← bootable PS2 disc image
   iso_contents/       ← the exact files that went into the ISO (for inspection)
   main.elf            ← the linked executable with full DWARF debug info
@@ -18,7 +18,7 @@ exec/
 
 ### Release build
 ```
-exec/
+dist/
   engine.iso
   main.elf
 ```
@@ -49,29 +49,29 @@ Only code and data symbols are included (object types `T t B b D d R r W w`).
 
 | File | Description |
 |------|-------------|
-| `exec/main.sym` | Symbol table, loaded by PCSX2 |
-| `exec/iso_contents/` | Mirror of the ISO's filesystem for inspection (debug only) |
-| `scripts/gen_sym.cmake` | CMake script that runs `ee-nm` and filters its output |
+| `dist/main.sym` | Symbol table, loaded by PCSX2 |
+| `dist/iso_contents/` | Mirror of the ISO's filesystem for inspection (debug only) |
+| `tools/gen_sym.cmake` | CMake script that runs `ee-nm` and filters its output |
 
 ## Loading Symbols in PCSX2
 
 **Option A — from `.sym` file (ISO workflow):**
-1. Boot `exec/engine.iso` in PCSX2.
+1. Boot `dist/engine.iso` in PCSX2.
 2. Open the debugger (*Debug → Open Debugger*).
-3. *Symbols → Load symbols…* → select `exec/main.sym`.
+3. *Symbols → Load symbols…* → select `dist/main.sym`.
 
 **Option B — from ELF directly (ELF workflow):**
-1. Load `exec/main.elf` directly in PCSX2 (*File → Run ELF…*).
+1. Load `dist/main.elf` directly in PCSX2 (*File → Run ELF…*).
 2. PCSX2 reads the `.symtab` automatically — no `.sym` file needed.
 
 ## Build Commands
 
 ```bash
 # Debug build — produces iso, iso_contents/, elf, sym
-./scripts/build.sh debug pal
+./tools/build.sh debug pal
 
 # Release build — produces iso, elf only
-./scripts/build.sh release pal
+./tools/build.sh release pal
 ```
 
 ## Implementation Details
@@ -81,11 +81,11 @@ Three ordered `POST_BUILD` steps on the ELF target, all guarded by
 
 | Step | Always / Debug only | What it does |
 |------|---------------------|--------------|
-| ① `gen_sym.cmake` | Debug only | Runs `ee-nm`, writes `exec/main.sym` |
-| ② `mkisofs` | Always | Stages `cd_files/` → `build/iso_root/`, writes `exec/engine.iso` |
-| ③ `copy_directory` | Debug only | Copies `build/iso_root/` → `exec/iso_contents/` |
+| ① `gen_sym.cmake` | Debug only | Runs `ee-nm`, writes `dist/main.sym` |
+| ② `mkisofs` | Always | Stages `cd_files/` → `build/iso_root/`, writes `dist/engine.iso` |
+| ③ `copy_directory` | Debug only | Copies `build/iso_root/` → `dist/iso_contents/` |
 
 Step ③ runs after step ② so the staging directory is already fully populated.
-`scripts/gen_sym.cmake` runs `ee-nm --numeric-sort`, then filters the output with
+`tools/gen_sym.cmake` runs `ee-nm --numeric-sort`, then filters the output with
 CMake string/regex commands — no shell, no `awk`, no generated temp files.
 

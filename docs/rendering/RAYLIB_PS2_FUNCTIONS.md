@@ -4,7 +4,7 @@ This document catalogues every raylib function that is **concretely implemented*
 **correct output** on the PlayStation 2 target.
 
 > **Build flags** (confirmed): `PLATFORM=PLATFORM_PLAYSTATION2 GRAPHICS=GRAPHICS_API_OPENGL_11 -I../../ps2gl/include`  
-> `From: thirdparty/CMakeLists.txt @ 58:58`
+> `From: external/CMakeLists.txt @ 58:58`
 
 Because raylib is compiled with `GRAPHICS_API_OPENGL_11`, every `rlgl*` call inside raylib routes
 **directly** to the matching `gl*` function in ps2gl. This means every constraint documented in

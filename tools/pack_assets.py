@@ -2,11 +2,11 @@
 """
 pack_assets.py — PS2 Engine Asset Packer
 
-Reads JSON + source file pairs from app/cd_files/ASSETS/ and compiles them into
-binary .ps2a files in app/cd_files/rassets/.
+Reads JSON + source file pairs from game/cd_files/ASSETS/ and compiles them into
+binary .ps2a files in game/cd_files/rassets/.
 
 Usage:
-    python3 scripts/pack_assets.py [--src <ASSETS_DIR>] [--dst <RASSETS_DIR>]
+    python3 tools/pack_assets.py [--src <ASSETS_DIR>] [--dst <RASSETS_DIR>]
 
 JSON schema (e.g. player_tex.json):
     { "type": "TEXTURE", "source": "player_tex.png", "deps": [] }

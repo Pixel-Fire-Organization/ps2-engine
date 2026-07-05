@@ -40,7 +40,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     # software-emulated and ~5-10x slower).  CMake dependency tracking automatically
     # detects the header change and recompiles liblua.a without manual intervention.
     execute_process(
-            COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/patch_lua.py"
+            COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/patch_lua.py"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             RESULT_VARIABLE _LUA_PATCH_RESULT
     )
@@ -63,7 +63,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         COMMAND ${CMAKE_COMMAND} -E rm -f "${_PS2SDK}/ports/lib/libps2stuff.a"
         COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM} install
         COMMAND ${CMAKE_COMMAND} -E touch "${_PS2STUFF_STAMP}"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2stuff"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/external/ps2stuff"
         COMMENT "Building and installing ps2stuff..."
         VERBATIM
     )
@@ -72,17 +72,32 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     )
 
     # Build ps2gl after ps2stuff has installed ps2s/ headers into $(PS2SDK)/ports/include.
-    # ps2gl's Makefile already adds -I$(PS2SDK)/ports/include via EE_INCS.
+    # ps2gl's develop branch is its own standalone CMake project (no Makefile),
+    # so it's configured and built out-of-tree into its own build dir under ours,
+    # then linked directly from there.
+    #
+    # Deliberately NOT passing our own ps2dev.cmake toolchain here: it forces
+    # -std=c++11, but ps2stuff's ps2s/core.h (which ps2gl includes) uses
+    # std::align_val_t (C++17 aligned new) and fails to compile under that flag.
+    # Omitting CMAKE_TOOLCHAIN_FILE lets ps2gl fall back to its own default
+    # ($PS2DEV/share/ps2dev.cmake, installed by ps2dev itself), which leaves the
+    # compiler's own default C++ standard (new enough) untouched.
+    set(PS2GL_BUILD_DIR "${CMAKE_BINARY_DIR}/ps2gl_build")
+    set(PS2GL_LIB "${PS2GL_BUILD_DIR}/libps2gl.a" CACHE INTERNAL "Path to the built ps2gl static library")
+
     add_custom_command(
-        OUTPUT "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
-        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}" ${CMAKE_MAKE_PROGRAM}
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl"
+        OUTPUT "${PS2GL_LIB}"
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}"
+            ${CMAKE_COMMAND} -S "${CMAKE_SOURCE_DIR}/external/ps2gl" -B "${PS2GL_BUILD_DIR}"
+            -DBUILD_TESTS=OFF -DBUILD_GLUT=OFF -DBUILD_EXAMPLES=OFF
+        COMMAND ${CMAKE_COMMAND} -E env "PS2DEV=${_PS2DEV}" "PS2SDK=${_PS2SDK}" "PATH=${_PS2_PATH}"
+            ${CMAKE_COMMAND} --build "${PS2GL_BUILD_DIR}" --target ps2gl
         DEPENDS "${_PS2STUFF_STAMP}"
-        COMMENT "Building ps2gl..."
+        COMMENT "Configuring and building ps2gl (CMake)..."
         VERBATIM
     )
     add_custom_target(ps2gl_build
-        DEPENDS "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
+        DEPENDS "${PS2GL_LIB}"
     )
     add_dependencies(ps2gl_build ps2stuff_build)
 endif()

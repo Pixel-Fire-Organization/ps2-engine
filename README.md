@@ -9,7 +9,7 @@ To reliably build this engine from source, you must have the PS2 toolchain prope
 1. **PS2 Toolchain:** 
    - Follow the official instructions to install the modern [`ps2dev` toolchain](https://github.com/ps2dev/ps2dev).
    - **Environment:** Ensure your shell exports the `PS2DEV` environment variable (e.g. `export PS2DEV=/usr/local/ps2dev`).
-   - **IDE Setup (Automatic):** Simply running `./scripts/build.sh` (see below) will automatically generate a `.clangd` file that configures your editor's highlighting for both WSL and Windows.
+   - **IDE Setup (Automatic):** Simply running `./tools/build.sh` (see below) will automatically generate a `.clangd` file that configures your editor's highlighting for both WSL and Windows.
 
 2. **Dependencies:**
    - **CMake (3.10+)**
@@ -25,14 +25,14 @@ To reliably build this engine from source, you must have the PS2 toolchain prope
 
 ## Build Instructions
 
-We provide convenient scripts in the `scripts/` directory to effortlessly wipe old caches and cleanly rebuild the toolchain via CMake.
+We provide convenient scripts in the `tools/` directory to effortlessly wipe old caches and cleanly rebuild the toolchain via CMake.
 
 ### Windows (Recommended)
 You can use the PowerShell or Batch wrappers which automatically handle WSL invocation:
 
 ```powershell
 # From the project root:
-./scripts/build.ps1
+./tools/build.ps1
 ```
 
 Or using the batch file:
@@ -44,8 +44,8 @@ Or using the batch file:
 To execute the bash build script directly:
 
 ```bash
-chmod +x scripts/build.sh
-./scripts/build.sh
+chmod +x tools/build.sh
+./tools/build.sh
 ```
 
 Alternatively, you can execute the CMake generation sequence manually:
@@ -64,23 +64,23 @@ A script is provided to quickly launch the generated ISO in PCSX2.
 
 ### Windows
 ```powershell
-./scripts/runEmulator.ps1
+./tools/runEmulator.ps1
 ```
 
 ### WSL / Linux (cross-calling Windows PCSX2)
 ```bash
-./scripts/runEmulator.sh
+./tools/runEmulator.sh
 ```
 
 ## Build Artifacts
 
-All successfully linked targets are automatically routed away from the build sludge into the dedicated `exec/` directory located at the root of the project workspace.
+All successfully linked targets are automatically routed away from the build sludge into the dedicated `dist/` directory located at the root of the project workspace.
 
-- `exec/main.elf` - The raw, unpacked PS2 executable (Recommended for rapid testing over network using `ps2client`).
-- `exec/engine.iso` - A completely bundled, self-bootable disk image ready for PCSX2 or mounting on authentic hardware (relies on `SYSTEM.CNF`).
+- `dist/main.elf` - The raw, unpacked PS2 executable (Recommended for rapid testing over network using `ps2client`).
+- `dist/engine.iso` - A completely bundled, self-bootable disk image ready for PCSX2 or mounting on authentic hardware (relies on `SYSTEM.CNF`).
 
 ### Custom ISO Assets
 
-Any custom assets (textures, scripts, data files) that you want to include in the generated `.iso` should be placed in `app/cd_files/`. These files will be automatically bundled at the **root** of the ISO filesystem during the build process.
+Any custom assets (textures, scripts, data files) that you want to include in the generated `.iso` should be placed in `game/cd_files/`. These files will be automatically bundled at the **root** of the ISO filesystem during the build process.
 
-For example, a file at `app/cd_files/levels/map.bin` will be accessible on the PS2 as `cdrom0:\\LEVELS\\MAP.BIN;1`.
+For example, a file at `game/cd_files/levels/map.bin` will be accessible on the PS2 as `cdrom0:\\LEVELS\\MAP.BIN;1`.

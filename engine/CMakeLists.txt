@@ -51,8 +51,8 @@ add_library(ps2_engine STATIC
 # Internal engine code always sees the full include directory.
 target_include_directories(ps2_engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/include"
-    "${CMAKE_SOURCE_DIR}/thirdparty/lua"
+    "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
+    "${CMAKE_SOURCE_DIR}/external/lua"
 )
 
 if(ENGINE_SANDBOX_MODE)
@@ -66,8 +66,8 @@ else()
     # Dev/test mode: full engine header surface exposed.
     target_include_directories(ps2_engine PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/include"
-        "${CMAKE_SOURCE_DIR}/thirdparty/lua"
+        "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
+        "${CMAKE_SOURCE_DIR}/external/lua"
     )
     message(STATUS "ENGINE_SANDBOX_MODE: OFF — full engine headers exposed")
 endif()

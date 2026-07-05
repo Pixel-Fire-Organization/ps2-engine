@@ -87,9 +87,9 @@ endif()
 
 file(WRITE "${CMAKE_BINARY_DIR}/SYSTEM.CNF" "BOOT2 = cdrom0:\\${APP_SERIAL};1\r\nVER = 1.00\r\nVMODE = ${APP_REGION}\r\n")
 
-add_subdirectory(thirdparty)
+add_subdirectory(external)
 add_subdirectory(engine)
-add_subdirectory(app)
+add_subdirectory(game)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
 
@@ -99,51 +99,37 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     endif()
 
     add_custom_target(run-emulator
-        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/runEmulator.py" "${CMAKE_SOURCE_DIR}/exec/engine.iso"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/runEmulator.py" "${CMAKE_SOURCE_DIR}/dist/engine.iso"
         COMMENT "Launching PCSX2 with ISO..."
         VERBATIM
     )
 
     add_custom_target(run-emulator-elf
-        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/scripts/runEmulator.py" "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/runEmulator.py" "${CMAKE_SOURCE_DIR}/dist/${APP_EXE_NAME}"
         COMMENT "Launching PCSX2 with ELF..."
         VERBATIM
     )
 
-    # Derive toolchain paths (mirrors thirdparty/CMakeLists.txt so the thirdparty
-    # Makefiles can find the PS2 cross-compiler during the clean step).
-    if(DEFINED ENV{PS2DEV})
-        set(_CLEAN_PS2DEV "$ENV{PS2DEV}")
-    else()
-        set(_CLEAN_PS2DEV "/usr/local/ps2dev")
-    endif()
-    set(_CLEAN_PS2SDK "${_CLEAN_PS2DEV}/ps2sdk")
-    set(_CLEAN_PATH "${_CLEAN_PS2DEV}/ee/bin:${_CLEAN_PS2DEV}/iop/bin:${_CLEAN_PS2DEV}/dvp/bin:$ENV{PATH}")
-
     # NOTE: CMake reserves the name "clean" for its own built-in target, so this
     # extended target is named "clean-all".  It cleans every artefact that the
-    # built-in "clean" misses: thirdparty source objects and exec/ outputs.
+    # built-in "clean" misses: external source objects and dist/ outputs.
     #
     # Usage:  cmake --build build --target clean-all
     add_custom_target(clean-all
         COMMENT "Cleaning all build artefacts for a full from-scratch rebuild..."
         # 1. CMake-tracked objects and libraries (engine, lua, .o files in build/).
         COMMAND ${CMAKE_MAKE_PROGRAM} clean
-        # 2. Thirdparty cached libraries — deleting them forces CMake's
-        #    add_custom_command to re-trigger the full thirdparty build next time.
-        COMMAND ${CMAKE_COMMAND} -E rm -f
-            "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl/libps2gl.a"
-        # 3. ps2gl source objects.
-        COMMAND ${CMAKE_COMMAND} -E env
-            "PS2DEV=${_CLEAN_PS2DEV}" "PS2SDK=${_CLEAN_PS2SDK}" "PATH=${_CLEAN_PATH}"
-            ${CMAKE_MAKE_PROGRAM} -C "${CMAKE_SOURCE_DIR}/thirdparty/ps2gl" clean
-        # 5. Final outputs in exec/.
-        COMMAND ${CMAKE_COMMAND} -E rm -f
-            "${CMAKE_SOURCE_DIR}/exec/${APP_EXE_NAME}"
-            "${CMAKE_SOURCE_DIR}/exec/${APP_ISO_NAME}"
-            "${CMAKE_SOURCE_DIR}/exec/main.sym"
+        # 2. ps2gl's own out-of-tree CMake build dir — deleting it forces a full
+        #    reconfigure + rebuild next time (it has no Makefile of its own to clean).
         COMMAND ${CMAKE_COMMAND} -E rm -rf
-            "${CMAKE_SOURCE_DIR}/exec/iso_contents"
+            "${CMAKE_BINARY_DIR}/ps2gl_build"
+        # 5. Final outputs in dist/.
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "${CMAKE_SOURCE_DIR}/dist/${APP_EXE_NAME}"
+            "${CMAKE_SOURCE_DIR}/dist/${APP_ISO_NAME}"
+            "${CMAKE_SOURCE_DIR}/dist/main.sym"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "${CMAKE_SOURCE_DIR}/dist/iso_contents"
         VERBATIM
     )
 endif()
@@ -177,8 +163,8 @@ if(DEFINED ENV{PS2DEV})
         "CompileFlags:\n"
         "  Add:\n"
         "    - \"-I${_CLANGD_ENG_PATH}/engine/include\"\n"
-        "    - \"-I${_CLANGD_ENG_PATH}/thirdparty/ps2gl/include\"\n"
-        "    - \"-I${_CLANGD_ENG_PATH}/thirdparty/lua\"\n"
+        "    - \"-I${_CLANGD_ENG_PATH}/external/ps2gl/include\"\n"
+        "    - \"-I${_CLANGD_ENG_PATH}/external/lua\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/ee/include\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/common/include\"\n"
         "    - \"-I${_CLANGD_SDK_PATH}/ports/include\"\n"

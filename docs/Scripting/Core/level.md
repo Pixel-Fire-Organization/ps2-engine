@@ -64,7 +64,7 @@ A level file can be written by any tool that:
 1. Fills a `LevelFileHeader` with the correct magic and version.
 2. Fills a `Level` struct (packed layout).
 3. Writes both sequentially to a `.ps2l` file.
-4. Places the file in `app/cd_files/` so the ISO build pipeline picks it up.
+4. Places the file in `game/cd_files/` so the ISO build pipeline picks it up.
 
 ---
 

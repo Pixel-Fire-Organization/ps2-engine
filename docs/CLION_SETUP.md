@@ -60,19 +60,19 @@ CMake handles the full pipeline automatically — ps2gl, raylib, engine compilat
 
 ### Running the Emulator
 
-A `run-emulator` CMake custom target is provided for launching PCSX2. It calls `scripts/runEmulator.sh` with the built ISO and works on both Windows (via WSL interop) and Linux natively.
+A `run-emulator` CMake custom target is provided for launching PCSX2. It calls `tools/runEmulator.sh` with the built ISO and works on both Windows (via WSL interop) and Linux natively.
 
 To run from CLion:
 
 1. In the **Build Target** dropdown, select `run-emulator`.
 2. Click the hammer (▲).
 
-See [scripts/runEmulator.sh](../scripts/runEmulator.sh) for supported PCSX2 install paths. You can also run it directly from a terminal:
+See [tools/runEmulator.sh](../tools/runEmulator.sh) for supported PCSX2 install paths. You can also run it directly from a terminal:
 
 ```bash
-bash scripts/runEmulator.sh exec/engine.iso
+bash tools/runEmulator.sh dist/engine.iso
 # or pass the path explicitly:
-bash scripts/runEmulator.sh exec/engine.iso "C:/path/to/pcsx2-qt.exe"
+bash tools/runEmulator.sh dist/engine.iso "C:/path/to/pcsx2-qt.exe"
 ```
 
 ---
@@ -82,14 +82,14 @@ bash scripts/runEmulator.sh exec/engine.iso "C:/path/to/pcsx2-qt.exe"
 The CMake hammer invokes `cmake --build <binaryDir> --target main.elf`. `CMakeLists.txt` drives the full pipeline in order:
 
 1. **Configure time**: patches raylib (idempotent), generates `.clangd` for IDE analysis.
-2. **Build time**: builds `ps2gl` → builds `raylib` → compiles the engine → links `main.elf` → generates `exec/engine.iso`.
+2. **Build time**: builds `ps2gl` → builds `raylib` → compiles the engine → links `main.elf` → generates `dist/engine.iso`.
 
 `ps2gl` and `raylib` are only rebuilt if their `.a` files are missing (CMake output-based tracking). On incremental builds only the changed engine/app sources are recompiled.
 
 `build.sh` is also available as a thin CLI wrapper if you prefer building from a terminal:
 
 ```
-bash scripts/build.sh [debug|release] [pal|ntsc]
+bash tools/build.sh [debug|release] [pal|ntsc]
 ```
 
 Note that `build.sh` always targets the single `build/` directory regardless of the active CLion profile. The CMake profile `binaryDir`s (`build/debug-pal`, etc.) are separate directories used only by CLion for code analysis.
@@ -100,7 +100,7 @@ Note that `build.sh` always targets the single `build/` directory regardless of 
 
 1. Select the `PS2 Debug (PAL)` CMake profile and `main.elf` as the build target, then click the hammer (▲).
    - The full pipeline runs: ps2gl → raylib → engine compile → link → ISO generation.
-   - Output: `exec/main.elf` and `exec/engine.iso`.
+   - Output: `dist/main.elf` and `dist/engine.iso`.
 2. **Reload CMake** in CLion after the first build: **Tools** → **CMake** → **Reload CMake Project**.
    - This picks up `build/compile_commands.json` and the generated `.clangd` so PS2SDK headers resolve correctly in the editor.
 3. To run the emulator, select `run-emulator` as the build target and click the hammer (▲).
@@ -143,7 +143,7 @@ The presets hardcode `/usr/local/ps2dev`. If your toolchain is at a different pa
 The script checks common install paths. Pass the path explicitly as the second argument:
 
 ```bash
-bash scripts/runEmulator.sh exec/engine.iso "C:/path/to/pcsx2-qt.exe"
+bash tools/runEmulator.sh dist/engine.iso "C:/path/to/pcsx2-qt.exe"
 ```
 
 ### `genisoimage` / `mkisofs` not found (no ISO generated)
