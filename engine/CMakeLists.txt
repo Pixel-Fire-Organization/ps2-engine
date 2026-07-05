@@ -1,5 +1,5 @@
 option(ENGINE_SANDBOX_MODE
-    "Restrict the app target to EngineApp.h only (Lua-driven sandbox mode). \
+    "Restrict the app target to the curated app_public headers only. \
 OFF exposes the full engine include directory (dev/test mode)."
     ON
 )
@@ -11,8 +11,8 @@ add_library(ps2_engine STATIC
         src/EngineIO.cpp
         src/EngineResource.cpp
         src/EngineLevel.cpp
-        src/EngineScript.cpp
         src/EngineApp.cpp
+        src/GameAPI.cpp
         src/EngineInput.cpp
         src/graphics/GLRenderer.cpp
         src/graphics/TagRenderer.cpp
@@ -25,6 +25,8 @@ add_library(ps2_engine STATIC
         # Headers
         include/Engine.h
         include/EngineApp.h
+        include/GameAPI.h
+        include/app_public/GameAPI.h
         include/Constants.h
         include/Macros.h
         include/EngineCore.h
@@ -33,7 +35,6 @@ add_library(ps2_engine STATIC
         include/EngineMemory.h
         include/EngineResource.h
         include/EngineLevel.h
-        include/EngineScript.h
         include/EngineInput.h
         include/graphics/EngineGraphics.h
         include/graphics/Renderer.h
@@ -52,22 +53,20 @@ add_library(ps2_engine STATIC
 target_include_directories(ps2_engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
-    "${CMAKE_SOURCE_DIR}/external/lua"
 )
 
 if(ENGINE_SANDBOX_MODE)
-    # App can only see EngineApp.h — memory, IO, resource, and scripting
-    # internals are not reachable from app code.
+    # App can only see the curated app_public headers — memory, IO, resource,
+    # and other engine internals are not reachable from app code.
     target_include_directories(ps2_engine PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include/app_public"
     )
-    message(STATUS "ENGINE_SANDBOX_MODE: ON — app restricted to EngineApp.h")
+    message(STATUS "ENGINE_SANDBOX_MODE: ON — app restricted to app_public headers")
 else()
     # Dev/test mode: full engine header surface exposed.
     target_include_directories(ps2_engine PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
-        "${CMAKE_SOURCE_DIR}/external/lua"
     )
     message(STATUS "ENGINE_SANDBOX_MODE: OFF — full engine headers exposed")
 endif()

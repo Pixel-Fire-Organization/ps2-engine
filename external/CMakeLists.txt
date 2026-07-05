@@ -1,30 +1,8 @@
 # Thirdparty libraries CMake configuration
 cmake_minimum_required(VERSION 3.10)
-project(lua C)
-
-# Define the Lua library
-# This is placed here to avoid modifying the submodule's directory structure
-set(LUA_SOURCES
-    lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c
-    lua/ldblib.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/linit.c
-    lua/liolib.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/loadlib.c lua/lobject.c
-    lua/lopcodes.c lua/loslib.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c
-    lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c
-)
-
-add_library(lua STATIC ${LUA_SOURCES})
-
-# Disable OS-specific features not available or buggy on PS2
-target_compile_definitions(lua PRIVATE LUA_USE_C89)
-target_include_directories(lua PUBLIC lua)
-target_compile_options(lua PRIVATE -w)
+project(ps2_engine_external)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
-    find_program(PYTHON3_BIN python3)
-    if(NOT PYTHON3_BIN)
-        set(PYTHON3_BIN "python3")
-    endif()
-
     # Derive PS2DEV/PS2SDK at configure time so build-phase commands have the correct env
     if(DEFINED ENV{PS2DEV})
         set(_PS2DEV "$ENV{PS2DEV}")
@@ -33,20 +11,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
     endif()
     set(_PS2SDK "${_PS2DEV}/ps2sdk")
     set(_PS2_PATH "${_PS2DEV}/ee/bin:${_PS2DEV}/iop/bin:${_PS2DEV}/dvp/bin:$ENV{PATH}")
-
-    # Patch luaconf.h at configure time (idempotent — safe to run on every configure).
-    # Sets LUA_32BITS=1 so lua_Number→float and lua_Integer→int, mapping all Lua
-    # arithmetic to the PS2 EE COP1 hardware FPU (single-precision only; double is
-    # software-emulated and ~5-10x slower).  CMake dependency tracking automatically
-    # detects the header change and recompiles liblua.a without manual intervention.
-    execute_process(
-            COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/patch_lua.py"
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            RESULT_VARIABLE _LUA_PATCH_RESULT
-    )
-    if (NOT _LUA_PATCH_RESULT EQUAL 0)
-        message(FATAL_ERROR "patch_lua.py failed")
-    endif ()
 
     # Stamp file lives inside the CMake build tree so `cmake --build --target clean`
     # removes it and forces a rebuild next time.  Using a stamp (rather than the

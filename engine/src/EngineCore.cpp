@@ -27,7 +27,7 @@ bool Engine_Init(EngineConfig config)
     s_ResourceLocationToken = config.resourceLocationToken;
 
     // Calculate total arena size from centralized constants
-    constexpr size_t totalArenaSize = MEM_BLOCK_SCRIPT_SIZE + MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE + MEM_BLOCK_RENDERER_SIZE;
+    constexpr size_t totalArenaSize = MEM_BLOCK_CONFIG_SIZE + MEM_BLOCK_LEVEL_DATA_SIZE + MEM_BLOCK_RENDERER_SIZE;
     constexpr size_t totalRequiredMemory = totalArenaSize + MEM_POOL_MAIN_SIZE;
 
     // Safety Threshold Check (PS2 Hardware Limit)
@@ -80,13 +80,6 @@ bool Engine_Init(EngineConfig config)
         return false;
     }
 
-    // Initialize the specialized subsystems
-    if (!Engine_Script_Init())
-    {
-        Engine_Panic("Lua Scripting subsystem failed to initialize");
-        return false;
-    }
-
     // Handle IO Subsystem automatically
     if (!Engine_IO_Init())
     {
@@ -115,6 +108,7 @@ static double s_EngineStartTime = 0.0;
 static float s_LogicTime = 0.0f;
 static float s_RenderTime = 0.0f;
 static float s_WaitTime = 0.0f;
+static uint32_t s_FrameCount = 0;
 
 void Engine_Update()
 {
@@ -143,7 +137,10 @@ void Engine_Update()
 
     Engine_IO_Update();
     Engine_Resource_Update();
+    s_FrameCount++;
 }
+
+uint32_t Engine_GetFrameCount() { return s_FrameCount; }
 
 float Engine_GetDeltaTime() { return s_EngineDeltaTime; }
 float Engine_GetFPS() { return s_EngineFPS; }
@@ -164,7 +161,6 @@ void Engine_Close()
 {
     Engine_Resource_Shutdown();
     Engine_IO_Shutdown();
-    Engine_Script_Close();
     // CloseAudioDevice();
     if (g_Renderer)
         g_Renderer->Shutdown();

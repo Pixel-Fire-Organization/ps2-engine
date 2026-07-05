@@ -12,7 +12,7 @@ int main(int argv, char** argc)
     if (argv >= 1)
         locationToken = argc[0];
 
-    if (!EngineStart(locationToken, NULL))
+    if (!EngineStart(locationToken))
     {
         return -1;
     }

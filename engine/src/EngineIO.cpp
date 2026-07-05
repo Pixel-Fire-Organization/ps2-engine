@@ -216,8 +216,8 @@ bool Engine_IO_Init()
     // 'status', and 'current_priority' fields never contain stack garbage.
     // PS2 kernel behaviour on CreateThread is undefined for non-zero 'attr'
     // bits that do not correspond to recognised flags; a garbage value here
-    // changes every time the call-stack above changes (e.g. when EngineScript
-    // is modified) and can corrupt the EE kernel's thread table, which then
+    // changes every time the call-stack above changes (e.g. when an unrelated
+    // caller is modified) and can corrupt the EE kernel's thread table, which then
     // manifests as a crash inside an unrelated ISR (typically libpad's DMA
     // handler in the pad polling interrupt).
     ee_thread_t threadParam = {};

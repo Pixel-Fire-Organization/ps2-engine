@@ -7,9 +7,6 @@
 /** ARENA                     **/
 /*******************************/
 
-#define MEM_BLOCK_SCRIPT_SIZE (2 * 1024 * 1024) // 2 MB
-#define MEM_BLOCK_SCRIPT_SLOTS 8
-
 #define MEM_BLOCK_CONFIG_SIZE (256 * 1024) // 256 KB
 #define MEM_BLOCK_CONFIG_SLOTS 4
 

@@ -1,6 +1,10 @@
-﻿# App API (`EngineApp`)
+# App API (`EngineApp`)
 
-The `EngineApp` module is the **only** interface the application layer is permitted to include. All engine subsystems (memory arenas, async I/O, resource streaming, Lua scripting) are driven internally. The app shell is intentionally minimal: it starts the engine, pumps the frame loop, and stops.
+The `EngineApp` module (plus `GameAPI.h`) is the **only** interface the application layer is
+permitted to include. All engine subsystems (memory arenas, async I/O, resource streaming, rendering)
+are driven internally. Gameplay is authored in C++ against the friendly `GameAPI` (`GameInit()` /
+`GameUpdate(dt)`); the app shell itself is intentionally minimal: it starts the engine, pumps the
+frame loop, and stops.
 
 ---
 
@@ -9,40 +13,40 @@ The `EngineApp` module is the **only** interface the application layer is permit
 Controlled by a CMake option in `engine/CMakeLists.txt`:
 
 ```cmake
-option(ENGINE_SANDBOX_MODE "Restrict app to EngineApp.h" ON)
+option(ENGINE_SANDBOX_MODE "Restrict app to the curated app_public headers" ON)
 ```
 
 | Mode | App include path | Visible headers |
 | :--- | :--- | :--- |
-| `ON` (default) | `engine/include/app_public/` | `EngineApp.h` only |
+| `ON` (default) | `engine/include/app_public/` | `EngineApp.h`, `GameAPI.h` |
 | `OFF` (dev/test) | `engine/include/` | Full engine surface |
 
 ---
 
 ## API Reference
 
-### `EngineStart(const char *mainScript) → bool`
+### `EngineStart(const char *resourceLocationToken) → bool`
 
-Initialises all engine subsystems, synchronously reads and executes the entry-point Lua script.
+Initialises all engine subsystems (arenas, renderer, input, IO, resources), then calls the game
+module's `GameInit()` once.
 
-- If `mainScript` is `NULL`, the path is constructed at runtime using `Engine_BuildPath()` with the active resource
-  location token and `SCRIPTING_MAIN_SCRIPT_FILENAME` (`"MAIN.LUA"`), so it resolves correctly on any storage device.
-- Returns `false` if engine init, file read, or Lua execution fails.
+- `resourceLocationToken` selects the active storage device (`"cdrom0:"`, `"mass0:"`, `"hdd0:"`,
+  `"host:"`); pass `NULL` to default to `cdrom0:`.
+- Returns `false` if engine init fails.
 
 ### `EngineUpdate(void)`
 
 Advances one frame:
-1. `BeginDrawing()`
-2. Calls Lua `OnUpdate(dt)` on all active script units.
-3. Renders the debug overlay.
-4. `EndDrawing()`
-5. Pumps async I/O and the resource manager.
+1. `Engine_Update()` — timing, async IO/resource pumps.
+2. `GameUpdate(dt)` — the game module's per-frame gameplay + draw submission.
+3. Renderer `BeginFrame()` / `Render()` / debug overlay / `EndFrame()`.
+4. Frame stats reporting + perf logger tick.
 
 Must be called every iteration of the main loop.
 
 ### `EngineExited(void) → bool`
 
-Returns `true` when the engine should stop — either because the window was closed or Lua called `engine.exit()`.
+Returns `true` when the engine should stop — set by `game::Exit()`.
 
 ### `EngineStop(void)`
 
@@ -52,7 +56,8 @@ Shuts down all subsystems and releases all memory. Call once after the main loop
 
 ## Logging & Panic
 
-`EngineApp.h` re-declares three functions from `EngineDebug.c` as `extern` prototypes, making them available to the app without transitively including `EngineDebug.h` or `raylib.h`:
+`EngineApp.h` re-declares three functions from `EngineDebug.c` as `extern` prototypes, making them
+available to the app without transitively including `EngineDebug.h`:
 
 ```c
 extern void Engine_LogInfo(const char *text, ...);
@@ -62,9 +67,9 @@ extern void Engine_Panic(const char *message);
 
 ---
 
-## Minimal `main.c`
+## Minimal `main.cpp`
 
-```c
+```cpp
 #include "EngineApp.h"
 
 int main(void) {
@@ -75,25 +80,30 @@ int main(void) {
 }
 ```
 
+Gameplay itself lives in a separate game module implementing the `GameAPI.h` entry points:
+
+```cpp
+#include "GameAPI.h"
+
+void GameInit() { /* load resources, set initial state */ }
+void GameUpdate(float dt) { /* input, animation, game::Draw*, game::SetCamera3D, ... */ }
+```
+
+See `game/src/Game.cpp` and `game/src/SwarmSystem.cpp` for a complete example.
+
 ---
 
 ## Internal Flow
 
 ```
-EngineStart(path)
-  └─ Engine_Init()           — arenas, pool, window, IO, resources, scripts
-  └─ Engine_Script_SetExitCallback(EngineApp_OnExitRequested)
-  └─ EngineApp_FileOpen(path)  — reads script into ARENA_CONFIG slot 0
-  └─ Engine_Script_Load()
-  └─ Engine_Script_Run()
-  └─ EngineApp_FileClose()   — slot 0 released
+EngineStart(token)
+  └─ Engine_Init()   — arenas, pool, renderer, pad, IO, resources
+  └─ GameInit()
 
 EngineUpdate()
-  └─ BeginDrawing()
-  └─ Engine_Script_UpdateAll(dt)  — Lua OnUpdate(dt)
-  └─ Engine_DrawDebugOverlay()
-  └─ EndDrawing()
-  └─ Engine_IO_Update()
-  └─ Engine_Resource_Update()
+  └─ Engine_Update()             — dt, IO/resource pumps
+  └─ GameUpdate(dt)              — gameplay + draw-list submission
+  └─ Renderer BeginFrame/Render/EndFrame
+  └─ Engine_ReportFrameStats()
+  └─ Engine_PerfLogger_Tick()
 ```
-

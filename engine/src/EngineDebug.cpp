@@ -151,7 +151,7 @@ void Engine_PerfLogger_Tick()
 
     // Heartbeat: one compact line every 50 frames (~1/s at 50fps). After a hang
     // the last heartbeat pins the frame/time of death and shows the heap trend.
-    const uint32_t frame = Engine_Script_GetFrameCount();
+    const uint32_t frame = Engine_GetFrameCount();
     if (frame != 0 && (frame % 50u) == 0u)
     {
         size_t heapUsed = 0;
@@ -205,7 +205,7 @@ void Engine_PerfLogger_Tick()
     }
 
     const double timeSec = Engine_GetTotalTime();
-    const uint32_t frameNum = Engine_Script_GetFrameCount();
+    const uint32_t frameNum = Engine_GetFrameCount();
     const uint32_t gsUsed = Engine_Resource_GetAllocatedGsPages();
     const uint32_t gsBudget = Engine_Resource_GetGsPageBudget();
 
@@ -268,7 +268,7 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] System Heap (malloc) : %zu / %zu KB", heapUsed / 1024, heapTotal / 1024);
 
     // 2. Arenas (Sub-allocated from Heap)
-    const char* arenaNames[] = {"Script", "Config", "LevelData", "Renderer"};
+    const char* arenaNames[] = {"Config", "LevelData", "Renderer"};
     for (int i = 0; i < (int)ARENA_COUNT; ++i)
     {
         size_t cap = 0, used = 0;
@@ -291,7 +291,7 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF]  +- Main Pool        : %zu / %zu KB (%zu%%)", poolUsed / 1024, poolCap / 1024, poolCap ? (poolUsed * 100 / poolCap) : 0);
 
     size_t miscUsed = heapUsed - arenaTotalCap - poolCap;
-    Engine_LogInfo("[PERF]  +- Misc (Lua/RL/IO) : %zu KB", miscUsed / 1024);
+    Engine_LogInfo("[PERF]  +- Misc (RL/IO)     : %zu KB", miscUsed / 1024);
 
     Engine_LogInfo("[PERF] -------------------------");
     Engine_LogInfo("[PERF] Total EE RAM Used    : %zu / %zu KB (%zu%%)", heapUsed / 1024, heapTotal / 1024, heapTotal ? (heapUsed * 100 / heapTotal) : 0);

@@ -347,21 +347,20 @@ When `Engine_Level_Unload` is called:
 
 ## Usage Example
 
-> **App layer**: Do not call `Engine_Resource_Load` / `Engine_Resource_Get` directly from `game/src/main.c`. Use the Lua
-`resources` table instead. See `docs/Scripting/Core/resources.md`.
+> **App layer**: Do not call `Engine_Resource_Load` / `Engine_Resource_Get` directly from game code. Use the friendly
+`game::LoadResource` / `game::IsResourceReady` wrappers (`engine/include/GameAPI.h`) instead.
 
-```lua
--- Lua (MAIN.LUA)
-local handle = resources.load("TEXTURE", "cdrom0:\\RASSETS\\PLAYER.PS2A;1")
+```cpp
+// game/src/Game.cpp
+int handle = game::LoadResource("TEXTURE", game::MakePath("RASSETS\\PLAYER.PS2A"));
 
-function OnUpdate(dt)
-    if resources.is_ready(handle) then
-        -- handle is valid; passed to future graphics.draw_texture bindings
-    end
-end
-
--- When no longer needed
-resources.unload(handle)
+void GameUpdate(float dt)
+{
+    if (game::IsResourceReady(handle))
+    {
+        // handle is valid; passed to future game::DrawTexture-style calls
+    }
+}
 ```
 
 Engine-internal C usage (subsystems only):

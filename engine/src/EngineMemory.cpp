@@ -20,7 +20,6 @@ static inline uintptr_t AlignForward(uintptr_t ptr, size_t alignment)
 
 // Internal specialized arenas (hidden from header)
 // GFX resources are managed by Raylib — only engine-internal arenas remain.
-static MemoryArena g_ScriptArena;
 static MemoryArena g_ConfigArena;
 static MemoryArena g_LevelDataArena;
 static MemoryArena g_RendererArena;
@@ -82,10 +81,6 @@ static void Internal_InitSlots(ArenaType type, MemoryArena* arena, uint32_t coun
 void Engine_ArenasInitSegmented(void* base_ptr)
 {
     uint8_t* ptr = static_cast<uint8_t *>(base_ptr);
-
-    Engine_ArenaInit(&g_ScriptArena, ptr, MEM_BLOCK_SCRIPT_SIZE);
-    Internal_InitSlots(ARENA_SCRIPT, &g_ScriptArena, MEM_BLOCK_SCRIPT_SLOTS);
-    ptr += MEM_BLOCK_SCRIPT_SIZE;
 
     Engine_ArenaInit(&g_ConfigArena, ptr, MEM_BLOCK_CONFIG_SIZE);
     Internal_InitSlots(ARENA_CONFIG, &g_ConfigArena, MEM_BLOCK_CONFIG_SLOTS);
@@ -162,8 +157,6 @@ void* Engine_AddToArena(ArenaType type, size_t size, size_t alignment)
 {
     switch (type)
     {
-    case ARENA_SCRIPT:
-        return Engine_ArenaAlloc(&g_ScriptArena, size, alignment);
     case ARENA_CONFIG:
         return Engine_ArenaAlloc(&g_ConfigArena, size, alignment);
     case ARENA_LEVEL_DATA:
@@ -226,9 +219,6 @@ void Engine_GetArenaStats(ArenaType type, size_t* outCapacity, size_t* outUsed)
     MemoryArena* a = nullptr;
     switch (type)
     {
-    case ARENA_SCRIPT:
-        a = &g_ScriptArena;
-        break;
     case ARENA_CONFIG:
         a = &g_ConfigArena;
         break;
