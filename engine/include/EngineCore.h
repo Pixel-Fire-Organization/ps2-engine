@@ -1,8 +1,8 @@
 #pragma once
 
-#include "graphics/Renderer.h"
 #include <cstddef>
 #include <cstdint>
+#include "graphics/Renderer.h"
 
 // Renderer backend selection. Chosen at build time via a CMake compile define
 // (-DRENDERER_BACKEND_PS2GL or -DRENDERER_BACKEND_GIFTAG). Default to the PS2GL

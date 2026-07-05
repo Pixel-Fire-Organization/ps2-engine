@@ -199,9 +199,10 @@ bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf,
             char* lastSlash = strrchr(baseDir, '/');
             char* lastBackslash = strrchr(baseDir, '\\');
             char* lastColon = strchr(baseDir, ':');
-            
+
             char* splitPoint = (lastSlash > lastBackslash) ? lastSlash : lastBackslash;
-            if (!splitPoint) splitPoint = lastColon;
+            if (!splitPoint)
+                splitPoint = lastColon;
 
             if (splitPoint)
             {

@@ -40,6 +40,4 @@ bool Frustum_SphereVisible(const FrustumPlanes* f, const Vector3& worldCenter, f
 // (objCenter/objRadius) under a translation + non-uniform scale. The center
 // offset is folded into the radius, so the result is rotation-independent and
 // needs no rotation matrix.
-void Frustum_WorldSphere(const Vector3& position, const Vector3& scale,
-                         const Vector3& objCenter, float objRadius,
-                         Vector3* outCenter, float* outRadius);
+void Frustum_WorldSphere(const Vector3& position, const Vector3& scale, const Vector3& objCenter, float objRadius, Vector3* outCenter, float* outRadius);

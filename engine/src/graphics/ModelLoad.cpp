@@ -8,46 +8,51 @@
 
 namespace
 {
-float* AllocFloats(size_t count)
-{
-    // 16-byte aligned so the arrays are safe for qword DMA / cache ops.
-    return static_cast<float*>(memalign(16, count * sizeof(float)));
-}
-
-// Bounding sphere of a strided vertex array: AABB midpoint as center, exact
-// max distance as radius. Load-time only (v1 blobs carry no baked bounds).
-void ComputeMeshBounds(const float* verts, uint32_t vertexCount, int stride, Vector3* outCenter, float* outRadius)
-{
-    Vector3 mn{verts[0], verts[1], verts[2]};
-    Vector3 mx = mn;
-    for (uint32_t i = 1; i < vertexCount; ++i)
+    float* AllocFloats(size_t count)
     {
-        const float* v = verts + i * stride;
-        if (v[0] < mn.x) mn.x = v[0];
-        if (v[1] < mn.y) mn.y = v[1];
-        if (v[2] < mn.z) mn.z = v[2];
-        if (v[0] > mx.x) mx.x = v[0];
-        if (v[1] > mx.y) mx.y = v[1];
-        if (v[2] > mx.z) mx.z = v[2];
+        // 16-byte aligned so the arrays are safe for qword DMA / cache ops.
+        return static_cast<float*>(memalign(16, count * sizeof(float)));
     }
-    const Vector3 c{(mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f, (mn.z + mx.z) * 0.5f};
 
-    float best = 0.0f;
-    for (uint32_t i = 0; i < vertexCount; ++i)
+    // Bounding sphere of a strided vertex array: AABB midpoint as center, exact
+    // max distance as radius. Load-time only (v1 blobs carry no baked bounds).
+    void ComputeMeshBounds(const float* verts, uint32_t vertexCount, int stride, Vector3* outCenter, float* outRadius)
     {
-        const float* v = verts + i * stride;
-        const float dx = v[0] - c.x, dy = v[1] - c.y, dz = v[2] - c.z;
-        const float d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 > best)
-            best = d2;
+        Vector3 mn{verts[0], verts[1], verts[2]};
+        Vector3 mx = mn;
+        for (uint32_t i = 1; i < vertexCount; ++i)
+        {
+            const float* v = verts + i * stride;
+            if (v[0] < mn.x)
+                mn.x = v[0];
+            if (v[1] < mn.y)
+                mn.y = v[1];
+            if (v[2] < mn.z)
+                mn.z = v[2];
+            if (v[0] > mx.x)
+                mx.x = v[0];
+            if (v[1] > mx.y)
+                mx.y = v[1];
+            if (v[2] > mx.z)
+                mx.z = v[2];
+        }
+        const Vector3 c{(mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f, (mn.z + mx.z) * 0.5f};
+
+        float best = 0.0f;
+        for (uint32_t i = 0; i < vertexCount; ++i)
+        {
+            const float* v = verts + i * stride;
+            const float dx = v[0] - c.x, dy = v[1] - c.y, dz = v[2] - c.z;
+            const float d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 > best)
+                best = d2;
+        }
+        *outCenter = c;
+        *outRadius = std::sqrt(best);
     }
-    *outCenter = c;
-    *outRadius = std::sqrt(best);
-}
 } // namespace
 
-bool Model_LoadBaked(const void* data, size_t size, Model* outModel,
-                     ModelTextureResolver resolver, void* resolverUser)
+bool Model_LoadBaked(const void* data, size_t size, Model* outModel, ModelTextureResolver resolver, void* resolverUser)
 {
     if (!data || !outModel || size < sizeof(BakedModelHeader))
     {

@@ -9,12 +9,13 @@
 // that used to run through the Lua interpreter (≈130% of the frame budget) now
 // runs natively, so the same 630-object scene fits comfortably in budget.
 // ---------------------------------------------------------------------------
-namespace swarm {
+namespace swarm
+{
 
-// Populate the swarm (call once, e.g. after the texture has streamed in).
-void Init();
+    // Populate the swarm (call once, e.g. after the texture has streamed in).
+    void Init();
 
-// Animate and draw every object for this frame. Cheap enough to call each frame.
-void Update();
+    // Animate and draw every object for this frame. Cheap enough to call each frame.
+    void Update();
 
 } // namespace swarm

@@ -8,5 +8,3 @@
 
 // Maximum file size for a single async IO read.
 #define IO_READ_BUFFER_SIZE (512 * 1024)
-
-

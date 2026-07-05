@@ -5,7 +5,7 @@
 
 namespace
 {
-constexpr float FRUSTUM_DEG_TO_RAD = 0.017453292519943295f;
+    constexpr float FRUSTUM_DEG_TO_RAD = 0.017453292519943295f;
 } // namespace
 
 void Frustum_Mult4x4(float out[16], const float a[16], const float b[16])
@@ -33,11 +33,10 @@ void Frustum_BuildPerspective(float out[16], float fovyDeg, float aspect, float 
 void Frustum_BuildLookAt(float out[16], const Camera3D& camera)
 {
     auto sub = [](const Vector3& a, const Vector3& b) { return Vector3{a.x - b.x, a.y - b.y, a.z - b.z}; };
-    auto cross = [](const Vector3& a, const Vector3& b) {
-        return Vector3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-    };
+    auto cross = [](const Vector3& a, const Vector3& b) { return Vector3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; };
     auto dot = [](const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
-    auto norm = [](const Vector3& v) {
+    auto norm = [](const Vector3& v)
+    {
         const float l2 = v.x * v.x + v.y * v.y + v.z * v.z;
         if (l2 <= 0.0f)
             return Vector3{0.0f, 0.0f, 0.0f};
@@ -49,10 +48,22 @@ void Frustum_BuildLookAt(float out[16], const Camera3D& camera)
     const Vector3 side = norm(cross(fwd, camera.up));
     const Vector3 up = cross(side, fwd);
 
-    out[0] = side.x; out[4] = side.y; out[8] = side.z; out[12] = -dot(side, camera.position);
-    out[1] = up.x; out[5] = up.y; out[9] = up.z; out[13] = -dot(up, camera.position);
-    out[2] = -fwd.x; out[6] = -fwd.y; out[10] = -fwd.z; out[14] = dot(fwd, camera.position);
-    out[3] = 0.0f; out[7] = 0.0f; out[11] = 0.0f; out[15] = 1.0f;
+    out[0] = side.x;
+    out[4] = side.y;
+    out[8] = side.z;
+    out[12] = -dot(side, camera.position);
+    out[1] = up.x;
+    out[5] = up.y;
+    out[9] = up.z;
+    out[13] = -dot(up, camera.position);
+    out[2] = -fwd.x;
+    out[6] = -fwd.y;
+    out[10] = -fwd.z;
+    out[14] = dot(fwd, camera.position);
+    out[3] = 0.0f;
+    out[7] = 0.0f;
+    out[11] = 0.0f;
+    out[15] = 1.0f;
 }
 
 void Frustum_FromViewProj(FrustumPlanes* out, const float vp[16])
@@ -94,13 +105,13 @@ bool Frustum_SphereVisible(const FrustumPlanes* f, const Vector3& worldCenter, f
     return true;
 }
 
-void Frustum_WorldSphere(const Vector3& position, const Vector3& scale,
-                         const Vector3& objCenter, float objRadius,
-                         Vector3* outCenter, float* outRadius)
+void Frustum_WorldSphere(const Vector3& position, const Vector3& scale, const Vector3& objCenter, float objRadius, Vector3* outCenter, float* outRadius)
 {
     float maxScale = std::fabs(scale.x);
-    if (std::fabs(scale.y) > maxScale) maxScale = std::fabs(scale.y);
-    if (std::fabs(scale.z) > maxScale) maxScale = std::fabs(scale.z);
+    if (std::fabs(scale.y) > maxScale)
+        maxScale = std::fabs(scale.y);
+    if (std::fabs(scale.z) > maxScale)
+        maxScale = std::fabs(scale.z);
 
     const float centerLen = std::sqrt(objCenter.x * objCenter.x + objCenter.y * objCenter.y + objCenter.z * objCenter.z);
     *outCenter = position;

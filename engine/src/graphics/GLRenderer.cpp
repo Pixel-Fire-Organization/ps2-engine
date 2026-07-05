@@ -5,20 +5,20 @@
 // define was supplied, so a bare build still selects this renderer.
 #ifdef RENDERER_BACKEND_PS2GL
 
-#include <cmath>
-#include <cstring>
-#include <ctime>
-#include <malloc.h>
+    #include <cmath>
+    #include <cstring>
+    #include <ctime>
+    #include <malloc.h>
 
-#include <GL/gl.h>
-#include <GL/ps2gl.h>
+    #include <GL/gl.h>
+    #include <GL/ps2gl.h>
 
-#include "../include/graphics/DrawList.h"
-#include "../include/graphics/PrimitiveGeometry.h"
-#include "EngineDebug.h"
-#include "EngineMemory.h"
-#include "EngineResource.h"
-#include "Macros.h"
+    #include "../include/graphics/DrawList.h"
+    #include "../include/graphics/PrimitiveGeometry.h"
+    #include "EngineDebug.h"
+    #include "EngineMemory.h"
+    #include "EngineResource.h"
+    #include "Macros.h"
 
 // SetGsCrt is a PS2 BIOS syscall (libkernel). Forward-declared to avoid pulling
 // the full <kernel.h> into this translation unit.
@@ -26,36 +26,36 @@ extern "C" int SetGsCrt(short int interlace, short int display_mode, short int f
 
 namespace
 {
-constexpr float GL_RENDERER_DEG_TO_RAD = 0.017453292519943295f;
+    constexpr float GL_RENDERER_DEG_TO_RAD = 0.017453292519943295f;
 
-// GS pixel storage modes (raw hardware codes; match ps2stuff GS::tPSM values).
-constexpr unsigned int GS_PSMCT32 = 0;
-constexpr unsigned int GS_PSMCT24 = 1;
-constexpr unsigned int GS_PSMZ24 = 49;
-constexpr unsigned int GS_PSMT8 = 19;
+    // GS pixel storage modes (raw hardware codes; match ps2stuff GS::tPSM values).
+    constexpr unsigned int GS_PSMCT32 = 0;
+    constexpr unsigned int GS_PSMCT24 = 1;
+    constexpr unsigned int GS_PSMZ24 = 49;
+    constexpr unsigned int GS_PSMT8 = 19;
 
-// GIF control register — OSDSYS leaves PATH3 busy; writing 1 resets the GIF so
-// our PATH1/PATH2 transfers are not ignored. (See ps2gl glut/raylib init.)
-volatile uint32_t* const GIF_CTRL = reinterpret_cast<volatile uint32_t*>(0x10003000);
+    // GIF control register — OSDSYS leaves PATH3 busy; writing 1 resets the GIF so
+    // our PATH1/PATH2 transfers are not ignored. (See ps2gl glut/raylib init.)
+    volatile uint32_t* const GIF_CTRL = reinterpret_cast<volatile uint32_t*>(0x10003000);
 
-// SetGsCrt display-mode values (ps2sdk GRAPH_MODE_*).
-constexpr short GS_MODE_NTSC = 2;
-constexpr short GS_MODE_PAL = 3;
+    // SetGsCrt display-mode values (ps2sdk GRAPH_MODE_*).
+    constexpr short GS_MODE_NTSC = 2;
+    constexpr short GS_MODE_PAL = 3;
 
-// Vertex count of the display list compiled for each primitive shape (used for
-// the throughput stats — the DList handle itself carries no size).
-uint32_t VertexCountForType(Primitive3D type)
-{
-    switch (type)
+    // Vertex count of the display list compiled for each primitive shape (used for
+    // the throughput stats — the DList handle itself carries no size).
+    uint32_t VertexCountForType(Primitive3D type)
     {
-    case Primitive3D::Sphere:
-        return PRIMITIVE_SPHERE_VERTEX_COUNT;
-    case Primitive3D::Cylinder:
-        return PRIMITIVE_CYLINDER_VERTEX_COUNT;
-    default:
-        return PRIMITIVE_CUBE_VERTEX_COUNT;
+        switch (type)
+        {
+        case Primitive3D::Sphere:
+            return PRIMITIVE_SPHERE_VERTEX_COUNT;
+        case Primitive3D::Cylinder:
+            return PRIMITIVE_CYLINDER_VERTEX_COUNT;
+        default:
+            return PRIMITIVE_CUBE_VERTEX_COUNT;
+        }
     }
-}
 } // namespace
 
 static void AddPrimitive(DrawLists& lists, Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, Color3 color, int32_t textureId)
@@ -515,8 +515,7 @@ void GLRenderer::RenderPrimitives(DrawLists& lists)
 
     if (totalPrims > budgetLeft)
     {
-        Engine_LogError("RenderPrimitives: CurPacket budget exceeded (%u used + %u prims > %u).",
-            m_frameDrawCallsUsed, totalPrims, static_cast<uint16_t>(GFX_DRAW_CALL_BUDGET));
+        Engine_LogError("RenderPrimitives: CurPacket budget exceeded (%u used + %u prims > %u).", m_frameDrawCallsUsed, totalPrims, static_cast<uint16_t>(GFX_DRAW_CALL_BUDGET));
     }
 
     const uint16_t uRender = (uCount <= budgetLeft) ? uCount : budgetLeft;
@@ -662,8 +661,7 @@ void GLRenderer::RenderModels(const DrawLists& lists)
         {
             Vector3 wc;
             float wr;
-            Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(),
-                                model->boundsCenter, model->boundsRadius, &wc, &wr);
+            Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(), model->boundsCenter, model->boundsRadius, &wc, &wr);
             if (!Frustum_SphereVisible(&m_frustum, wc, wr))
             {
                 ++m_frameStats.entriesCulled;
@@ -731,9 +729,7 @@ void GLRenderer::RenderModels(const DrawLists& lists)
             ++modelMeshDraws;
 
             const uint32_t verts = static_cast<uint32_t>(dl->vertexCounts[meshIdx]);
-            const uint32_t tris = (dl->topologies[meshIdx] == MESH_TOPOLOGY_STRIP)
-                                      ? (verts >= 2 ? verts - 2 : 0)
-                                      : verts / 3;
+            const uint32_t tris = (dl->topologies[meshIdx] == MESH_TOPOLOGY_STRIP) ? (verts >= 2 ? verts - 2 : 0) : verts / 3;
             m_frameStats.trisSubmitted += tris;
             m_frameStats.vertsTransformed += verts;
         }
@@ -857,11 +853,7 @@ void GLRenderer::ApplyCameraTransform(const Camera3D& camera) const
     const Vector3 up = Cross(side, forward);
 
     const float viewMatrix[16] = {
-        side.x, up.x, -forward.x, 0.0f,
-        side.y, up.y, -forward.y, 0.0f,
-        side.z, up.z, -forward.z, 0.0f,
-        -Dot(side, camera.position), -Dot(up, camera.position), Dot(forward, camera.position), 1.0f
-    };
+        side.x, up.x, -forward.x, 0.0f, side.y, up.y, -forward.y, 0.0f, side.z, up.z, -forward.z, 0.0f, -Dot(side, camera.position), -Dot(up, camera.position), Dot(forward, camera.position), 1.0f};
     glMultMatrixf(viewMatrix);
 }
 
@@ -877,10 +869,7 @@ Vector3 GLRenderer::Normalize(const Vector3& value)
 
 Vector3 GLRenderer::Subtract(const Vector3& a, const Vector3& b) { return Vector3{a.x - b.x, a.y - b.y, a.z - b.z}; }
 
-Vector3 GLRenderer::Cross(const Vector3& a, const Vector3& b)
-{
-    return Vector3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-}
+Vector3 GLRenderer::Cross(const Vector3& a, const Vector3& b) { return Vector3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
 
 float GLRenderer::Dot(const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 

@@ -1,10 +1,10 @@
 ﻿#include <cstdio>
 #include <cstring>
 #include "Engine.h"
+#include "graphics/ModelFormat.h"
 #include "graphics/Renderer.h"
 #include "graphics/Types.h"
 #include "graphics/tim2.h"
-#include "graphics/ModelFormat.h"
 
 // Stable per-dependency reference: packs a slot index and a generation counter
 // into 4 bytes (same width as the old int32_t). The generation must match the
@@ -79,8 +79,7 @@ static int32_t Internal_FindFreeSlot()
 
 static void Internal_UnloadEntry(int32_t index);
 
-static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, AssetFileHeader* outHeader,
-                                            int32_t entryIndex);
+static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, AssetFileHeader* outHeader, int32_t entryIndex);
 
 // Sum the GS pages that COULD be freed right now (non-pinned, reference-free,
 // READY textures). Used only to produce an actionable error message when the
@@ -173,8 +172,7 @@ static void Internal_UnloadEntry(int32_t index)
     {
         int16_t depIdx = entry->deps[d].index;
         uint16_t depGen = entry->deps[d].generation;
-        if (depIdx >= 0 && depIdx < RES_MAX_ENTRIES && s_Entries[depIdx].state != RES_STATE_EMPTY &&
-            s_Entries[depIdx].generation == depGen)
+        if (depIdx >= 0 && depIdx < RES_MAX_ENTRIES && s_Entries[depIdx].state != RES_STATE_EMPTY && s_Entries[depIdx].generation == depGen)
         {
             if (s_Entries[depIdx].refCount > 0)
             {
@@ -224,7 +222,7 @@ typedef struct
 
 static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* userData)
 {
-    ResourceLoadContext* ctx = static_cast<ResourceLoadContext *>(userData);
+    ResourceLoadContext* ctx = static_cast<ResourceLoadContext*>(userData);
     if (!ctx)
         return;
 
@@ -253,7 +251,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         return;
     }
 
-    const unsigned char* payload = static_cast<const unsigned char *>(data) + sizeof(AssetFileHeader);
+    const unsigned char* payload = static_cast<const unsigned char*>(data) + sizeof(AssetFileHeader);
     int32_t payloadSize = static_cast<int32_t>(size - sizeof(AssetFileHeader));
 
     if (payloadSize <= 0 || static_cast<uint32_t>(payloadSize) < header.dataSize)
@@ -305,11 +303,17 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             switch (img.format)
             {
             case PixelFormat::RGBA16:
-                pageW = 64u; pageH = 64u; break;
+                pageW = 64u;
+                pageH = 64u;
+                break;
             case PixelFormat::PAL8:
-                pageW = 128u; pageH = 64u; break;
+                pageW = 128u;
+                pageH = 64u;
+                break;
             default:
-                pageW = GFX_GS_PAGE_WIDTH_PSM32; pageH = GFX_GS_PAGE_HEIGHT_PSM32; break;
+                pageW = GFX_GS_PAGE_WIDTH_PSM32;
+                pageH = GFX_GS_PAGE_HEIGHT_PSM32;
+                break;
             }
             uint32_t pages = 0;
             for (uint8_t lvl = 0; lvl < img.mipCount; ++lvl)
@@ -325,8 +329,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             {
                 Engine_LogError("Resource: texture rejected — %dx%d (%u pages) exceeds budget "
                                 "(max %u pages, dimension cap %dx%d) in slot %d '%s'",
-                                img.width, img.height, pages, GFX_MAX_TEXTURE_GS_PAGES, GFX_MAX_TEXTURE_WIDTH,
-                                GFX_MAX_TEXTURE_HEIGHT, idx, entry->key);
+                                img.width, img.height, pages, GFX_MAX_TEXTURE_GS_PAGES, GFX_MAX_TEXTURE_WIDTH, GFX_MAX_TEXTURE_HEIGHT, idx, entry->key);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
@@ -339,8 +342,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
                 Internal_CalcEvictablePages(&evictablePages, &evictableCount);
                 Engine_LogError("Resource: GS VRAM full — cannot load %dx%d (%u pages). Usage: %u/%u pages. "
                                 "Call Engine_Resource_Unload() to free up to %u pages across %d texture(s), then retry.",
-                                img.width, img.height, pages, s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET,
-                                evictablePages, evictableCount);
+                                img.width, img.height, pages, s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET, evictablePages, evictableCount);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
@@ -373,8 +375,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             entry->gsPages = pages;
             s_AllocatedGsPages += pages;
             entry->state = RES_STATE_READY;
-            Engine_LogInfo("Texture loaded (%dx%d). Remaining pages: %u", img.width, img.height,
-                           static_cast<uint32_t>(GFX_GS_TEXTURE_PAGE_BUDGET) - s_AllocatedGsPages);
+            Engine_LogInfo("Texture loaded (%dx%d). Remaining pages: %u", img.width, img.height, static_cast<uint32_t>(GFX_GS_TEXTURE_PAGE_BUDGET) - s_AllocatedGsPages);
         }
         break;
     case RES_MODEL:
@@ -383,8 +384,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             // dependencies were queued by Internal_ParseHeaderAndLoadDeps above;
             // materials store the dep resource handles and are resolved to live
             // textures at draw time.
-            if (!Model_LoadBaked(payload, static_cast<size_t>(payloadSize), &entry->handle.model,
-                                 Internal_ResolveModelTexture, entry))
+            if (!Model_LoadBaked(payload, static_cast<size_t>(payloadSize), &entry->handle.model, Internal_ResolveModelTexture, entry))
             {
                 Engine_LogError("Resource: baked model load failed for slot %d (%s)", idx, entry->key);
                 Internal_UnloadEntry(idx);
@@ -396,8 +396,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
         break;
     case RES_SOUND:
     case RES_FONT:
-        Engine_LogError("Resource: type %u unsupported (fonts/sound were dropped with raylib) for slot %d (%s)",
-                        header.type, idx, entry->key);
+        Engine_LogError("Resource: type %u unsupported (fonts/sound were dropped with raylib) for slot %d (%s)", header.type, idx, entry->key);
         Internal_UnloadEntry(idx);
         Engine_PoolFreeMain(ctx);
         return;
@@ -434,8 +433,7 @@ static bool Internal_PeekAssetType(const char* path, ResourceType* outType)
 
 // Parse a .ps2a header from raw file data and load dependencies.
 // Returns true if the header is valid.
-static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, AssetFileHeader* outHeader,
-                                            int32_t entryIndex)
+static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, AssetFileHeader* outHeader, int32_t entryIndex)
 {
     if (size < sizeof(AssetFileHeader))
         return false;
@@ -575,7 +573,7 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
     // type drives decoding (TIM2 for textures, baked blob for models); the .ps2a
     // dependency list is loaded first so a model's textures are already queued.
     // Async path: allocate a context from the pool, then stream
-    ResourceLoadContext* ctx = static_cast<ResourceLoadContext *>(Engine_PoolAllocMain());
+    ResourceLoadContext* ctx = static_cast<ResourceLoadContext*>(Engine_PoolAllocMain());
     if (!ctx)
     {
         Engine_LogError("Resource: pool exhausted, cannot create load context");

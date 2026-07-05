@@ -128,8 +128,7 @@ static void IOThreadEntry(void* arg)
 
                     if (size > IO_READ_BUFFER_SIZE)
                     {
-                        Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath,
-                                        size, IO_READ_BUFFER_SIZE);
+                        Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath, size, IO_READ_BUFFER_SIZE);
                         fclose(f);
                         size = 0;
                     }
@@ -139,8 +138,7 @@ static void IOThreadEntry(void* arg)
                         fclose(f);
                         if (bytesRead != size)
                         {
-                            Engine_LogError("IO: Short read for '%s': expected %zu, got %zu", filepath, size,
-                                            bytesRead);
+                            Engine_LogError("IO: Short read for '%s': expected %zu, got %zu", filepath, size, bytesRead);
                             size = 0;
                         }
                         else

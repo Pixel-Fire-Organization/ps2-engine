@@ -18,8 +18,7 @@ bool Engine_Level_Load(Level* level)
     uint32_t effectiveCount = level->requiredCount;
     if (effectiveCount > LEVEL_MAX_RESOURCES_COUNT)
     {
-        Engine_LogError("Level '%s': requiredCount %u exceeds LEVEL_MAX_RESOURCES_COUNT (%d), clamping", level->name,
-                        level->requiredCount, LEVEL_MAX_RESOURCES_COUNT);
+        Engine_LogError("Level '%s': requiredCount %u exceeds LEVEL_MAX_RESOURCES_COUNT (%d), clamping", level->name, level->requiredCount, LEVEL_MAX_RESOURCES_COUNT);
         effectiveCount = LEVEL_MAX_RESOURCES_COUNT;
     }
 
@@ -51,8 +50,7 @@ bool Engine_Level_Load(Level* level)
     {
         // Partial failure — rollback every handle already pinned so we don't
         // leak pinned resources or corrupt the GS VRAM / resource-table budget.
-        Engine_LogError("Level '%s': only %u/%u required resources loaded — rolling back", level->name, s_LoadedCount,
-                        effectiveCount);
+        Engine_LogError("Level '%s': only %u/%u required resources loaded — rolling back", level->name, s_LoadedCount, effectiveCount);
 
         for (uint32_t i = 0; i < s_LoadedCount; i++)
         {
@@ -64,8 +62,7 @@ bool Engine_Level_Load(Level* level)
         return false;
     }
 
-    Engine_LogInfo("Level '%s' loaded: %u/%u required resources pinned", level->name, s_LoadedCount,
-                   level->requiredCount);
+    Engine_LogInfo("Level '%s' loaded: %u/%u required resources pinned", level->name, s_LoadedCount, level->requiredCount);
     return true;
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
-namespace Hooks {
+namespace Hooks
+{
     void HurtEntity(void* entity) {}
-}
+} // namespace Hooks

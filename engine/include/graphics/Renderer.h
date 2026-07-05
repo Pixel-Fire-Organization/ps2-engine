@@ -1,10 +1,11 @@
 #pragma once
 
+#include "DrawList.h"
 #include "EngineGraphics.h"
 #include "EngineLevel.h"
-#include "DrawList.h"
 
-class Renderer {
+class Renderer
+{
 public:
     Renderer() = default;
     Renderer(const Renderer&) = delete;

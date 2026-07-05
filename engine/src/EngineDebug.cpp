@@ -73,10 +73,7 @@ static void CustomLog(int logLevel, const char* text, va_list args)
     printf("%s\n", buffer); // Single newline at the end is safe for the kernel flush
 }
 
-void Engine_InitDebug()
-{
-    Engine_LogInfo("Engine Debug initialized.");
-}
+void Engine_InitDebug() { Engine_LogInfo("Engine Debug initialized."); }
 
 void Engine_LogInfo(const char* text, ...)
 {
@@ -156,8 +153,7 @@ void Engine_PerfLogger_Tick()
     {
         size_t heapUsed = 0;
         Engine_GetHeapStats(nullptr, &heapUsed, nullptr);
-        Engine_LogInfo("[HB] frame=%u t=%.1fs heap=%zuKB fps=%.1f",
-                       frame, Engine_GetTotalTime(), heapUsed / 1024, Engine_GetFPS());
+        Engine_LogInfo("[HB] frame=%u t=%.1fs heap=%zuKB fps=%.1f", frame, Engine_GetTotalTime(), heapUsed / 1024, Engine_GetFPS());
     }
 
     // Combo 1: L1+L2+R1+R2 (Console Snapshot)
@@ -240,8 +236,7 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] Texture binds     : %u", ds.texBinds);
     if (ds.packetQwordsUsed > 0)
     {
-        Engine_LogInfo("[PERF] GIF packet        : %u / %u qwords (%.1f KB)", ds.packetQwordsUsed,
-            static_cast<unsigned>(GFX_GIFTAG_PACKET_QWORDS), (ds.packetQwordsUsed * 16.0f) / 1024.0f);
+        Engine_LogInfo("[PERF] GIF packet        : %u / %u qwords (%.1f KB)", ds.packetQwordsUsed, static_cast<unsigned>(GFX_GIFTAG_PACKET_QWORDS), (ds.packetQwordsUsed * 16.0f) / 1024.0f);
     }
 
     Engine_LogInfo("[PERF] --- Draw Lists ---");

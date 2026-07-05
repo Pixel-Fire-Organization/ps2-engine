@@ -6,38 +6,38 @@
 
 namespace
 {
-// Alignment-safe little-endian reads (the blob comes straight off disc and its
-// multi-byte fields are not guaranteed to sit on aligned addresses).
-uint16_t ReadU16(const uint8_t* p)
-{
-    uint16_t v;
-    std::memcpy(&v, p, sizeof(v));
-    return v;
-}
+    // Alignment-safe little-endian reads (the blob comes straight off disc and its
+    // multi-byte fields are not guaranteed to sit on aligned addresses).
+    uint16_t ReadU16(const uint8_t* p)
+    {
+        uint16_t v;
+        std::memcpy(&v, p, sizeof(v));
+        return v;
+    }
 
-uint32_t ReadU32(const uint8_t* p)
-{
-    uint32_t v;
-    std::memcpy(&v, p, sizeof(v));
-    return v;
-}
+    uint32_t ReadU32(const uint8_t* p)
+    {
+        uint32_t v;
+        std::memcpy(&v, p, sizeof(v));
+        return v;
+    }
 
-// File header layout (16 bytes):
-//   [0..3]  magic "TIM2"   [4] formatVersion   [5] formatId
-//   [6..7]  pictureCount   [8..15] padding
-constexpr uint32_t TIM2_MAGIC = 0x324D4954u; // 'T','I','M','2' little-endian
-constexpr size_t TIM2_FILE_HEADER_SIZE = 16;
+    // File header layout (16 bytes):
+    //   [0..3]  magic "TIM2"   [4] formatVersion   [5] formatId
+    //   [6..7]  pictureCount   [8..15] padding
+    constexpr uint32_t TIM2_MAGIC = 0x324D4954u; // 'T','I','M','2' little-endian
+    constexpr size_t TIM2_FILE_HEADER_SIZE = 16;
 
-// Picture header layout (48 bytes / 0x30) — see tim2.h. We only read what we
-// need: sizes, dimensions and the image color type.
-constexpr size_t TIM2_PIC_HEADER_SIZE = 0x30;
+    // Picture header layout (48 bytes / 0x30) — see tim2.h. We only read what we
+    // need: sizes, dimensions and the image color type.
+    constexpr size_t TIM2_PIC_HEADER_SIZE = 0x30;
 
-// TIM2 imageType values we accept.
-constexpr uint8_t TIM2_IMGTYPE_RGBA16 = 0x01; // A1B5G5R5
-constexpr uint8_t TIM2_IMGTYPE_RGBA32 = 0x03; // A8B8G8R8
-constexpr uint8_t TIM2_IMGTYPE_IDTEX8 = 0x05; // 8-bit indexed + CLUT
+    // TIM2 imageType values we accept.
+    constexpr uint8_t TIM2_IMGTYPE_RGBA16 = 0x01; // A1B5G5R5
+    constexpr uint8_t TIM2_IMGTYPE_RGBA32 = 0x03; // A8B8G8R8
+    constexpr uint8_t TIM2_IMGTYPE_IDTEX8 = 0x05; // 8-bit indexed + CLUT
 
-inline size_t Align16(size_t n) { return (n + 15u) & ~static_cast<size_t>(15u); }
+    inline size_t Align16(size_t n) { return (n + 15u) & ~static_cast<size_t>(15u); }
 } // namespace
 
 bool Tim2_Parse(const void* data, size_t size, Tim2Image* out)
