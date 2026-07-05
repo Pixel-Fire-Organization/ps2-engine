@@ -56,23 +56,23 @@ All fields in these profiles (including the toolchain dropdown) are **grayed out
 2. In the **Build Target** dropdown next to the hammer (▲), select `main.elf`.
 3. Click the hammer (▲) to build.
 
-CMake handles the full pipeline automatically — ps2gl, raylib, engine compilation, linking, and ISO generation all run in order via the dependency chain in `CMakeLists.txt`.
+CMake handles the full pipeline automatically — ps2gl, ps2stuff, engine compilation, linking, and ISO generation all run in order via the dependency chain in `CMakeLists.txt`.
 
 ### Running the Emulator
 
-A `run-emulator` CMake custom target is provided for launching PCSX2. It calls `tools/runEmulator.sh` with the built ISO and works on both Windows (via WSL interop) and Linux natively.
+A `run-emulator` CMake custom target is provided for launching PCSX2. It calls `tools/runEmulator.py` with the built ISO and works on both Windows (via WSL interop) and Linux natively.
 
 To run from CLion:
 
 1. In the **Build Target** dropdown, select `run-emulator`.
 2. Click the hammer (▲).
 
-See [tools/runEmulator.sh](../tools/runEmulator.sh) for supported PCSX2 install paths. You can also run it directly from a terminal:
+See [tools/runEmulator.py](../tools/runEmulator.py) for supported PCSX2 install paths. You can also run it directly from a terminal:
 
 ```bash
-bash tools/runEmulator.sh dist/engine.iso
+python3 tools/runEmulator.py dist/engine.iso
 # or pass the path explicitly:
-bash tools/runEmulator.sh dist/engine.iso "C:/path/to/pcsx2-qt.exe"
+python3 tools/runEmulator.py dist/engine.iso "C:/path/to/pcsx2-qt.exe"
 ```
 
 ---
@@ -81,18 +81,18 @@ bash tools/runEmulator.sh dist/engine.iso "C:/path/to/pcsx2-qt.exe"
 
 The CMake hammer invokes `cmake --build <binaryDir> --target main.elf`. `CMakeLists.txt` drives the full pipeline in order:
 
-1. **Configure time**: patches raylib (idempotent), generates `.clangd` for IDE analysis.
-2. **Build time**: builds `ps2gl` → builds `raylib` → compiles the engine → links `main.elf` → generates `dist/engine.iso`.
+1. **Configure time**: generates `.clangd` for IDE analysis.
+2. **Build time**: builds `ps2gl` → builds `ps2stuff` → compiles the engine → links `main.elf` → generates `dist/engine.iso`.
 
-`ps2gl` and `raylib` are only rebuilt if their `.a` files are missing (CMake output-based tracking). On incremental builds only the changed engine/app sources are recompiled.
+`ps2gl` and `ps2stuff` are only rebuilt if their `.a` files are missing (CMake output-based tracking). On incremental builds only the changed engine/app sources are recompiled.
 
-`build.sh` is also available as a thin CLI wrapper if you prefer building from a terminal:
+`build.py` is also available as a thin CLI wrapper if you prefer building from a terminal:
 
 ```
-bash tools/build.sh [debug|release] [pal|ntsc]
+python3 tools/build.py [debug|release] [pal|ntsc]
 ```
 
-Note that `build.sh` always targets the single `build/` directory regardless of the active CLion profile. The CMake profile `binaryDir`s (`build/debug-pal`, etc.) are separate directories used only by CLion for code analysis.
+`build.py` targets a per-config directory (`build/<debug|release>-<pal|ntsc>`), matching the CMake profile `binaryDir`s (`build/debug-pal`, etc.) used by CLion for code analysis.
 
 ---
 
@@ -128,7 +128,7 @@ The presets hardcode `/usr/local/ps2dev`. If your toolchain is at a different pa
 ### Code analysis does not resolve PS2SDK headers
 
 1. Confirm CLion ran CMake at least once for a profile (check the **Build** tab for configure output).
-2. Ensure a successful `build.sh` run has completed — `.clangd` is generated during the cmake configure step.
+2. Ensure a successful `build.py` run has completed — `.clangd` is generated during the cmake configure step.
 3. Reload: **Tools** → **CMake** → **Reload CMake Project**.
 4. If the CMake output shows errors about missing compilers, verify the WSL toolchain name is exactly `WSL` (Step 1).
 
@@ -138,12 +138,12 @@ The presets hardcode `/usr/local/ps2dev`. If your toolchain is at a different pa
 2. Confirm the WSL toolchain is configured (Step 1) before CMake loads.
 3. Try **File** → **Invalidate Caches** → **Invalidate and Restart**.
 
-### PCSX2 not found by `runEmulator.sh`
+### PCSX2 not found by `runEmulator.py`
 
 The script checks common install paths. Pass the path explicitly as the second argument:
 
 ```bash
-bash tools/runEmulator.sh dist/engine.iso "C:/path/to/pcsx2-qt.exe"
+python3 tools/runEmulator.py dist/engine.iso "C:/path/to/pcsx2-qt.exe"
 ```
 
 ### `genisoimage` / `mkisofs` not found (no ISO generated)

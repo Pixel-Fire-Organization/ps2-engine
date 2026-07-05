@@ -17,7 +17,7 @@ The `generate-iso` CMake target performs the following steps in order:
 5. **Run** `mkisofs` / `genisoimage` to produce `dist/<APP_ISO_NAME>.iso`.
 
 > **Requirement**: `genisoimage` (which provides `mkisofs`) must be installed and on `PATH`.  
-> If it is not found, `generate-iso` still exists as a no-op target so `build.sh --target generate-iso` does not fail.
+> If it is not found, `generate-iso` still exists as a no-op target so `python3 tools/build.py` does not fail.
 
 ---
 
@@ -65,27 +65,27 @@ game/cd_files/
 All contents are automatically staged into the ISO **unless** they are listed in
 the [ISO Content Blacklist](#iso-content-blacklist).
 
-> **Note**: Raw asset source files (JSON, PNGs, etc.) live in `game/cd_files/RAYLIB/`.  
+> **Note**: Raw asset source files (JSON, PNGs, etc.) live in `game/cd_files/ASSETS/`.  
 > They are compiled to `.ps2a` by `pack-assets` and written to `game/cd_files/rassets/`.  
-> Only `rassets/` needs to be on disc; `RAYLIB/` is excluded by the blacklist.
+> Only `rassets/` needs to be on disc; `ASSETS/` is excluded by the blacklist.
 
 ---
 
 ## ISO Content Blacklist
 
 The blacklist prevents specific files or directories inside `game/cd_files/` from being included in the disc image. It is
-defined near the top of `app/CMakeLists.txt`:
+defined near the top of `game/CMakeLists.txt`:
 
 ```cmake
 # ─────────────────────────────────────────────────────────────────────────────
 # ISO Content Blacklist
 # Add folder or file names (relative to cd_files/) that should NOT be included
-# on the disc image.  RAYLIB/ holds raw asset sources — only the compiled
+# on the disc image.  ASSETS/ holds raw asset sources — only the compiled
 # .ps2a files produced by pack-assets and stored in rassets/ are needed at
 # runtime.
 # ─────────────────────────────────────────────────────────────────────────────
 set(ISO_CONTENT_BLACKLIST
-        "RAYLIB"   # Raw asset sources; packed output lives in rassets/
+        "ASSETS"   # Raw asset sources; packed output lives in rassets/
 )
 ```
 
@@ -96,15 +96,15 @@ set(ISO_CONTENT_BLACKLIST
 | **Name-based matching**           | Each entry is matched against the file or directory name (not the full path).              |
 | **Case-sensitive**                | Matching follows the filesystem on the build host (case-sensitive on Linux/WSL).           |
 | **Applies at staging time**       | Exclusion happens when files are copied into `iso_root/`, before `mkisofs` runs.           |
-| **Does not affect `pack-assets`** | The `pack-assets` target always reads from `cd_files/RAYLIB/` regardless of the blacklist. |
+| **Does not affect `pack-assets`** | The `pack-assets` target always reads from `cd_files/ASSETS/` regardless of the blacklist. |
 
 ### Adding an Entry
 
-Append the name to the list in `app/CMakeLists.txt`:
+Append the name to the list in `game/CMakeLists.txt`:
 
 ```cmake
 set(ISO_CONTENT_BLACKLIST
-        "RAYLIB"        # Raw asset sources
+        "ASSETS"        # Raw asset sources
         "DEBUG_LOGS"    # Not needed at runtime
 )
 ```

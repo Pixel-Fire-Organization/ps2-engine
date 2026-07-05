@@ -31,5 +31,4 @@ runs:
     - name: Build engine via Script
       shell: bash
       run: |
-        chmod +x ./tools/build.sh
-        bash ./tools/build.sh ${{ inputs.build_type }} ${{ inputs.region }}
+        python3 ./tools/build.py ${{ inputs.build_type }} ${{ inputs.region }}

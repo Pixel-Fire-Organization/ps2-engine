@@ -32,8 +32,9 @@ def main():
         # Git submodule in WSL
         subprocess.run(["wsl", "-d", wsl_distro, "bash", "-lc", "cd $(wslpath -u '{}') && git submodule update --init --recursive".format(project_root)], check=True)
         
+        build_dir = f"build/{args.build_type}-{args.region.lower()}"
         print(f"=== Building engine & app ({args.build_type}, DEBUG={debug_flag}, REGION={region_flag}) ===")
-        build_cmd = f"cd $(wslpath -u '{project_root}') && cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -DDEBUG='{debug_flag}' -DREGION='{region_flag}' -B build && cmake --build build --target generate-iso"
+        build_cmd = f"cd $(wslpath -u '{project_root}') && cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -DDEBUG='{debug_flag}' -DREGION='{region_flag}' -B {build_dir} && cmake --build {build_dir} --target generate-iso"
         
         try:
             subprocess.run(["wsl", "-d", wsl_distro, "bash", "-lc", build_cmd], check=True)
@@ -50,18 +51,20 @@ def main():
             sys.exit(e.returncode)
             
         print(f"=== Building engine & app ({args.build_type}, DEBUG={debug_flag}, REGION={region_flag}) ===")
-        
+
+        build_dir = f"build/{args.build_type}-{args.region.lower()}"
+
         cmake_configure = [
             "cmake",
             "-DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake",
             f"-DDEBUG={debug_flag}",
             f"-DREGION={region_flag}",
-            "-B", "build"
+            "-B", build_dir
         ]
-        
+
         cmake_build = [
             "cmake",
-            "--build", "build",
+            "--build", build_dir,
             "--target", "generate-iso"
         ]
         

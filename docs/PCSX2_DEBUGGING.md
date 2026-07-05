@@ -68,10 +68,10 @@ Only code and data symbols are included (object types `T t B b D d R r W w`).
 
 ```bash
 # Debug build — produces iso, iso_contents/, elf, sym
-./tools/build.sh debug pal
+python3 ./tools/build.py debug pal
 
 # Release build — produces iso, elf only
-./tools/build.sh release pal
+python3 ./tools/build.py release pal
 ```
 
 ## Implementation Details

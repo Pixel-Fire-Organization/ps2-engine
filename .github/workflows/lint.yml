@@ -18,7 +18,7 @@ jobs:
 
       - name: Check code formatting
         run: |
-          find engine app -type f \( -name '*.c' -o -name '*.h' \) -exec clang-format --dry-run --Werror {} +
+          find engine game -type f \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \) -exec clang-format --dry-run --Werror {} +
 
   analyze-cppcheck:
     name: Cppcheck Security Scan

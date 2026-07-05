@@ -5,36 +5,27 @@ project.
 
 ## Project Overview
 
-This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and `ps2gl`.
+This is a custom PS2 game engine using the `ps2sdk`, `ps2gl`, and `ps2stuff`.
 
 ## Toolchain & Environment
 
 - **Environment Variable**: `PS2DEV` must be set to the root of the PS2 toolchain (e.g., `/usr/local/ps2dev`).
 - **Cross-Compilation**: Uses `ps2dev.cmake` for CMake-based builds targeting `mips64r5900el-ps2-elf`.
 - **Compiler/Linker**:
-    - Although the engine is primarily C, the **Linker Language MUST be CXX**.
-    - This is required because `ps2gl` depends on C++ standard library symbols (`libstdc++`, `operator new`, etc.).
+    - The engine is C++ throughout.
     - CMake property: `set_target_properties(<target> PROPERTIES LINKER_LANGUAGE CXX)`.
 
 ## NEVER DO
 
-- Do not modify raylib directly or commit the changes there.
 - Do not modify ps2gl directly or commit the changes there.
 - Do not modify ps2stuff directly or commit the changes there.
 - Do not use `git` to add/commit/push changes in the **whole** repository.
+- Do not reintroduce a scripting VM (e.g. Lua) into the engine — it was removed in favor of native C++ via `GameAPI.h`.
 
 ## Build System
 
-- **Entry Point**: Use `./tools/build.sh` for a clean rebuild.
-    - **Requirement**: Must be run through **WSL (preferred)** or **Git Bash** in Windows environments.
-- [x] **Step 3: Subsystems Refactor**
-    - [x] Refactor `engine_io.h` and `engine_io.c`
-    - [x] Refactor `engine_memory.c` (Fix `Engine_ArenasInitSegmented`)
-    - [x] Refactor `engine_script.h` and `engine_script.c`
-- [x] **Step 4: Documentation & Cleanup**
-    - [x] Update `app/src/main.c` (Minimal config fix)
-    - [x] Update `.github/copilot-instructions.md` with new rules
-- [/] **Step 5: Verification**
+- **Entry Point**: Use `python3 ./tools/build.py` for a clean rebuild.
+    - **Requirement**: Must be run through **WSL (preferred)** or **Git Bash** in Windows environments; on native Windows, the script re-invokes itself inside WSL automatically.
 - **Output Directory**: All final binaries (`.elf`) and discs (`.iso`) are routed to the `dist/` directory.
 - **ISO Generation**:
     - Requires `genisoimage` (provides `mkisofs`).
@@ -48,30 +39,6 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 ## Dependencies (external/)
 
 - Managed as Git Submodules.
-- `thirdparty/raylib`: Custom PS2 port (usually `work` branch). There is a script for injecting custom patches into
-  raylib. Never modify raylib directly or commit the changes there.
-    - **Patches applied by `tools/patch_raylib.sh`** (idempotent, run at CMake configure time):
-        - `PGL_PATCHED_DYNAMIC_REGION` — makes `rcore_playstation2.c` respect `InitWindow` PAL/NTSC screen dimensions
-          instead of hardcoding NTSC.
-        - `PGL_PATCHED_FONT_ALIGN` — changes the default font atlas allocation in `rtext.c` from `RL_CALLOC` (no
-          alignment guarantee) to `memalign(16, ...)` (16-byte aligned). ps2gl's `glTexImage2D` requires 16-byte aligned
-          pixel data for GS DMA; misaligned data silently corrupts the texel upload, causing garbled text on PS2.
-        - `PGL_PATCHED_ATLAS_LIFETIME` — replaces the heap-allocated atlas buffer with a `static` file-scope buffer for
-          the PS2 path only (Dreamcast/N64 keep `memalign`). ps2gl stores only a *pointer* to the pixel data and defers
-          the GS DMA until the first draw (`CMMTexture::Load` → `FlushCache(0)` → `SendImage`). Raylib calls
-          `UnloadImage(imFont)` immediately after `LoadTextureFromImage`, freeing that pointer. On PS2's write-back EE
-          cache, arena/pool allocations that follow inside `Engine_Init` can evict the atlas's dirty cache lines before
-          `FlushCache(0)` syncs them, leaving stale (garbage) data in main memory for specific GS-VRAM page rows — the
-          root cause of the pattern of specific glyphs being blank or garbled while neighbours are correct. A `static`
-          buffer lives in BSS for the entire application lifetime, eliminating the race entirely. The two
-          `UnloadImage(imFont)` calls inside `LoadFontDefault` are also guarded with
-          `#if !defined(PLATFORM_PLAYSTATION2)` to prevent freeing static storage.
-      - `PGL_PATCHED_NO_GAMEPAD` — strips the `SIO2MAN`/`PADMAN` IOP module loads, `padInit`, `padPortOpen`, and
-        `initializePad` from `InitPlatform`, and removes the gamepad polling block from `PollInputEvents`.
-        `EngineInput` (`EngineInput.cpp`) is the sole owner of the full pad lifecycle. `SifInitRpc(0)` is preserved
-        in raylib for general IOP services. Running both raylib's and EngineInput's pad init on the same port caused
-        a double-open conflict and unpredictable button state.
-- `thirdparty/raylib`: Custom PS2 port (usually `work` branch). There is a script for injecting custom patches into raylib. Never modify raylib directly or commit the changes there.
 - `external/ps2gl`: Graphics abstraction layer. Depends on ps2stuff headers (`ps2s/`) at compile time.
 - `external/ps2stuff`: Low-level PS2 hardware utility library. Must be built and installed (`make install`) **before** ps2gl. Its install step copies `include/ps2s/` headers to `$(PS2SDK)/ports/include/ps2s/`. Never modify ps2stuff directly or commit the changes there.
 - **Link Order Matters**: Ensure `ps2stuff` is linked when using `ps2gl`.
@@ -93,8 +60,8 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
 ## Memory Management & Allocation Strategy
 
 - **Master Reference**: Always refer to `engine/include/Constants.h` for the current EE RAM (32MB) layout.
-- **GFX Resources**: Textures, models, sounds, and fonts are managed by **Raylib's allocator** via the **Resource
-  Manager** (`EngineResource.h`). Never allocate GFX resources in engine arenas.
+- **GFX Resources**: Textures and models are managed by the **Resource Manager** (`EngineResource.h`); note that
+  `RES_SOUND`/`RES_FONT` are currently unsupported since raylib was removed. Never allocate GFX resources in engine arenas.
     - Use `Engine_Resource_Load(type, path)` to load, `Engine_Resource_Get(handle)` to access.
     - See `docs/RESOURCE_MANAGER.md` for full API and `.ps2a` asset format.
 - **Engine Arenas** (for internal subsystems only):
@@ -103,7 +70,7 @@ This is a custom PS2 game engine using the `ps2sdk`, `raylib4PlayStation2`, and 
     - Use `Engine_LoadToSlot(ARENA_TYPE, slot, data, size)` for slot replacement.
     - Slots are **16KB aligned** for DMA/VIF performance.
 - **Memory Pool** (`g_MainPool`): 1 MB, 256B chunks — scratch allocator for short-lived temp objects only.
-- **Asset Authoring**: Raw assets go in `game/cd_files/RAYLIB/` as JSON+source pairs. `tools/pack_assets.py` compiles
+- **Asset Authoring**: Raw assets go in `game/cd_files/ASSETS/` as JSON+source pairs. `tools/pack_assets.py` compiles
   them to `.ps2a` in `game/cd_files/rassets/`.
 
 ## Coding Standards
@@ -112,8 +79,8 @@ See `.github/c-expert.instructions.md` for C rules and `.github/cpp-expert.instr
 
 ## IDE & IntelliSense Rules
 
-- **Configuration**: Do NOT manually edit the `.clangd` file. It is automatically generated by `./build.sh`.
-- **Cross-Environment Mapping**: The `build.sh` script handles the translation of Linux paths (`/usr/local/ps2dev/...`)
+- **Configuration**: Do NOT manually edit the `.clangd` file. It is automatically generated by `tools/build.py`.
+- **Cross-Environment Mapping**: The `build.py` script handles the translation of Linux paths (`/usr/local/ps2dev/...`)
   to Windows UNC paths (`//wsl.localhost/Ubuntu/...`) for the IDE automatically using `wslpath`.
 - **Git Strategy**: `.clangd` is ignored by Git (`.gitignore`). Each developer produces their own local copy by running
   the build script.
