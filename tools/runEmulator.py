@@ -14,7 +14,10 @@ def main():
 
     pcsx2_path = sys.argv[2] if len(sys.argv) > 2 else ""
 
-    is_wsl = "microsoft" in open("/proc/version", "r").read().lower() if os.path.exists("/proc/version") else False
+    is_wsl = False
+    if os.path.exists("/proc/version"):
+        with open("/proc/version", "r") as proc_version:
+            is_wsl = "microsoft" in proc_version.read().lower()
     is_mac = sys.platform == "darwin"
     is_windows = sys.platform == "win32"
 
