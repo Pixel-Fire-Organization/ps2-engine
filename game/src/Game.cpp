@@ -9,6 +9,7 @@
 
 #include <cmath>
 
+#include "EcsComponents.h" // generated (build dir): declares Ecs_SpawnDispatch
 #include "GameAPI.h"
 #include "SwarmSystem.h"
 
@@ -34,6 +35,11 @@ namespace
 void GameInit()
 {
     game::Log("MAIN (C++) starting...");
+
+    // Register the generated ECS spawn dispatcher so the level loader can turn
+    // compiled map entities into the game's typed components (see EcsHooks.cpp).
+    game::SetSpawnHandler(&Ecs_SpawnDispatch);
+
     s_texHandle = game::LoadResource("TEXTURE", game::MakePath("RASSETS\\BOX.PS2A"));
     game::Log("Texture requested (async)");
 }

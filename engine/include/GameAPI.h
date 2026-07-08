@@ -74,4 +74,37 @@ namespace game
     int LoadResource(const char* type, const char* path);
     bool IsResourceReady(int handle);
 
+    // --- Entities / spawning ----------------------------------------------------
+    // A generic entity record produced by the level loader from compiled map data.
+    // The engine knows nothing about component types: it hands the game a classname
+    // plus the raw key/value properties authored in TrenchBroom and the entity's
+    // origin. The game's generated Ecs_SpawnDispatch (tools/ECS/generate_ecs.py)
+    // turns this into typed components. The key/value strings and props array are
+    // only valid for the duration of the handler call — copy anything you keep.
+    struct EntityProp
+    {
+        const char* key;
+        const char* value;
+    };
+    struct EntitySpawn
+    {
+        const char* classname;
+        const EntityProp* props;
+        int propCount;
+        float x, y, z; // origin
+    };
+
+    // A handler returns true if it recognised and spawned the classname.
+    typedef bool (*SpawnHandler)(const EntitySpawn& spawn);
+
+    // Register the game's spawn dispatcher. Call once in GameInit(). The engine
+    // invokes it for every entity found while loading a level.
+    void SetSpawnHandler(SpawnHandler handler);
+
 } // namespace game
+
+// --- Engine-internal (not part of the game-facing surface) ------------------
+// Route a spawn record to the handler registered via game::SetSpawnHandler.
+// Returns false if no handler is registered or the handler rejected the record.
+// Called by the level loader (EngineLevel.cpp) when instantiating map entities.
+bool Engine_Game_DispatchSpawn(const game::EntitySpawn& spawn);

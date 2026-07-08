@@ -7,5 +7,9 @@
 *.cmake text eol=lf
 CMakeLists.txt text eol=lf
 
+# Generated TrenchBroom FGD: keep LF so the build-time regenerate + copy_if_different
+# is a no-op on a clean tree (the generator always writes LF).
+*.fgd text eol=lf
+
 # Default: normalize to LF on all platforms
 * text=auto

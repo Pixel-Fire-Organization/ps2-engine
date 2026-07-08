@@ -47,6 +47,49 @@ else()
     message(WARNING "python3 not found. Asset packing (pack_assets.py) will be skipped.")
 endif()
 
+# --- ECS code generation ----------------------------------------------------
+# The game owns its ECS: tools/ECS/ECS.json is the single source of truth for the
+# component/entity C++ (EcsComponents.h + EcsSpawn.cpp, generated into the build
+# dir) AND the TrenchBroom FGD. Generating at build time makes drift impossible;
+# the FGD is also copied back into the committed editor profile so TrenchBroom on
+# the Windows host stays current (copy_if_different = no-op on a clean tree).
+if(PYTHON3_BIN)
+    set(ECS_GEN_DIR       "${CMAKE_BINARY_DIR}/generated/ecs")
+    set(ECS_JSON          "${CMAKE_SOURCE_DIR}/tools/ECS/ECS.json")
+    set(ECS_SCHEMA        "${CMAKE_SOURCE_DIR}/tools/ECS/schema.json")
+    set(ECS_GEN_PY        "${CMAKE_SOURCE_DIR}/tools/ECS/generate_ecs.py")
+    set(ECS_FGD_COMMITTED "${CMAKE_SOURCE_DIR}/tools/trenchbroom/games/PS2Engine/PS2Engine.fgd")
+
+    add_custom_command(
+        OUTPUT  "${ECS_GEN_DIR}/EcsComponents.h"
+                "${ECS_GEN_DIR}/EcsSpawn.cpp"
+                "${ECS_GEN_DIR}/PS2Engine.fgd"
+        COMMAND ${PYTHON3_BIN} "${ECS_GEN_PY}"
+                --ecs "${ECS_JSON}" --schema "${ECS_SCHEMA}"
+                --out-header "${ECS_GEN_DIR}/EcsComponents.h"
+                --out-source "${ECS_GEN_DIR}/EcsSpawn.cpp"
+                --out-fgd    "${ECS_GEN_DIR}/PS2Engine.fgd"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${ECS_GEN_DIR}/PS2Engine.fgd" "${ECS_FGD_COMMITTED}"
+        DEPENDS "${ECS_JSON}" "${ECS_SCHEMA}" "${ECS_GEN_PY}"
+        COMMENT "Generating ECS (EcsComponents.h, EcsSpawn.cpp, FGD) from ECS.json"
+        VERBATIM
+    )
+    set_source_files_properties(
+        "${ECS_GEN_DIR}/EcsComponents.h"
+        "${ECS_GEN_DIR}/EcsSpawn.cpp"
+        PROPERTIES GENERATED TRUE
+    )
+
+    target_sources(${APP_EXE_NAME} PRIVATE
+        src/EcsHooks.cpp
+        "${ECS_GEN_DIR}/EcsSpawn.cpp"
+    )
+    target_include_directories(${APP_EXE_NAME} PRIVATE "${ECS_GEN_DIR}")
+else()
+    message(FATAL_ERROR "python3 not found — required to generate ECS code (tools/ECS/generate_ecs.py).")
+endif()
+
 if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
     get_filename_component(_TOOLCHAIN_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     find_program(EE_NM_BIN

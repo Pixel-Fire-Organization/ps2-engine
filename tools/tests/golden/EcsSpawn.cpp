@@ -1,0 +1,68 @@
+// AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
+// Generated from tools/ECS/ECS.json by tools/ECS/generate_ecs.py
+#include "EcsComponents.h"
+#include "GameAPI.h"
+
+#include <cstdlib>
+#include <cstring>
+
+// Game-implemented spawn handlers, one per classname. A missing definition is a
+// link error on purpose: adding an entity to ECS.json forces the game to handle it.
+void Game_Spawn_prop_barrel(const Ecs_prop_barrel& def, const game::EntitySpawn& spawn);
+void Game_Spawn_prop_model(const Ecs_prop_model& def, const game::EntitySpawn& spawn);
+
+namespace
+{
+    const char* Internal_FindProp(const game::EntitySpawn& spawn, const char* key)
+    {
+        for (int i = 0; i < spawn.propCount; ++i)
+        {
+            if (std::strcmp(spawn.props[i].key, key) == 0)
+            {
+                return spawn.props[i].value;
+            }
+        }
+        return nullptr;
+    }
+}  // namespace
+
+// Turn a generic engine spawn record into the game's typed components, applying
+// declared defaults for any property the map did not set. Returns false for an
+// unknown classname. String properties point into the spawn record, which is only
+// valid for the duration of the handler call -- copy anything you need to keep.
+bool Ecs_SpawnDispatch(const game::EntitySpawn& spawn)
+{
+    if (std::strcmp(spawn.classname, "prop_barrel") == 0)
+    {
+        Ecs_prop_barrel def;
+        {
+            const char* raw = Internal_FindProp(spawn, "max_health");
+            if (raw) { long v = std::strtol(raw, nullptr, 10); def.healthComponent.max_health = (int)v; }
+        }
+        {
+            const char* raw = Internal_FindProp(spawn, "layer_mask");
+            if (raw) { unsigned long v = std::strtoul(raw, nullptr, 10); def.collisionComponent.layer_mask = (uint32_t)v; }
+        }
+        {
+            const char* raw = Internal_FindProp(spawn, "model");
+            if (raw) { const char* v = raw; def.modelComponent.model = v; }
+        }
+        Game_Spawn_prop_barrel(def, spawn);
+        return true;
+    }
+    if (std::strcmp(spawn.classname, "prop_model") == 0)
+    {
+        Ecs_prop_model def;
+        {
+            const char* raw = Internal_FindProp(spawn, "layer_mask");
+            if (raw) { unsigned long v = std::strtoul(raw, nullptr, 10); def.collisionComponent.layer_mask = (uint32_t)v; }
+        }
+        {
+            const char* raw = Internal_FindProp(spawn, "model");
+            if (raw) { const char* v = raw; def.modelComponent.model = v; }
+        }
+        Game_Spawn_prop_model(def, spawn);
+        return true;
+    }
+    return false;
+}

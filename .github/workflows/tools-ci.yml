@@ -1,0 +1,45 @@
+name: Tools CI
+
+# Fast host-side checks for the Python asset/codegen tools (no PS2 toolchain).
+# Validates ECS.json, runs the generator golden + negative-fixture tests, and
+# enforces that the committed TrenchBroom FGD has not drifted from ECS.json.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install tool dependencies
+        run: pip install pillow pytest jsonschema
+
+      - name: Run tool tests
+        run: python -m pytest tools/tests -q
+
+      - name: Check ECS FGD is not drifted from ECS.json
+        run: |
+          python tools/ECS/generate_ecs.py \
+            --ecs tools/ECS/ECS.json --schema tools/ECS/schema.json \
+            --out-fgd /tmp/PS2Engine.fgd
+          if ! diff -u tools/trenchbroom/games/PS2Engine/PS2Engine.fgd /tmp/PS2Engine.fgd; then
+            echo "::error::ECS.json and the committed PS2Engine.fgd have drifted." \
+                 "Run: python tools/ECS/generate_ecs.py --ecs tools/ECS/ECS.json" \
+                 "--schema tools/ECS/schema.json --out-fgd" \
+                 "tools/trenchbroom/games/PS2Engine/PS2Engine.fgd  and commit the result."
+            exit 1
+          fi

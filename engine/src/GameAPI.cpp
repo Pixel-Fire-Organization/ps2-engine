@@ -212,4 +212,22 @@ namespace game
 
     bool IsResourceReady(int handle) { return Engine_Resource_IsReady(static_cast<int32_t>(handle)); }
 
+    // --- Entities / spawning ----------------------------------------------------
+    namespace
+    {
+        SpawnHandler s_SpawnHandler = nullptr;
+    }
+
+    void SetSpawnHandler(SpawnHandler handler) { s_SpawnHandler = handler; }
+
 } // namespace game
+
+bool Engine_Game_DispatchSpawn(const game::EntitySpawn& spawn)
+{
+    if (!game::s_SpawnHandler)
+    {
+        Engine_LogError("[Game] no spawn handler registered — cannot spawn '%s'", spawn.classname ? spawn.classname : "(null)");
+        return false;
+    }
+    return game::s_SpawnHandler(spawn);
+}

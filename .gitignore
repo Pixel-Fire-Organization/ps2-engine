@@ -44,3 +44,4 @@ build_log.txt
 
 # Python bytecode cache
 __pycache__/
+.pytest_cache/
