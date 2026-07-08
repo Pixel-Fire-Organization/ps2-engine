@@ -101,6 +101,17 @@ namespace game
     // invokes it for every entity found while loading a level.
     void SetSpawnHandler(SpawnHandler handler);
 
+    // --- Levels -----------------------------------------------------------------
+    // Load a compiled level by name (mounts LEVELS/<name>.PS2R and spawns its
+    // entities via the registered spawn handler). Returns true on success. Any
+    // previously loaded level is unloaded first.
+    bool LoadLevel(const char* name);
+    void UnloadLevel();
+
+    // Set the streaming centre (world position) — the resident 3x3 sector ring
+    // recenters to follow it. Call each frame with the camera/player position.
+    void SetStreamingCenter(float x, float y, float z);
+
 } // namespace game
 
 // --- Engine-internal (not part of the game-facing surface) ------------------

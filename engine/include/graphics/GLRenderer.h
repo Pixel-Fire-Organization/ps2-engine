@@ -144,4 +144,8 @@ protected:
     void RenderPrimitives(DrawLists& lists) override;
     void RenderModels(const DrawLists& lists) override;
     void RenderUI(const DrawLists& lists) override;
+
+    // Draw the resident level sectors (queried from the sector manager, not the
+    // draw lists). Not part of the Renderer interface — GL-backend specific.
+    void RenderLevel();
 };

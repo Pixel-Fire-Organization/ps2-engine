@@ -105,6 +105,22 @@ bool Frustum_SphereVisible(const FrustumPlanes* f, const Vector3& worldCenter, f
     return true;
 }
 
+bool Frustum_AabbVisible(const FrustumPlanes* f, const Aabb3& box)
+{
+    for (int i = 0; i < 6; ++i)
+    {
+        const float* plane = f->p[i];
+        // Positive vertex: the box corner farthest along this plane's normal. If
+        // even that corner is behind the plane, the whole box is outside.
+        const float px = (plane[0] >= 0.0f) ? box.max.x : box.min.x;
+        const float py = (plane[1] >= 0.0f) ? box.max.y : box.min.y;
+        const float pz = (plane[2] >= 0.0f) ? box.max.z : box.min.z;
+        if (plane[0] * px + plane[1] * py + plane[2] * pz + plane[3] < 0.0f)
+            return false;
+    }
+    return true;
+}
+
 void Frustum_WorldSphere(const Vector3& position, const Vector3& scale, const Vector3& objCenter, float objRadius, Vector3* outCenter, float* outRadius)
 {
     float maxScale = std::fabs(scale.x);

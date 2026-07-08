@@ -15,6 +15,7 @@
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineInput.h"
+#include "EngineLevel.h"
 #include "EngineResource.h"
 #include "graphics/Primitives.h"
 #include "graphics/Renderer.h"
@@ -219,6 +220,42 @@ namespace game
     }
 
     void SetSpawnHandler(SpawnHandler handler) { s_SpawnHandler = handler; }
+
+    // --- Levels -----------------------------------------------------------------
+    namespace
+    {
+        Level s_GameLevel;
+        bool s_LevelLoaded = false;
+    }
+
+    bool LoadLevel(const char* name)
+    {
+        if (s_LevelLoaded)
+        {
+            Engine_Level_Unload(&s_GameLevel, false);
+            s_LevelLoaded = false;
+        }
+        memset(&s_GameLevel, 0, sizeof(s_GameLevel));
+        strncpy(s_GameLevel.name, name, sizeof(s_GameLevel.name) - 1);
+        s_LevelLoaded = Engine_Level_Load(&s_GameLevel);
+        return s_LevelLoaded;
+    }
+
+    void UnloadLevel()
+    {
+        if (s_LevelLoaded)
+        {
+            Engine_Level_Unload(&s_GameLevel, false);
+            s_LevelLoaded = false;
+        }
+    }
+
+    void SetStreamingCenter(float x, float y, float z)
+    {
+        (void)y; // streaming is on the X/Z ground plane
+        if (s_LevelLoaded)
+            Engine_Level_SetStreamingCenter(x, z);
+    }
 
 } // namespace game
 

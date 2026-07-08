@@ -7,6 +7,7 @@
 #include "EngineIO.h"
 #include "EngineInput.h"
 #include "EngineLevel.h"
+#include "EngineSector.h"
 #include "EngineMemory.h"
 #include "EngineResource.h"
 #include "Macros.h"
