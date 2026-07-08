@@ -411,20 +411,39 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
 }
 
 
-// Read just the magic and type fields from a .ps2a file on disc without
-// loading its full payload. Returns false if the file can't be opened or the
+// Read just the magic and type fields (first 8 bytes) of a .ps2a asset without
+// loading its full payload. Resolves through a mounted archive first, falling
+// back to a loose file on disc. Returns false if the asset can't be read or the
 // magic is wrong.
 static bool Internal_PeekAssetType(const char* path, ResourceType* outType)
 {
-    FILE* f = fopen(path, "rb");
-    if (!f)
-        return false;
-
     uint32_t peek[2]; // [0] = magic, [1] = type
-    size_t bytesRead = fread(peek, sizeof(uint32_t), 2, f);
-    fclose(f);
 
-    if (bytesRead < 2 || peek[0] != RES_ASSET_MAGIC)
+    // ARCHIVE SEAM (header peek): prefer a mounted archive.
+    ArchiveLocator loc;
+    if (Engine_Archive_Find(path, &loc))
+    {
+        if (!Engine_Archive_ReadSync(&loc, 0, peek, sizeof(peek)))
+            return false;
+    }
+    else
+    {
+        // Loose fallback — take the file-access semaphore so this raw read never
+        // races the IO worker's file access.
+        Engine_IO_AcquireFileAccess();
+        FILE* f = fopen(path, "rb");
+        size_t bytesRead = 0;
+        if (f)
+        {
+            bytesRead = fread(peek, sizeof(uint32_t), 2, f);
+            fclose(f);
+        }
+        Engine_IO_ReleaseFileAccess();
+        if (!f || bytesRead < 2)
+            return false;
+    }
+
+    if (peek[0] != RES_ASSET_MAGIC)
         return false;
 
     *outType = static_cast<ResourceType>(peek[1]);
@@ -526,8 +545,14 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
     if (!path)
         return -1;
 
+    // Canonicalise the path into the dedup/lookup key so the same asset requested
+    // as a device path ("cdrom0:/RASSETS/BOX.PS2A;1") and as a baked dependency
+    // string ("RASSETS/BOX.PS2A") map to one slot instead of two.
+    char canonicalKey[IO_FILE_MAX_PATH];
+    Engine_Path_Canonical(path, canonicalKey);
+
     // Check if already loaded or loading
-    int32_t existing = Internal_FindByKey(path);
+    int32_t existing = Internal_FindByKey(canonicalKey);
     if (existing >= 0)
     {
         s_Entries[existing].lastUsedFrame = s_CurrentFrame;
@@ -560,8 +585,9 @@ int32_t Engine_Resource_Load(ResourceType type, const char* path)
     entry->pinned = false;
     entry->refCount = 0;
     entry->depCount = 0;
-    strncpy(entry->key, path, IO_FILE_MAX_PATH - 1);
-    entry->key[IO_FILE_MAX_PATH - 1] = '\0';
+    // canonicalKey is fully defined and null-terminated across all IO_FILE_MAX_PATH
+    // bytes by Engine_Path_Canonical, so copy the whole buffer.
+    memcpy(entry->key, canonicalKey, IO_FILE_MAX_PATH);
 
     for (uint8_t d = 0; d < RES_MAX_DEPENDENCIES; d++)
     {
