@@ -4,6 +4,11 @@
   "type": "object",
   "required": ["components", "entities"],
   "properties": {
+    "hooks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Engine hook symbols an action's 'engineHook' may reference."
+    },
     "components": {
       "type": "array",
       "items": {

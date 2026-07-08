@@ -1,5 +1,6 @@
 {
   "$schema": "./schema.json",
+  "hooks": ["HurtEntity"],
   "components": [
     {
       "name": "HealthComponent",
