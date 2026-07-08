@@ -40,6 +40,13 @@ void GameInit()
     // compiled map entities into the game's typed components (see EcsHooks.cpp).
     game::SetSpawnHandler(&Ecs_SpawnDispatch);
 
+    // Load the compiled test level (mounts LEVELS/TEST.PS2R, spawns its
+    // entities, primes the resident sector ring). Non-fatal if absent.
+    if (game::LoadLevel("TEST"))
+        game::Log("Level TEST loaded");
+    else
+        game::Log("Level TEST not available — running without a level");
+
     s_texHandle = game::LoadResource("TEXTURE", game::MakePath("RASSETS\\BOX.PS2A"));
     game::Log("Texture requested (async)");
 }
@@ -83,6 +90,9 @@ void GameUpdate(float dt)
     const float camY = s_cubeY + CAM_DIST * sinf(s_camPitch);
     const float camZ = s_cubeZ + CAM_DIST * cosPitch * cosf(s_camYaw);
     game::SetCamera3D(camX, camY, camZ, s_cubeX, s_cubeY, s_cubeZ, 45.0f);
+
+    // Drive level sector streaming from the player position.
+    game::SetStreamingCenter(s_cubeX, s_cubeY, s_cubeZ);
 
     // Background + ground grid.
     game::Clear(20, 20, 20);

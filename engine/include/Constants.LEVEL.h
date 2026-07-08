@@ -32,3 +32,14 @@
 // Sector residency: recenter the 3x3 ring only once the camera leaves the
 // current cell by this fraction of a cell (hysteresis against boundary thrash).
 #define LEVEL_SECTOR_HYSTERESIS 0.15f
+
+// Max key/value properties read from one entity spawn record.
+#define LEVEL_MAX_ENTITY_PROPS 32
+
+// Resident sectors: a 3x3 ring around the camera cell.
+#define LEVEL_RESIDENT_SECTORS 9
+
+// ARENA_LEVEL_DATA slot assignment: slots [0..CORE_SLOTS) hold the resident
+// level core; sectors stream into the slots after that.
+#define LEVEL_CORE_SLOTS 2
+#define LEVEL_SECTOR_SLOT_BASE LEVEL_CORE_SLOTS

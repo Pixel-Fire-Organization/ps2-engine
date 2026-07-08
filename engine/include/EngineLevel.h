@@ -1,32 +1,41 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 
 #include "Constants.h"
+#include "EngineLevelFormat.h"
 
-// On-disc header for .ps2l files.
-// Must be read and validated before deserializing the Level struct.
+// Runtime level descriptor. Filled by Engine_Level_Load from a compiled level
+// archive (LEVELS/<name>.PS2R, produced by tools/compile_level.py). The chunk
+// pointers are views into the resident level-core arena slot(s); the sector
+// geometry streams separately (see EngineSector.h).
 typedef struct
 {
-    uint32_t magic; // Must equal LEVEL_FILE_MAGIC
-    uint8_t version; // Must equal LEVEL_FILE_VERSION
-    uint8_t reserved[3];
-} LevelFileHeader;
+    char name[64]; // set by the caller; names the archive/core (e.g. "TEST")
+    int32_t archiveHandle; // mounted level archive, or -1
 
-// Minimal level descriptor.
-// Only stores the paths of required (pinned) resources.
-// Packed to eliminate host/target padding divergence when serializing to .ps2l.
-typedef struct __attribute__((packed))
-{
-    char name[64];
-    char requiredResources[LEVEL_MAX_RESOURCES_COUNT][IO_FILE_MAX_PATH];
-    uint32_t requiredCount;
+    const LevelInfoChunk* info; // views into ARENA_LEVEL_DATA core slot
+    const LevelMaterialEntry* materials;
+    const LevelGridCell* grid;
+    const uint8_t* entsChunk; // raw ENTS chunk (count/records/props/strings)
+    const uint8_t* farfieldChunk; // raw FARF chunk, or null
+
+    int32_t materialTex[LEVEL_MAX_MATERIALS]; // pinned texture resource handles
 } Level;
 
-// Load a level: loads and pins all required resources.
-// Returns true if all required resources were successfully queued/loaded.
+// Load a compiled level: mount its archive, read the core into resident slots,
+// pin material textures, spawn its entities via the game's spawn handler, and
+// prime the resident sector ring. Blocking (call from a load screen).
+// `level->name` must be set; other fields are filled in. Returns false on error.
 bool Engine_Level_Load(Level* level);
 
-// Unload a level: unpins required resources and resets ARENA_LEVEL_DATA.
-// If keepPinned is true, required resources remain pinned (e.g. shared UI/fonts).
+// Unload: release the sector ring, unpin textures (unless keepPinned), unmount
+// the archive, and clear the level-data arena.
 void Engine_Level_Unload(Level* level, bool keepPinned);
+
+// Update the streaming centre (world X/Z). Recenters the resident sector ring
+// with hysteresis. Call each frame with the camera/player position.
+void Engine_Level_SetStreamingCenter(float worldX, float worldZ);
+
+// The currently loaded level, or null. Used by the renderer to draw sectors.
+const Level* Engine_Level_Current();

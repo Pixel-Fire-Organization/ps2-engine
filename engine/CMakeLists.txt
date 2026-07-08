@@ -12,6 +12,7 @@ add_library(ps2_engine STATIC
         src/EngineArchive.cpp
         src/EngineResource.cpp
         src/EngineLevel.cpp
+        src/EngineSector.cpp
         src/EngineApp.cpp
         src/GameAPI.cpp
         src/EngineInput.cpp
@@ -38,6 +39,7 @@ add_library(ps2_engine STATIC
         include/EngineResource.h
         include/EngineLevel.h
         include/EngineLevelFormat.h
+        include/EngineSector.h
         include/EngineInput.h
         include/graphics/EngineGraphics.h
         include/graphics/Renderer.h

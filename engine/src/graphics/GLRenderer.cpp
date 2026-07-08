@@ -16,8 +16,10 @@
     #include "../include/graphics/DrawList.h"
     #include "../include/graphics/PrimitiveGeometry.h"
     #include "EngineDebug.h"
+    #include "EngineLevel.h"
     #include "EngineMemory.h"
     #include "EngineResource.h"
+    #include "EngineSector.h"
     #include "Macros.h"
 
 // SetGsCrt is a PS2 BIOS syscall (libkernel). Forward-declared to avoid pulling
@@ -458,9 +460,83 @@ void GLRenderer::Render()
     RenderSkybox(m_drawLists);
     RenderPrimitives(m_drawLists);
     RenderModels(m_drawLists);
+    RenderLevel();
     RenderUI(m_drawLists);
 
     m_drawLists.Reset(false);
+}
+
+// Draw the resident level sectors. Each sector's geometry is a set of Mesh views
+// pointing straight into an arena slot; we frustum-cull whole sectors by their
+// world AABB, then draw each mesh immediately (no display-list cache for streamed
+// sectors). Textures resolve from the level's pinned material handles at draw time.
+void GLRenderer::RenderLevel()
+{
+    if (!Engine_Level_Current())
+        return;
+
+    uint32_t count = 0;
+    const SectorResident* residents = Engine_Sector_GetResidents(&count);
+
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    int32_t lastTexResId = -2;
+
+    for (uint32_t s = 0; s < count; ++s)
+    {
+        const SectorResident& sec = residents[s];
+        if (sec.state != SECTOR_READY || sec.meshCount == 0)
+            continue;
+        if (!Frustum_AabbVisible(&m_frustum, sec.bounds))
+        {
+            ++m_frameStats.entriesCulled;
+            continue;
+        }
+
+        for (uint32_t m = 0; m < sec.meshCount; ++m)
+        {
+            if (m_frameDrawCallsUsed >= GFX_DRAW_CALL_BUDGET)
+                break;
+            const Mesh& mesh = sec.meshes[m];
+            if (!mesh.vertices || mesh.vertexCount == 0)
+                continue;
+
+            const int32_t texResId = sec.meshTexture[m];
+            if (texResId != lastTexResId)
+            {
+                const auto* tex = (texResId >= 0) ? static_cast<const Texture2D*>(Engine_Resource_Get(texResId)) : nullptr;
+                if (tex && tex->id != 0)
+                {
+                    glEnable(GL_TEXTURE_2D);
+                    glBindTexture(GL_TEXTURE_2D, tex->id);
+                    ++m_frameStats.texBinds;
+                    lastTexResId = texResId;
+                }
+                else
+                {
+                    glDisable(GL_TEXTURE_2D);
+                    lastTexResId = -2;
+                }
+            }
+
+            glEnableClientState(GL_VERTEX_ARRAY);
+            glEnableClientState(GL_NORMAL_ARRAY);
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glVertexPointer((mesh.vertexComponents == 4) ? 4 : 3, GL_FLOAT, 0, mesh.vertices);
+            if (mesh.normals)
+                glNormalPointer(GL_FLOAT, 0, mesh.normals);
+            if (mesh.texcoords)
+                glTexCoordPointer(2, GL_FLOAT, 0, mesh.texcoords);
+
+            const GLenum mode = (mesh.topology == MESH_TOPOLOGY_STRIP) ? GL_TRIANGLE_STRIP : GL_TRIANGLES;
+            glDrawArrays(mode, 0, mesh.vertexCount);
+            ++m_frameDrawCallsUsed;
+
+            const uint32_t verts = static_cast<uint32_t>(mesh.vertexCount);
+            m_frameStats.trisSubmitted += (mesh.topology == MESH_TOPOLOGY_STRIP) ? (verts >= 2 ? verts - 2 : 0) : verts / 3;
+            m_frameStats.vertsTransformed += verts;
+        }
+    }
+    glDisable(GL_TEXTURE_2D);
 }
 
 void GLRenderer::RenderSkybox(const DrawLists& lists)

@@ -36,6 +36,17 @@ void Frustum_FromViewProj(FrustumPlanes* out, const float vp[16]);
 // outside at least one plane (i.e. definitely invisible).
 bool Frustum_SphereVisible(const FrustumPlanes* f, const Vector3& worldCenter, float worldRadius);
 
+// Axis-aligned bounding box, world space.
+struct Aabb3
+{
+    Vector3 min;
+    Vector3 max;
+};
+
+// Conservative AABB-vs-frustum test (positive-vertex method): false only when the
+// box is fully outside at least one plane. Used to cull whole sectors.
+bool Frustum_AabbVisible(const FrustumPlanes* f, const Aabb3& box);
+
 // Conservative world-space bounding sphere for an object-space sphere
 // (objCenter/objRadius) under a translation + non-uniform scale. The center
 // offset is folded into the radius, so the result is rotation-independent and

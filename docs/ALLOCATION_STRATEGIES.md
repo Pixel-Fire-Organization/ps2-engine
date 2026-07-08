@@ -12,8 +12,14 @@ fragmentation and maximize performance.
 
 ### The Model:
 
-Each internal subsystem is assigned a dedicated "Segment" of the 7MB engine arena. These segments are partitioned into *
-*Fixed-Capacity Slots** aligned to **16 KB**.
+Each internal subsystem is assigned a dedicated "Segment" of the ~7.25MB engine arena. These segments are partitioned
+into **Fixed-Capacity Slots** aligned to **16 KB**. Current map (see `Constants.MEM.h`):
+
+| Segment | Size | Slots | Slot capacity | Use |
+|---------|------|-------|---------------|-----|
+| `ARENA_CONFIG` | 256 KB | 4 | 64 KB | config/boot data |
+| `ARENA_LEVEL_DATA` | 4 MB | 16 | 256 KB | level core (slots 0-1) + streamed sectors (2-10) + prefetch (11-15) |
+| `ARENA_RENDERER` | 3 MB | 1 | 3 MB | renderer scratch |
 
 - **Logic**: Linear Stack Allocation within a slot.
 - **Replacement**: Instant O(1) overwriting of a slot.
