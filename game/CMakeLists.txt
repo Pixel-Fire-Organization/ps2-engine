@@ -90,6 +90,27 @@ else()
     message(FATAL_ERROR "python3 not found — required to generate ECS code (tools/ECS/generate_ecs.py).")
 endif()
 
+# --- Level compilation ------------------------------------------------------
+# Compile every assets/maps/*.map into a self-contained level archive
+# (build/levels/<NAME>.PS2R). generate-iso stages these under LEVELS/ on the disc.
+set(LEVELS_OUT_DIR "${CMAKE_BINARY_DIR}/levels")
+if(PYTHON3_BIN)
+    file(GLOB LEVEL_MAPS "${CMAKE_SOURCE_DIR}/assets/maps/*.map")
+    add_custom_target(compile-levels
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LEVELS_OUT_DIR}"
+        COMMENT "Compiling levels from assets/maps/*.map -> ${LEVELS_OUT_DIR}"
+    )
+    foreach(MAP_FILE ${LEVEL_MAPS})
+        add_custom_command(TARGET compile-levels POST_BUILD
+            COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/compile_level.py"
+                    "${MAP_FILE}" --out "${LEVELS_OUT_DIR}"
+                    --textures "${CMAKE_SOURCE_DIR}/assets/textures"
+                    --models "${CMAKE_SOURCE_DIR}/assets/models"
+            VERBATIM
+        )
+    endforeach()
+endif()
+
 if(DEBUG AND CMAKE_SYSTEM_NAME STREQUAL "Generic")
     get_filename_component(_TOOLCHAIN_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     find_program(EE_NM_BIN
@@ -146,6 +167,10 @@ if(MKISOFS_BIN)
                 --dir "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/rassets"
                 --prefix RASSETS
                 --dst "${ISO_STAGING_DIR}/RASSETS.PS2R"
+        # Stage compiled level archives under LEVELS/ (created by compile-levels).
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${ISO_STAGING_DIR}/LEVELS"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${LEVELS_OUT_DIR}" "${ISO_STAGING_DIR}/LEVELS"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_SERIAL}"
         COMMAND ${CMAKE_COMMAND} -E copy
@@ -184,5 +209,6 @@ endif()
 add_dependencies(generate-iso ${APP_EXE_NAME})
 if(PYTHON3_BIN)
     add_dependencies(generate-iso pack-assets)
+    add_dependencies(generate-iso compile-levels)
 endif()
 

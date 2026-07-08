@@ -37,6 +37,7 @@ add_library(ps2_engine STATIC
         include/EngineMemory.h
         include/EngineResource.h
         include/EngineLevel.h
+        include/EngineLevelFormat.h
         include/EngineInput.h
         include/graphics/EngineGraphics.h
         include/graphics/Renderer.h
