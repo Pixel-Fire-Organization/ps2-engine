@@ -9,6 +9,7 @@ add_library(ps2_engine STATIC
         src/EngineDebug.cpp
         src/EngineMemory.cpp
         src/EngineIO.cpp
+        src/EngineArchive.cpp
         src/EngineResource.cpp
         src/EngineLevel.cpp
         src/EngineApp.cpp
@@ -32,6 +33,7 @@ add_library(ps2_engine STATIC
         include/EngineCore.h
         include/EngineDebug.h
         include/EngineIO.h
+        include/EngineArchive.h
         include/EngineMemory.h
         include/EngineResource.h
         include/EngineLevel.h

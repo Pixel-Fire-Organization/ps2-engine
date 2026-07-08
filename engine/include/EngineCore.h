@@ -48,3 +48,11 @@ uint32_t Engine_GetFrameCount();
 // suffix for the device type (e.g. cdrom0:\\FOLDER\\FILE;1, host:FILE).
 // Returns false if any argument is NULL or bufSize is 0.
 bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf, size_t bufSize);
+
+// Canonicalise an asset path into the stable key used for resource dedup and
+// archive lookup: strips the device token (cdrom0:/mass0:/hdd0:/host:) and any
+// ";N" version suffix, converts '\\' to '/', upper-cases, and drops leading
+// slashes. e.g. "cdrom0:/RASSETS/BOX.PS2A;1" and the baked dependency string
+// "RASSETS/BOX.PS2A" both canonicalise to "RASSETS/BOX.PS2A". out must hold at
+// least IO_FILE_MAX_PATH bytes.
+void Engine_Path_Canonical(const char* in, char* out);

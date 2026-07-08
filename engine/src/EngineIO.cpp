@@ -108,10 +108,44 @@ static void IOThreadEntry(void* arg)
             if (!s_IOThreadActive)
                 break;
 
-            Engine_IO_AcquireFileAccess();
-            FILE* f = fopen(filepath, "rb");
             void* data = nullptr;
             size_t size = 0;
+
+            // ARCHIVE SEAM: if a mounted archive holds this asset, read its span
+            // straight from the container (one seek + read, no per-file open).
+            // Engine_Archive_ReadSync takes the file-access semaphore itself.
+            ArchiveLocator loc;
+            if (Engine_Archive_Find(filepath, &loc))
+            {
+                if (loc.size > IO_READ_BUFFER_SIZE)
+                {
+                    Engine_LogError("IO: '%s' is %u bytes in archive, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath, loc.size, IO_READ_BUFFER_SIZE);
+                }
+                else if (Engine_Archive_ReadSync(&loc, 0, s_SharedReadBuffer, loc.size))
+                {
+                    data = s_SharedReadBuffer;
+                    size = loc.size;
+                }
+                else
+                {
+                    Engine_LogError("IO: archive read failed for '%s'", filepath);
+                }
+
+                if (s_IOMutex >= 0)
+                {
+                    WaitSema(s_IOMutex);
+                    s_Requests[reqIndex].loadedData = data;
+                    s_Requests[reqIndex].loadedSize = size;
+                    s_Requests[reqIndex].state = IO_STATE_COMPLETED;
+                    SignalSema(s_IOMutex);
+                }
+                continue; // handled via archive; skip the loose-file path
+            }
+
+            // Loose-file fallback: no mounted archive holds it (host: dev builds,
+            // and the loose->archive transition). Unchanged whole-file read.
+            Engine_IO_AcquireFileAccess();
+            FILE* f = fopen(filepath, "rb");
             if (f)
             {
                 fseek(f, 0, SEEK_END);

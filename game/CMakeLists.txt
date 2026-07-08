@@ -138,6 +138,14 @@ if(MKISOFS_BIN)
                 -D "DST=${ISO_STAGING_DIR}"
                 -D "BLACKLIST=${ISO_CONTENT_BLACKLIST}"
                 -P "${CMAKE_SOURCE_DIR}/tools/copy_iso_files.cmake"
+        # Bundle the packed assets into a single flat archive at the disc root.
+        # The engine mounts RASSETS.PS2R at boot and serves assets from it; the
+        # loose rassets/ tree is still copied above as a fallback during the
+        # loose->archive transition (dropped in a later phase).
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/pack_archive.py"
+                --dir "${CMAKE_CURRENT_SOURCE_DIR}/cd_files/rassets"
+                --prefix RASSETS
+                --dst "${ISO_STAGING_DIR}/RASSETS.PS2R"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:${APP_EXE_NAME}>" "${ISO_STAGING_DIR}/${APP_SERIAL}"
         COMMAND ${CMAKE_COMMAND} -E copy
