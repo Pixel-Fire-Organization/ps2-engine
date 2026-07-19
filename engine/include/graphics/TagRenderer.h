@@ -97,7 +97,8 @@ class TagRenderer final : public Renderer
     TexEntry m_textures[TAG_MAX_TEXTURES]{};
 
     // Queued 2D rectangles (see GLRenderer for why DrawRect2D must be deferred).
-    static constexpr uint16_t TAG_MAX_2D_RECTS = 64;
+    // Sized for the rect-font UI (game/src/DebugFont); see GLRenderer note.
+    static constexpr uint16_t TAG_MAX_2D_RECTS = 2048;
     struct Rect2D
     {
         int32_t x, y, w, h;
