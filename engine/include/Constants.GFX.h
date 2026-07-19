@@ -35,6 +35,13 @@
     #define GFX_SCREEN_REGION_STR "NTSC"
 #endif
 
+// Projection aspect ratio. The PS2 outputs its framebuffer (640x448 NTSC /
+// 640x512 PAL) to a 4:3 display with NON-SQUARE pixels, so the perspective
+// projection must use the DISPLAY aspect (4:3), not the framebuffer pixel ratio
+// (640/512 = 1.25 would stretch geometry ~7% wide and differ between regions).
+// (For a 16:9 mode this would become 16/9.)
+#define GFX_DISPLAY_ASPECT (4.0f / 3.0f)
+
 #define GFX_MAX_DRAW_LIST_LENGTH 1024
 
 // Shared clip-plane distances — both backends must build the same frustum so

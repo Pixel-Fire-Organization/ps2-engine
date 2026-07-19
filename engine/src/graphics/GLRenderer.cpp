@@ -456,7 +456,7 @@ void GLRenderer::Render()
     // Rebuild the CPU cull frustum from the same projection/view fed to GL.
     {
         float proj[16], view[16], vp[16];
-        const float aspect = static_cast<float>(GFX_SCREEN_WIDTH) / static_cast<float>(GFX_SCREEN_HEIGHT);
+        const float aspect = GFX_DISPLAY_ASPECT;
         Frustum_BuildPerspective(proj, camera.fovy, aspect, GFX_NEAR_PLANE, GFX_FAR_PLANE);
         Frustum_BuildLookAt(view, camera);
         Frustum_Mult4x4(vp, proj, view);
@@ -935,7 +935,7 @@ void GLRenderer::ClearModelDListCache()
 
 void GLRenderer::ApplyProjection(const Camera3D& camera) const
 {
-    const float aspect = static_cast<float>(GFX_SCREEN_WIDTH) / static_cast<float>(GFX_SCREEN_HEIGHT);
+    const float aspect = GFX_DISPLAY_ASPECT;
     const float nearPlane = GFX_NEAR_PLANE;
     const float farPlane = GFX_FAR_PLANE;
     const float fovY = camera.fovy * GL_RENDERER_DEG_TO_RAD;
