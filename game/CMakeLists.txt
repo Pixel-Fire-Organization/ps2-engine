@@ -2,6 +2,11 @@ add_executable(${APP_EXE_NAME} EXCLUDE_FROM_ALL
     src/main.cpp
     src/Game.cpp
     src/SwarmSystem.cpp
+    src/DebugFont.cpp
+    src/SceneManager.cpp
+    src/scene_select.cpp
+    src/scene_swarm.cpp
+    src/scene_level.cpp
 )
 set_target_properties(${APP_EXE_NAME} PROPERTIES
     LINKER_LANGUAGE CXX
