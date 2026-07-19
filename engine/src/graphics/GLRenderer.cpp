@@ -485,18 +485,26 @@ void GLRenderer::RenderLevel()
     const SectorResident* residents = Engine_Sector_GetResidents(&count);
 
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    // Compiled level faces are not guaranteed to be wound for GL's front-face
+    // convention after the map->engine coordinate transform, so draw both sides
+    // (no back-face cull) — like the skybox and the 2D pass.
+    glDisable(GL_CULL_FACE);
     int32_t lastTexResId = -2;
+
+    uint32_t renderable = 0, visibleSectors = 0, drawnMeshes = 0;
 
     for (uint32_t s = 0; s < count; ++s)
     {
         const SectorResident& sec = residents[s];
         if (sec.state != SECTOR_READY || sec.meshCount == 0)
             continue;
+        ++renderable;
         if (!Frustum_AabbVisible(&m_frustum, sec.bounds))
         {
             ++m_frameStats.entriesCulled;
             continue;
         }
+        ++visibleSectors;
 
         for (uint32_t m = 0; m < sec.meshCount; ++m)
         {
@@ -505,6 +513,7 @@ void GLRenderer::RenderLevel()
             const Mesh& mesh = sec.meshes[m];
             if (!mesh.vertices || mesh.vertexCount == 0)
                 continue;
+            ++drawnMeshes;
 
             const int32_t texResId = sec.meshTexture[m];
             if (texResId != lastTexResId)
@@ -542,7 +551,16 @@ void GLRenderer::RenderLevel()
             m_frameStats.vertsTransformed += verts;
         }
     }
+    glEnable(GL_CULL_FACE);
     glDisable(GL_TEXTURE_2D);
+
+    // One-shot diagnostic: how many sectors were renderable / visible / drawn.
+    static bool s_LoggedLevelStats = false;
+    if (!s_LoggedLevelStats)
+    {
+        s_LoggedLevelStats = true;
+        Engine_LogInfo("RenderLevel: residents=%u renderable=%u visible=%u drawnMeshes=%u", count, renderable, visibleSectors, drawnMeshes);
+    }
 }
 
 void GLRenderer::RenderSkybox(const DrawLists& lists)
