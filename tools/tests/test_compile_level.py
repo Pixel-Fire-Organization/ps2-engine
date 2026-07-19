@@ -124,6 +124,42 @@ def test_sectors_within_budget(compiled):
             assert m["verts_offset"] % 16 == 0
 
 
+def test_triangle_edges_within_max_edge(compiled):
+    """ps2gl's VU1 renderers drop whole triangles with any vertex outside the
+    guard band (no true clipping), so the compiler must tessellate: no baked
+    triangle edge may exceed DEFAULT_MAX_EDGE world units."""
+    max_edge = compile_level.DEFAULT_MAX_EDGE + 1e-3
+    toc = pack_archive.read_toc(compiled)
+    checked = 0
+    for e in toc["entries"]:
+        if not e["key"].endswith(".SEC"):
+            continue
+        blob = pack_archive.read_payload(compiled, e)
+        sec = levelfmt.parse_sector(blob)
+        for m in sec["meshes"]:
+            # vec4 positions at verts_offset, 16-byte stride.
+            verts = []
+            for i in range(m["vert_count"]):
+                x, y, z, _w = struct.unpack_from("<ffff", blob, m["verts_offset"] + i * 16)
+                verts.append((x, y, z))
+            if m["topology"] == 1:  # strip: decode, skipping degenerates
+                tris = []
+                for i in range(len(verts) - 2):
+                    t = (i, i + 1, i + 2)
+                    a, b, c = verts[t[0]], verts[t[1]], verts[t[2]]
+                    if a == b or b == c or a == c:
+                        continue
+                    tris.append((a, b, c))
+            else:  # list
+                tris = [(verts[i], verts[i + 1], verts[i + 2]) for i in range(0, len(verts), 3)]
+            for (a, b, c) in tris:
+                for (p, q) in ((a, b), (b, c), (c, a)):
+                    edge = sum((p[k] - q[k]) ** 2 for k in range(3)) ** 0.5
+                    assert edge <= max_edge, f"{e['key']}: edge {edge:.2f} > {max_edge}"
+                    checked += 1
+    assert checked > 0
+
+
 def test_entities_present(compiled):
     toc = pack_archive.read_toc(compiled)
     by_key = {e["key"]: e for e in toc["entries"]}

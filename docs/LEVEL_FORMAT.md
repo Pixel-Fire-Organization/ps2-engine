@@ -18,6 +18,10 @@ sector grid partitions the ground. Positions are scaled by `_map_scale`
 (worldspawn key, default `1/32` — 32 map units ≈ 1 metre). UVs are computed from
 the untransformed Quake vertices, because the Valve-220 U/V axes live in map space.
 
+Worldspawn keys: `_map_scale` (default 1/32), `_sector_size` (world units per
+grid cell, default 64), `_max_edge` (max triangle edge after tessellation,
+default 4 — see the compiler pipeline below for why this is mandatory on PS2).
+
 ## On-disc layout
 
 A compiled level is an archive `LEVELS/<NAME>.PS2R` (see [ARCHIVES.md](ARCHIVES.md))
@@ -69,9 +73,17 @@ strips (or lists) built by the same stripifier as baked models
 2. Convert + scale vertices to engine space.
 3. Grid from the world AABB; assign each face to a cell by its centroid (whole
    faces — no splitting in v1; neighbours are co-resident so there is no gap).
-4. Per cell, group faces by material, fan-triangulate, and bake one mesh per
-   material into a PSEC blob. Enforces `LEVEL_MAX_MESHES_PER_SECTOR` (32) and
-   `LEVEL_SECTOR_MAX_BYTES` (256KB → one arena slot); over-budget is a hard error.
+4. Per cell, group faces by material, fan-triangulate, **tessellate** so no
+   triangle edge exceeds `_max_edge` (default 4.0 world units), and bake one mesh
+   per material into a PSEC blob. Tessellation is mandatory on PS2: ps2gl's VU1
+   renderers never truly clip — any triangle with a vertex outside the ±2048
+   guard band or behind the near plane is ADC-dropped **whole**
+   (`external/ps2gl/vu1/clip_cull.i`), so giant brush faces vanish piecewise as
+   the camera moves. Splitting always halves the longest edge; shared edges may
+   split differently on either side (T-junctions), which is invisible on coplanar
+   faces but a known v2 refinement. Enforces `LEVEL_MAX_MESHES_PER_SECTOR` (32)
+   and `LEVEL_SECTOR_MAX_BYTES` (256KB → one arena slot); over-budget is a hard
+   error.
 5. Bake each material to a PAL8 TIM2, each point-entity `.obj` to BKM2. Missing
    sources warn and fall back (magenta texture / kept raw model reference).
 6. Bake far-field impostors and assemble the archive.
