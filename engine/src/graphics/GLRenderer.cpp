@@ -386,6 +386,11 @@ void GLRenderer::FlushRects2D()
 
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
+    // Screen-space quads have a fixed winding that is back-facing under the
+    // Y-flipped ortho below; with GL_CULL_FACE left enabled (from Init) every rect
+    // would be culled and nothing would show. Disable culling for the 2D pass
+    // (mirrors RenderSkybox, which does the same for its full-screen quad).
+    glDisable(GL_CULL_FACE);
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -419,6 +424,7 @@ void GLRenderer::FlushRects2D()
     glPopMatrix();
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
     glEnable(GL_TEXTURE_2D);
 
     m_rect2DCount = 0;
