@@ -57,6 +57,26 @@ This is a custom PS2 game engine using the `ps2sdk`, `ps2gl`, and `ps2stuff`.
 - When modifying this repository, check the documentation. If element (you will change) is documented, edit the
   documentation accordingly.
 
+## AI Instruction Files
+
+This file is the **single source of truth** for AI-agent-facing conventions in this repo. Other instruction files
+exist only to route to it — never fork or duplicate its content into them:
+
+- `CLAUDE.md` (repo root) — auto-loaded by Claude Code every session; must stay a thin pointer to this file.
+- `.github/instructions/c-expert.instructions.md` / `cpp-expert.instructions.md` — C/C++ coding-standard details,
+  linked from "Coding Standards" below.
+
+**Rule — keep them in sync, in the same change, never deferred:**
+
+- Build steps, toolchain, the "NEVER DO" list, memory/arena layout, constants standard, resource-management
+  philosophy, or a dependency added/removed/changed → update **this file**.
+- A C or C++ coding-standard change (naming, memory rules, allowed language features, formatting, etc.) → also update
+  the matching `c-expert.instructions.md` or `cpp-expert.instructions.md` directly — this file only links to them, it
+  does not restate their content.
+
+This applies to human contributors and AI agents alike (Copilot, Claude Code, or any other tool): whichever one made
+the change is responsible for updating the relevant file(s) before considering the change complete.
+
 ## Memory Management & Allocation Strategy
 
 - **Master Reference**: Always refer to `engine/include/Constants.h` for the current EE RAM (32MB) layout.
@@ -75,7 +95,7 @@ This is a custom PS2 game engine using the `ps2sdk`, `ps2gl`, and `ps2stuff`.
 
 ## Coding Standards
 
-See `.github/c-expert.instructions.md` for C rules and `.github/cpp-expert.instructions.md` for C++ rules.
+See `.github/instructions/c-expert.instructions.md` for C rules and `.github/instructions/cpp-expert.instructions.md` for C++ rules.
 
 ## IDE & IntelliSense Rules
 
