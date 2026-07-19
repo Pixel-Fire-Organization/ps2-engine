@@ -68,7 +68,7 @@ namespace
     {
         float view[16], proj[16];
         Frustum_BuildLookAt(view, camera);
-        const float aspect = static_cast<float>(GFX_SCREEN_WIDTH) / static_cast<float>(GFX_SCREEN_HEIGHT);
+        const float aspect = GFX_DISPLAY_ASPECT;
         Frustum_BuildPerspective(proj, camera.fovy, aspect, GFX_NEAR_PLANE, GFX_FAR_PLANE);
         Frustum_Mult4x4(vp, proj, view);
     }
