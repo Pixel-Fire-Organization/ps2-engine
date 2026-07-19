@@ -36,6 +36,15 @@ DEFAULT_SECTOR_SIZE = 64.0        # world units per sector cell
 FARFIELD_FRAME_SIZE = 48          # px per azimuth view in the impostor atlas
 FARFIELD_ATLAS_SIZE = 256
 
+# Max triangle edge length in world units (worldspawn `_max_edge` overrides).
+# The PS2 requires small world triangles: ps2gl's VU1 renderers never truly clip
+# — a triangle with ANY vertex outside the ±2048 guard band or behind the near
+# plane has its ADC bit set and is dropped WHOLE (see external/ps2gl/vu1/
+# clip_cull.i). Giant brush faces (a floor as two half-map triangles) therefore
+# vanish piecewise as the camera moves. Subdividing to a few metres per edge
+# keeps every triangle comfortably inside the guard band.
+DEFAULT_MAX_EDGE = 4.0
+
 # Texture names that never produce render geometry.
 _SKIP_TEXTURES = ("skip", "nodraw", "clip", "trigger", "origin", "hint", "areaportal")
 
@@ -52,6 +61,43 @@ def q2e(p, scale):
 
 def q2e_dir(n):
     return (n[0], n[2], -n[1])
+
+
+def _tessellate_tri(tri, max_edge):
+    """Subdivide one triangle until no edge exceeds max_edge (world units).
+
+    tri is [(vert3, uv2)] * 3. Splits the longest edge at its midpoint each
+    step; brush-face UVs are a planar (affine) mapping, so midpoint-interpolated
+    UVs are exact. Winding is preserved. Returns a list of triangles.
+    """
+    max_e2 = max_edge * max_edge
+    out = []
+    stack = [tri]
+    while stack:
+        t = stack.pop()
+        longest = -1
+        longest_l2 = 0.0
+        for i in range(3):
+            a = t[i][0]
+            b = t[(i + 1) % 3][0]
+            l2 = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+            if l2 > longest_l2:
+                longest_l2 = l2
+                longest = i
+        if longest_l2 <= max_e2:
+            out.append(t)
+            continue
+        i = longest
+        j = (i + 1) % 3
+        k = (j + 1) % 3
+        a, b, c = t[i], t[j], t[k]
+        mid = (
+            tuple((a[0][q] + b[0][q]) * 0.5 for q in range(3)),
+            tuple((a[1][q] + b[1][q]) * 0.5 for q in range(2)),
+        )
+        stack.append([a, mid, c])
+        stack.append([mid, b, c])
+    return out
 
 
 class Material:
@@ -109,6 +155,7 @@ def compile_level(map_path, out_dir, tex_dir, model_dir, report=False, debug_png
 
     scale = float(world.props.get("_map_scale", DEFAULT_MAP_SCALE))
     sector_size = float(world.props.get("_sector_size", DEFAULT_SECTOR_SIZE))
+    max_edge = float(world.props.get("_max_edge", DEFAULT_MAX_EDGE))
 
     # --- collect world faces (worldspawn + any solid entities' brushes) -------
     # A face -> (texture, engine polygon verts, engine normal, quake verts for UV).
@@ -161,10 +208,15 @@ def compile_level(map_path, out_dir, tex_dir, model_dir, report=False, debug_png
         groups = cell_groups.setdefault((cx, cz), {})
         ov, on, ot = groups.setdefault(midx, ([], [], []))
         for k in range(1, len(poly) - 1):
-            for idx in (0, k, k + 1):
-                ov.append(everts[idx])
-                on.append(nrm)
-                ot.append(uvs[idx])
+            # Fan-triangulate, then subdivide so no edge exceeds max_edge — the
+            # PS2 drops whole triangles that poke outside the guard band (see
+            # DEFAULT_MAX_EDGE), so world geometry must be small triangles.
+            fan_tri = [(everts[idx], uvs[idx]) for idx in (0, k, k + 1)]
+            for tri in _tessellate_tri(fan_tri, max_edge):
+                for (vert, uv) in tri:
+                    ov.append(vert)
+                    on.append(nrm)
+                    ot.append(uv)
 
     # --- bake sectors (PSEC) --------------------------------------------------
     sectors = {}   # (cx,cz) -> psec bytes
