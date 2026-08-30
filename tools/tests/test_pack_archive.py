@@ -6,7 +6,6 @@ round-trip, and canonical-key / FNV-1a parity with the C side.
 """
 
 import importlib.util
-import os
 import pathlib
 
 import pytest

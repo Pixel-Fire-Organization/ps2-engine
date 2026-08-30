@@ -39,8 +39,9 @@ Thumbs.db
 *.ps2a
 build_log.txt
 
-# ...but keep test golden fixtures even if they match the patterns above.
+# ...but keep test golden fixtures and input fixtures even if they match the patterns above.
 !tools/tests/golden/**
+!tools/tests/fixtures/**
 
 # PCSX2 artefacts
 .pcsx2/**

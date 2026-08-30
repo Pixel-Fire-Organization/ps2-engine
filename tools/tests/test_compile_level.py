@@ -6,7 +6,6 @@ mesh-stripifier correctness and C<->Python struct-size parity.
 """
 
 import importlib.util
-import os
 import pathlib
 import struct
 
