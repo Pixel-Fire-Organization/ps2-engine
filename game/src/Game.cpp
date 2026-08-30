@@ -15,7 +15,4 @@ void GameInit()
     SceneManager_Init(); // activates the selector scene
 }
 
-void GameUpdate(float dt)
-{
-    SceneManager_Update(dt);
-}
+void GameUpdate(float dt) { SceneManager_Update(dt); }

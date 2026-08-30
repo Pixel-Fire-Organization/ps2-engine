@@ -202,10 +202,7 @@ bool Engine_Level_Load(Level* level)
     return true;
 }
 
-void Engine_Level_SetStreamingCenter(float worldX, float worldZ)
-{
-    Engine_Sector_Update(worldX, worldZ);
-}
+void Engine_Level_SetStreamingCenter(float worldX, float worldZ) { Engine_Sector_Update(worldX, worldZ); }
 
 void Engine_Level_Unload(Level* level, bool keepPinned)
 {
