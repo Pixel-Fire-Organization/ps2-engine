@@ -226,7 +226,7 @@ namespace game
     {
         Level s_GameLevel;
         bool s_LevelLoaded = false;
-    }
+    } // namespace
 
     bool LoadLevel(const char* name)
     {

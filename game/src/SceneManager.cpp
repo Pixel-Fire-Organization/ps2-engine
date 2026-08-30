@@ -40,10 +40,7 @@ void SceneManager_SetScene(int index)
 
 int SceneManager_Count() { return s_SceneCount; }
 
-const char* SceneManager_Name(int index)
-{
-    return (index >= 0 && index < s_SceneCount) ? s_Scenes[index].name : "";
-}
+const char* SceneManager_Name(int index) { return (index >= 0 && index < s_SceneCount) ? s_Scenes[index].name : ""; }
 
 // --- Shared player + orbit camera -------------------------------------------
 namespace
