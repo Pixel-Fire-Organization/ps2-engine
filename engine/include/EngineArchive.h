@@ -2,18 +2,21 @@
 
 #include <cstdint>
 
-#include "Constants.h"
+#include "PlatformConstants.h"
 
-// ---------------------------------------------------------------------------
-// Game archives (.PS2R). See Constants.ARCH.h for the rationale.
-//
-// This is the runtime READ side. The producer is tools/pack_archive.py; both
-// sides agree on the canonical asset key (Engine_Path_Canonical) and the FNV-1a
-// name hash, so a lookup path in any form (device path, baked dependency path)
-// resolves to the same TOC entry.
-// ---------------------------------------------------------------------------
+// FORMAT CONSTANTS - shared with tools/pack_archive.py, identical everywhere.
 
-// --- On-disc format (little-endian) ---
+#define ARCH_FILE_MAGIC 0x52325350u // "PS2R" little-endian
+#define ARCH_FILE_VERSION 1u
+
+// Payloads are aligned to a DVD sector so a read never straddles an extra sector
+// and every seek target lands on a sector boundary (drive locality).
+#define ARCH_SECTOR_ALIGN 2048u
+
+#define ARCH_FILE_EXT ".PS2R"
+
+// Boot archive base name, mounted at Engine_Init against the active device token.
+#define ARCH_BOOT_ARCHIVE_NAME "RASSETS.PS2R"
 
 typedef struct
 {

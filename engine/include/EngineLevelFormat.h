@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "Constants.h"
+#include "PlatformConstants.h"
 #include "graphics/ModelFormat.h" // BakedMeshEntry reused by sector geometry
 
 // ---------------------------------------------------------------------------
@@ -15,11 +15,37 @@
 // resident 3x3 ring.
 //
 // On-disc: LevelFileHeaderV2, then LevelChunkEntry[chunkCount], then the chunk
-// payloads. All little-endian; 16-byte alignment for anything the GS/VU touches.
+// payloads. All little-endian; 16-byte alignment for anything a transfer path
+// touches.
 //
 // BSP (indoor) is deferred: LEVEL_CHUNK_BSP and SectorHeader.bvhOffset are
 // reserved so an indoor tree can be added later without a format break.
 // ---------------------------------------------------------------------------
+
+// --- Format constants ----------------------------------------------------
+// Shared with tools/compile_level.py; identical on every platform.
+
+#define LEVEL_FILE_MAGIC 0x4C325350u /* "PS2L" in little-endian */
+#define LEVEL_FILE_VERSION 2u /* v2: chunked, sectorized */
+#define LEVEL_FILE_EXT ".ps2l"
+
+// Materials (textures) referenced by a level's geometry.
+#define LEVEL_MAX_MATERIALS 64
+
+// Meshes per streamed sector (one per material present in the sector's cell).
+#define LEVEL_MAX_MESHES_PER_SECTOR 32
+
+// A streamed sector payload (PSEC) must fit one ARENA_LEVEL_DATA slot. The
+// level compiler hard-fails any sector larger than this; each platform
+// static_asserts that its own slot capacity is at least this big.
+#define LEVEL_SECTOR_MAX_BYTES (256 * 1024)
+
+// Far-field impostor azimuth views baked per cluster (N/E/S/W). Data-driven at
+// runtime via FarfieldHeader.azimuthCount; this is the compiler default.
+#define LEVEL_FARFIELD_AZIMUTHS 4
+
+// Max key/value properties read from one entity spawn record.
+#define LEVEL_MAX_ENTITY_PROPS 32
 
 typedef struct
 {

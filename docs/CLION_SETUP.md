@@ -9,10 +9,10 @@ This guide configures CLion to build, run, and analyze the PS2 engine using the 
 | Requirement       | Details                                                                                          |
 | :---------------- | :----------------------------------------------------------------------------------------------- |
 | **CLion**         | 2023.1 or newer (CMakePresets.json v6 support required)                                          |
-| **WSL2 + Ubuntu** | With the PS2 toolchain installed at `/usr/local/ps2dev` (see [PS2SDK_SETUP.md](PS2SDK_SETUP.md)) |
+| **WSL2 + Ubuntu** | With the PS2 toolchain installed at `/usr/local/ps2dev` (see [PS2SDK_SETUP.md](ps2/PS2SDK_SETUP.md)) |
 | **PCSX2**         | Installed on your platform (for the `run-emulator` target)                                       |
 | **genisoimage**   | Installed in WSL (`sudo apt install genisoimage`) for ISO generation                             |
-| **python3**       | Installed in WSL (`sudo apt install python3`) for asset packing (`pack_assets.py`)               |
+| **python3**       | Installed in WSL (`sudo apt install python3`) for the asset pipeline (`cook_assets.py`)               |
 
 > `PS2DEV` does **not** need to be in your `~/.bashrc` for CLion — the default path `/usr/local/ps2dev` is hardcoded in `CMakePresets.json`. You only need it exported if you run builds from a terminal directly. If your toolchain is at a non-standard path, see the [Troubleshooting](#troubleshooting) section.
 
@@ -31,14 +31,25 @@ This guide configures CLion to build, run, and analyze the PS2 engine using the 
 
 ## 2. CMake Profiles (Code Analysis Only)
 
-`CMakePresets.json` defines four profiles that CLion loads automatically:
+`CMakePresets.json` defines the profiles CLion loads automatically. Which
+platforms a configure produces is chosen by `PLATFORMS_TO_SUPPORT`, which
+defaults to every known platform and is filtered against the active toolchain.
 
-| Profile              | binaryDir            | DEBUG | REGION |
-| :------------------- | :------------------- | :---- | :----- |
-| `PS2 Debug (PAL)`    | `build/debug-pal`    | ON    | PAL    |
-| `PS2 Debug (NTSC)`   | `build/debug-ntsc`   | ON    | NTSC   |
-| `PS2 Release (PAL)`  | `build/release-pal`  | OFF   | PAL    |
-| `PS2 Release (NTSC)` | `build/release-ntsc` | OFF   | NTSC   |
+| Preset             | DEBUG | PLATFORMS_TO_SUPPORT |
+| :----------------- | :---- | :------------------- |
+| `ps2-debug-pal`    | ON    | `PS2PAL`             |
+| `ps2-debug-ntsc`   | ON    | `PS2NTSC`            |
+| `ps2-debug`        | ON    | `PS2PAL;PS2NTSC`     |
+| `ps2-release-pal`  | OFF   | `PS2PAL`             |
+| `ps2-release-ntsc` | OFF   | `PS2NTSC`            |
+| `ps2-release`      | OFF   | `PS2PAL;PS2NTSC`     |
+| `win32-debug`      | ON    | `WIN32`              |
+| `win32-release`    | OFF   | `WIN32`              |
+
+Presets ending in `-linux` configure the same builds for a Linux host. The
+retired `REGION` option no longer exists: broadcast region is now platform
+identity, so `ps2pal` and `ps2ntsc` are separate platforms rather than one
+platform with a switch. See [PLATFORMS.md](PLATFORMS.md).
 
 All fields in these profiles (including the toolchain dropdown) are **grayed out** — this is expected CLion behavior for preset-based profiles. The toolchain is assigned via the `vendor` block in `CMakePresets.json`.
 
@@ -70,9 +81,9 @@ To run from CLion:
 See [tools/runEmulator.py](../tools/runEmulator.py) for supported PCSX2 install paths. You can also run it directly from a terminal:
 
 ```bash
-python3 tools/runEmulator.py dist/engine.iso
+python3 tools/runEmulator.py dist/ps2pal/engine.iso
 # or pass the path explicitly:
-python3 tools/runEmulator.py dist/engine.iso "C:/path/to/pcsx2-qt.exe"
+python3 tools/runEmulator.py dist/ps2pal/engine.iso "C:/path/to/pcsx2-qt.exe"
 ```
 
 ---
@@ -82,7 +93,7 @@ python3 tools/runEmulator.py dist/engine.iso "C:/path/to/pcsx2-qt.exe"
 The CMake hammer invokes `cmake --build <binaryDir> --target main.elf`. `CMakeLists.txt` drives the full pipeline in order:
 
 1. **Configure time**: generates `.clangd` for IDE analysis.
-2. **Build time**: builds `ps2gl` → builds `ps2stuff` → compiles the engine → links `main.elf` → generates `dist/engine.iso`.
+2. **Build time**: builds `ps2gl` → builds `ps2stuff` → compiles the engine → links `main.elf` → generates `dist/ps2pal/engine.iso`.
 
 `ps2gl` and `ps2stuff` are only rebuilt if their `.a` files are missing (CMake output-based tracking). On incremental builds only the changed engine/app sources are recompiled.
 
@@ -92,15 +103,15 @@ The CMake hammer invokes `cmake --build <binaryDir> --target main.elf`. `CMakeLi
 python3 tools/build.py [debug|release] [pal|ntsc]
 ```
 
-`build.py` targets a per-config directory (`build/<debug|release>-<pal|ntsc>`), matching the CMake profile `binaryDir`s (`build/debug-pal`, etc.) used by CLion for code analysis.
+`build.py` targets a per-toolchain, per-config directory (`build/<toolchain>-<debug|release>`), matching the preset `binaryDir`s (`build/ps2dev-debug-pal`, `build/win32-debug`, and so on) that CLion loads for code analysis.
 
 ---
 
 ## 5. First-Time Workflow
 
 1. Select the `PS2 Debug (PAL)` CMake profile and `main.elf` as the build target, then click the hammer (▲).
-   - The full pipeline runs: ps2gl → raylib → engine compile → link → ISO generation.
-   - Output: `dist/main.elf` and `dist/engine.iso`.
+   - The full pipeline runs: ps2gl → engine compile → game compile → link → cook → package → distribution. See [PIPELINE.md](PIPELINE.md).
+   - Output: `dist/ps2pal/main.elf` and `dist/ps2pal/engine.iso`.
 2. **Reload CMake** in CLion after the first build: **Tools** → **CMake** → **Reload CMake Project**.
    - This picks up `build/compile_commands.json` and the generated `.clangd` so PS2SDK headers resolve correctly in the editor.
 3. To run the emulator, select `run-emulator` as the build target and click the hammer (▲).
@@ -143,7 +154,7 @@ The presets hardcode `/usr/local/ps2dev`. If your toolchain is at a different pa
 The script checks common install paths. Pass the path explicitly as the second argument:
 
 ```bash
-python3 tools/runEmulator.py dist/engine.iso "C:/path/to/pcsx2-qt.exe"
+python3 tools/runEmulator.py dist/ps2pal/engine.iso "C:/path/to/pcsx2-qt.exe"
 ```
 
 ### `genisoimage` / `mkisofs` not found (no ISO generated)

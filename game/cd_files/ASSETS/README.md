@@ -1,6 +1,6 @@
 ﻿# Asset Descriptor Directory (`game/cd_files/ASSETS/`)
 
-This directory contains **source assets** (images, models, fonts, sounds) and their **JSON descriptor files**. During the build, `tools/pack_assets.py` reads every `.json` file here and compiles each pair into a binary `.ps2a` file written to `game/cd_files/rassets/`.
+This directory contains **source assets** (images, models, fonts, sounds) and their **JSON descriptor files**. During the build, `tools/cook_assets.py` reads every `.json` file here and cooks each pair into a binary `.ps2a` written to `dist/cooked/<platform>/rassets/` — per platform, because the encoding is a hardware choice. See `docs/PIPELINE.md`.
 
 The generated `.ps2a` files are automatically included in the bootable ISO at `cdrom0:\RASSETS\`.
 
@@ -107,10 +107,10 @@ Packing runs **automatically during the CMake build**. To run it manually:
 
 ```bash
 # From the project root (WSL / Linux)
-python3 tools/pack_assets.py
+python3 tools/cook_assets.py --platform win32
 
 # Override source/output directories
-python3 tools/pack_assets.py --src game/cd_files/ASSETS --dst game/cd_files/rassets
+python3 tools/cook_assets.py --src game/cd_files/ASSETS --dst dist/cooked/win32/rassets --cooklist engine/platform/win32/cooklist.json
 ```
 
 ---
@@ -128,7 +128,7 @@ void GameUpdate(float dt)
 }
 ```
 
-See `docs/RESOURCE_MANAGER.md` and `engine/include/GameAPI.h` for the full resource-loading API.
+See `docs/ASSET_AUTHORING.md` for authoring rules and `docs/subsystems/RESOURCE.md` for the runtime contract.
 
 ---
 

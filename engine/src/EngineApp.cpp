@@ -6,47 +6,31 @@
 
 #include <cstdio>
 #include <cstring>
-#include <ctime>
+#include "platform/Platform.h"
 
 // ---------------------------------------------------------------------------
 // Internal exit flag — set by EngineApp_OnExitRequested (called by game::Exit()).
 // ---------------------------------------------------------------------------
 static bool s_ExitRequested = false;
-static const char* s_cdRomResourceLocationToken = "cdrom0:";
-static const char* s_massResourceLocationToken = "mass0:";
-static const char* s_hddResourceLocationToken = "hdd0:";
-static const char* s_hostResourceLocationToken = "host:";
-
-const char* FormatResourceLocationToken(const char* locationToken);
 
 void EngineApp_OnExitRequested() { s_ExitRequested = true; }
 
 // ---------------------------------------------------------------------------
-// Public shell API
+// Engine shell. Device-token resolution used to live here; it is platform
+// grammar, so it moved to engine/platform/<name>/Filesystem.cpp.
 // ---------------------------------------------------------------------------
 
-bool EngineStart(const char* resourceLocationToken)
+bool EngineStart(const EngineConfig& config, Platform* platform, Renderer* renderer)
 {
-    if (resourceLocationToken == NULL)
-        resourceLocationToken = s_cdRomResourceLocationToken;
-    else
-        resourceLocationToken = FormatResourceLocationToken(resourceLocationToken);
-
-    EngineConfig config;
-    config.windowTitle = "PS2 Engine";
-    config.resourceLocationToken = resourceLocationToken;
-    config.enablePerfLogger = true;
-
-    if (!Engine_Init(config))
+    if (!Engine_Init(config, platform, renderer))
     {
         Engine_Panic("Engine_Init failed — hardware or memory error");
-        return false;
     }
 
     s_ExitRequested = false;
 
     // Gameplay (and UI) is authored in C++: hand control to the game module.
-    Engine_LogInfo("EngineStart: token='%s' — starting C++ game module", resourceLocationToken);
+    Engine_LogInfo("EngineStart: token='%s' — starting C++ game module", config.resourceLocationToken ? config.resourceLocationToken : "<none>");
     GameInit();
     return true;
 }
@@ -57,14 +41,15 @@ void EngineUpdate()
     static double gameLogicEndTime = 0;
     static double renderEndTime = 0;
 
-    frameStartTime = (double)clock() / CLOCKS_PER_SEC;
+    Platform* platform = Engine_GetPlatform();
+    frameStartTime = platform->GetTimeSeconds();
 
     Engine_Update();
     float dt = Engine_GetDeltaTime();
 
     // 1. Gameplay Phase (C++) — the game module's per-frame update + draw submission.
     GameUpdate(dt);
-    gameLogicEndTime = (double)clock() / CLOCKS_PER_SEC;
+    gameLogicEndTime = platform->GetTimeSeconds();
 
     // 2. Renderer Phase (CPU-side transforms)
     Renderer* r = Engine_GetRenderer();
@@ -76,9 +61,9 @@ void EngineUpdate()
         r->EndFrame();
     }
 
-    renderEndTime = (double)clock() / CLOCKS_PER_SEC;
+    renderEndTime = platform->GetTimeSeconds();
 
-    double frameEndTime = (double)clock() / CLOCKS_PER_SEC;
+    const double frameEndTime = platform->GetTimeSeconds();
 
     // Detailed Stats Reporting
     // Game Logic = Start to GameLogicEnd
@@ -95,37 +80,3 @@ void EngineUpdate()
 bool EngineExited() { return s_ExitRequested; }
 
 void EngineStop() { Engine_Close(); }
-
-const char* FormatResourceLocationToken(const char* locationToken)
-{
-    /**
-     *  Normalise an argv[0]-style path to the appropriate storage token.
-     *  argv[0] on PS2 typically looks like "cdrom0:\MAIN.ELF;1" or "host:MAIN.ELF".
-     *  We match only the leading device name, not the full path.
-     *
-     *  Supported storage locations:
-     *  ---
-     *  cdrom  → "cdrom0:"
-     *  mass   → "mass0:"
-     *  hdd    → "hdd0:"
-     *  host   → "host:"
-     */
-
-    if (locationToken[0] == 'c') // cdrom
-        return s_cdRomResourceLocationToken;
-
-    if (locationToken[0] == 'm' && locationToken[1] == 'a') // mass
-        return s_massResourceLocationToken;
-
-    if (locationToken[0] == 'h' && locationToken[1] == 'd') // hdd
-        return s_hddResourceLocationToken;
-
-    if (locationToken[0] == 'h' && locationToken[1] == 'o') // host
-        return s_hostResourceLocationToken;
-
-    char buff[LOG_STRING_MAX_SIZE] = {0};
-    snprintf(buff, LOG_STRING_MAX_SIZE, "Invalid resource location! `%s`", locationToken);
-    Engine_Panic(buff);
-
-    return NULL; // This won't be hit.
-}

@@ -1,7 +1,7 @@
 """Golden tests for the ps2lib refactor.
 
 Locks the extracted mesh/tim2/ps2a code to byte-identical output for the existing
-assets, so moving it out of pack_assets can never silently change what ships.
+assets, so moving it out of the cooker can never silently change what ships.
 """
 
 import importlib.util
@@ -29,12 +29,12 @@ def _load(name, relpath):
 mesh = _load("ps2lib.mesh", "ps2lib/mesh.py")
 tim2 = _load("ps2lib.tim2", "ps2lib/tim2.py")
 ps2a = _load("ps2lib.ps2a", "ps2lib/ps2a.py")
-pack_assets = _load("pack_assets", "pack_assets.py")
+cook_assets = _load("cook_assets", "cook_assets.py")
 
 
 def test_box_ps2a_byte_identical(tmp_path):
     src = ROOT / "game" / "cd_files" / "ASSETS"
-    pack_assets.pack_asset(str(src / "BOX.JSON"), str(src), str(tmp_path))
+    cook_assets.pack_asset(str(src / "BOX.JSON"), str(src), str(tmp_path))
     produced = (tmp_path / "BOX.PS2A").read_bytes()
     assert produced == (GOLDEN / "BOX.PS2A").read_bytes()
 

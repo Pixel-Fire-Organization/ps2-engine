@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <cstdint>
 
-#include "Constants.h"
+#include "PlatformConstants.h"
 #include "Types.h"
 
 enum class Primitive3D : uint8_t
@@ -45,8 +45,11 @@ public:
     void SetScale(const Vector3&);
 };
 
-enum class RendererType
+enum class RendererType : uint8_t
 {
-    OpenGL, // PS2GL renderer (ps2gl / GL 1.1 subset)
-    Tag // GIFTAG renderer (direct GS packets via packet2/draw)
+    Null, // headless - accepts every call, draws nothing
+    Ps2Gl, // PS2: ps2gl (a GL 1.1 subset over the GS), NOT desktop OpenGL
+    GifTag, // PS2: direct GS packets via packet2/draw
+    OpenGl, // desktop OpenGL 2.1 / 3.3 / 4.x
+    WebGpu // desktop WebGPU (wgpu-native)
 };

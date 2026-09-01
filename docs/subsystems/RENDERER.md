@@ -1,0 +1,105 @@
+# Subsystem — Renderer
+
+## Purpose
+
+Turn the frame the game described into pixels. The engine defines one rendering
+contract; each platform supplies the backends that can satisfy it on that
+hardware. Backend-specific behaviour is documented per backend, not here — see
+the renderer specs under each platform:
+[PS2](../ps2/PLATFORM.md#renderers), [Win32](../win32/PLATFORM.md#renderers).
+
+## Contract
+
+**Backends are chosen by the platform, not the engine.** A platform declares
+which backends it supports, which is the default, and what to try when one fails.
+Shared engine code never names a backend and contains no conditional compilation
+selecting one.
+
+**Draw lists, then a frame.** The game submits work — primitives, models, level
+geometry, sky, screen-space rectangles and UI — into per-frame lists. The backend
+consumes them between a frame beginning and ending. Submission and execution are
+separate so the engine can sort, cull and batch without the game knowing.
+
+**Submission may precede the frame.** Some screen-space submission happens during
+the game update, before the frame formally begins. Backends must therefore stage
+two-dimensional and three-dimensional work independently: resetting all staging
+at frame start discards work the game has already submitted. This is a real
+defect that has occurred, and it presents as screen-space content vanishing while
+world content is fine.
+
+**Textures are uploaded, then referenced by handle.** A backend accepts a decoded
+texture and returns a handle; the invalid handle is a fixed value every backend
+agrees on. The engine asks the platform, not the backend, what a texture costs in
+bytes — see [Resource](RESOURCE.md).
+
+**Cameras are addressed by slot.** Several three-dimensional cameras may be
+configured; one is active. Two-dimensional rendering uses a separate camera.
+
+**Every frame reports statistics** — draw counts and geometry submitted — because
+the performance snapshot in [Debug](DEBUG.md) reads them, and a backend that does
+not report them cannot be compared against one that does.
+
+**Failure is loud and ordered.** When a backend fails to initialise, the failure
+and its specific reason are logged, then the platform fallback is tried, and that
+attempt is logged too. Falling back silently produces a running engine that looks
+wrong for reasons nobody can see.
+
+**The null backend terminates every chain.** It satisfies the contract and draws
+nothing, so the engine always has a renderer and the frame loop never has to test
+for its absence. It exists for **headless hosting and logic tests**, not as a
+graphics fallback anyone should ship — reaching it by fallback means every real
+backend failed, which is an error condition, not a degraded mode.
+
+## Depends on
+
+- **Platform** — backend construction, the window or display, and the fallback
+  order.
+- [Memory](MEMORY.md) — geometry staging comes from the renderer arena segment.
+  Backends take that storage **as they are constructed**, so memory must be
+  reserved before any backend is built.
+- [Resource](RESOURCE.md) — texture data to upload.
+- [Level](LEVEL.md) and [Sector](SECTOR.md) — resident world geometry to draw.
+
+## Depended on by
+
+- [Debug](DEBUG.md) — overlay and, on some platforms, the panic display.
+- [Resource](RESOURCE.md) — texture upload and release.
+- Game code, through the public game API.
+
+## Lifecycle
+
+Constructed after memory is reserved and before the engine starts, because engine
+startup verifies a live renderer. A frame is begun, cleared, submitted to,
+rendered and ended, in that order, every frame. Shutdown releases textures and
+backend resources; the platform that constructed the backend destroys it.
+
+## When not loaded
+
+Not applicable — the renderer is never absent. Selecting the null backend is how
+a game runs without graphics, and it is a backend choice rather than a subsystem
+being disabled. This is deliberate: making the renderer optional would put a
+presence test in every draw path for a case the null backend already handles at
+zero cost.
+
+## Failure modes
+
+- **Every backend fails** — the null backend takes over and the engine runs
+  blind, with each failure logged in order. The engine does not exit; on hardware
+  with no console, a running engine that logs is more diagnosable than one that
+  vanished.
+- **Backend constructed before memory is reserved** — the backend gets no
+  staging storage and fails immediately. This has happened; the ordering above is
+  the fix.
+- **Texture upload fails** — reported per asset with the slot and asset name; the
+  frame still renders, untextured.
+- **Unsupported backend requested** — refused at startup with the list of
+  backends this platform actually supports, rather than a generic list of every
+  backend the engine knows.
+
+## Limits
+
+- Draw list capacity is fixed per platform; overflow drops the excess and logs.
+- One active three-dimensional camera at a time.
+- Backend feature coverage is not uniform, and the gaps are recorded in each
+  backend spec rather than being discoverable only by observing a missing effect.
+- There is no render graph, no post-processing chain, and no shadow system.

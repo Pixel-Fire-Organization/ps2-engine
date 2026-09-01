@@ -2,16 +2,17 @@
 
 #include <cmath>
 #include <cstring>
-#include <malloc.h>
 
 #include "EngineDebug.h"
+#include "EngineMemory.h"
+#include "platform/Platform.h"
 
 namespace
 {
     float* AllocFloats(size_t count)
     {
         // 16-byte aligned so the arrays are safe for qword DMA / cache ops.
-        return static_cast<float*>(memalign(16, count * sizeof(float)));
+        return static_cast<float*>(Engine_PlatformAlloc(count * sizeof(float), 16));
     }
 
     // Bounding sphere of a strided vertex array: AABB midpoint as center, exact
@@ -288,9 +289,12 @@ void Model_FreeBaked(Model* model)
     {
         for (int i = 0; i < model->meshCount; ++i)
         {
-            free(model->meshes[i].vertices);
-            free(model->meshes[i].normals);
-            free(model->meshes[i].texcoords);
+            // Mesh pointers stay raw: renderers consume them as views, and a
+            // sector's Mesh points into an arena slot instead. Ownership is
+            // expressed by pairing these with Engine_PlatformAlloc.
+            Engine_PlatformFree(model->meshes[i].vertices);
+            Engine_PlatformFree(model->meshes[i].normals);
+            Engine_PlatformFree(model->meshes[i].texcoords);
         }
         free(model->meshes);
     }

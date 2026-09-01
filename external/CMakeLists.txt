@@ -2,7 +2,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(ps2_engine_external)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
+# Entered only when a PS2 platform is active (see the root CMakeLists), so no
+# toolchain guard is needed here.
     # Derive PS2DEV/PS2SDK at configure time so build-phase commands have the correct env
     if(DEFINED ENV{PS2DEV})
         set(_PS2DEV "$ENV{PS2DEV}")
@@ -64,4 +65,3 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
         DEPENDS "${PS2GL_LIB}"
     )
     add_dependencies(ps2gl_build ps2stuff_build)
-endif()

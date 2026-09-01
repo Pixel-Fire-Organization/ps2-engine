@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "Constants.h"
+#include "PlatformConstants.h"
 #include "EngineLevelFormat.h"
 
 // Runtime level descriptor. Filled by Engine_Level_Load from a compiled level

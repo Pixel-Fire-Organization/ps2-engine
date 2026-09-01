@@ -38,7 +38,69 @@
 - Use `= delete` for copy/move constructors and assignment operators on non-copyable types.
 - Always use `final` on leaf classes to help the compiler devirtualize.
 - No `new`/`delete` — objects are either stack-allocated, arena-allocated, or static.
-    - Exception: `EngineCore.cpp` uses `new` for the single `Renderer` instance (lifetime = process).
+    - Exception: each platform's `Platform.cpp` uses `new` for the single `Renderer` instance it
+      constructs (lifetime = process), released through the same platform's `DestroyRenderer`.
+
+## Allocator pairing
+
+Memory is returned to the allocator it came from. These are **not** interchangeable — on Win32
+aligned allocations come from a separate heap, and releasing one with `free()` is undefined
+behaviour:
+
+| Allocated with | Released with |
+| :--- | :--- |
+| `Engine_PlatformAlloc` / the platform memory contract | `Engine_PlatformFree` |
+| `malloc` / `calloc` | `free` |
+| An arena slot | Nothing — the arena owns it; reset the slot or segment |
+
+Prefer `PlatformArray<T>` (`EngineMemory.h`): it carries the matching release with the pointer, so
+the pairing cannot be got wrong. Use the raw pair only where the pointer must stay a plain view —
+`Mesh`, for instance, is consumed by renderers and may point either at a platform allocation or
+straight into an arena slot.
+
+## Smart pointers
+
+`std::unique_ptr` is permitted for genuinely owning pointers. It is header-only, allocates nothing
+itself, needs no RTTI and does not throw, so it is compatible with `-fno-exceptions -fno-rtti` and
+with the EE toolchain.
+
+- **Use it** for owning platform allocations (via `PlatformArray<T>`) and for a single owned object
+  whose lifetime is a scope or a member.
+- **Do not use it** for arena or pool allocations — the arena *is* the ownership model, and a
+  smart pointer there implies an independent free that must never happen — nor for non-owning views,
+  nor in a per-frame hot path.
+- `std::shared_ptr` stays banned: it heap-allocates a control block and atomically refcounts.
+
+## Exhaustive switches over enum keys
+
+A switch that must answer for every enumerator - `GetConstant`, `HasCapability`, and any other keyed
+accessor a platform implements - carries **no `default:` label**. List `Count` explicitly and put the
+fallback after the switch. `-Wswitch` (in `-Wall`, with `-Werror`) then refuses to compile a platform
+that forgets a key.
+
+This is not style. A `default:` turned a missing `MaxTextureBytes` case into a silent `0` at runtime,
+which rejected every texture load on that platform with a nonsense message. The compiler can catch
+the whole class; let it.
+
+Switches that legitimately reject unknown values - `CreateRenderer` on an unsupported id, for
+instance - keep their `default:`.
+
+## Keyed accessors never guess
+
+A platform accessor that cannot answer **panics naming the key**; it never returns a placeholder. `0` is a
+legitimate value for several platform constants, so a guessed zero cannot be told apart from a real one — that
+ambiguity is what made a missing `MaxTextureBytes` case reject every texture load on one platform.
+
+This is why the return type is a plain `uint32_t` rather than an optional or a two-state union: every platform must
+answer every key, and the compiler now enforces that, so an "empty" result is unreachable by construction. Making
+callers unwrap it would invite `valueOr(0)` at each of them and reintroduce exactly the bug the panic prevents. If a
+value ever becomes genuinely optional per platform, add a separate `TryGet...` for that key rather than weakening
+the common path — and check whether `HasCapability` already covers the question.
+
+## Panics never return
+
+`Engine_Panic` and `Platform::Panic` are `[[noreturn]]`. A panic is a graceful crash, not an error
+path a caller continues from — never write recovery code after one.
 
 ## Overloads vs Default Parameters
 
@@ -102,8 +164,13 @@ The repo `.clang-format` is authoritative. **ALWAYS** follow it.
 
 ## Constants
 
-- All engine-wide constants live in `engine/include/Constants.h` (split by category `Constants.XXX.h`).
-- Include `Constants.h` (the umbrella) — never individual `Constants.XXX.h` directly.
+- Format constants (anything an on-disc layout or a `tools/` script depends on) live in the header declaring the
+  matching struct: `EngineArchive.h`, `EngineResource.h`, `EngineLevelFormat.h`, `EngineIO.h`.
+- Platform constants live in `engine/platform/<name>/PlatformConstants*.h`; shared code includes
+  `"PlatformConstants.h"` and CMake resolves it to the selected platform.
+- Values shared code must read at runtime come from `Platform::GetConstant(PlatformConstant)` — an `enum class` key,
+  never a string. The same applies to the other keyed platform accessors (capabilities, input devices).
+- See the Constants standard in `.github/copilot-instructions.md` for the format-vs-platform test.
 
 ## Comments
 

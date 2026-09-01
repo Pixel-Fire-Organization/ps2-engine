@@ -16,8 +16,9 @@ void Engine_DrawDebugOverlay();
 // Assumes the active renderer's BeginFrame() has been called.
 void Engine_DrawAsciiTable();
 
-// PS2-specific panic BSOD trigger
-void Engine_Panic(const char* message);
+// Stop the engine. Never returns: the active platform decides what a panic
+// looks like, and every platform terminates. See docs/subsystems/DEBUG.md.
+[[noreturn]] void Engine_Panic(const char* message);
 
 // ---------------------------------------------------------------------------
 // Performance Logger

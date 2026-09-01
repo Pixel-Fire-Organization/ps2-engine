@@ -1,6 +1,6 @@
 """TIM2 texture encoding (PS2-native). rgba32 / pal8, optional box-filtered mips.
 
-Byte-compatible with the historical pack_assets encoders (golden-tested via
+Byte-compatible with the historical cooker encoders (golden-tested via
 BOX.PS2A). `encode_pal8_cutout` is a level-pipeline addition: it reserves CLUT
 index 0 as fully transparent for billboard-impostor cutouts.
 """
@@ -136,3 +136,50 @@ def convert_texture_to_tim2(source_path, fmt="rgba32", mip_levels=0):
     if fmt == "pal8":
         return encode_pal8(img, mip_levels), ".tm2"
     return encode_rgba32(img, mip_levels), ".tm2"
+
+
+# Names for the imageType values the encoders above write. Derived from the
+# constants rather than restated, so the two cannot drift.
+IMAGE_TYPE_NAMES = {
+    TIM2_IMGTYPE_RGBA16: "rgba16",
+    TIM2_IMGTYPE_RGBA32: "rgba32",
+    TIM2_IMGTYPE_IDTEX8: "pal8",
+}
+
+
+def describe(blob):
+    """Summarise a TIM2 blob for the inspection and validation tools.
+
+    Returns a dict, or raises ValueError. Reads only the file and picture
+    headers - it never decodes pixels, so it stays cheap on a whole tree.
+    """
+    if len(blob) < 16 + 0x30:
+        raise ValueError("shorter than a TIM2 header")
+    if blob[:4] != b"TIM2":
+        raise ValueError("bad TIM2 magic")
+
+    total_size, clut_size, image_size = struct.unpack_from("<III", blob, 16)
+    header_size, clut_colors = struct.unpack_from("<HH", blob, 16 + 12)
+    _pict_format, mip_count, clut_type, image_type = struct.unpack_from("<BBBB", blob, 16 + 16)
+    width, height = struct.unpack_from("<HH", blob, 16 + 20)
+
+    return {
+        "width": width,
+        "height": height,
+        "format": IMAGE_TYPE_NAMES.get(image_type, "type%d" % image_type),
+        "image_type": image_type,
+        "mip_count": mip_count,
+        "clut_colors": clut_colors,
+        "clut_size": clut_size,
+        "clut_type": clut_type,
+        "image_size": image_size,
+        "total_size": total_size,
+        "header_size": header_size,
+    }
+
+
+def describe_text(blob):
+    d = describe(blob)
+    clut = ", clut %d colours" % d["clut_colors"] if d["clut_colors"] else ""
+    return "%dx%d %s, %d mip(s), %d image bytes%s" % (
+        d["width"], d["height"], d["format"], d["mip_count"], d["image_size"], clut)

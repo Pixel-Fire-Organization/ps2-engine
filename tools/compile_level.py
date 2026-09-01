@@ -2,7 +2,7 @@
 """
 compile_level.py — TrenchBroom .map -> compiled PS2 level (.ps2l + .PS2R archive).
 
-Pipeline (see docs/LEVEL_FORMAT.md):
+Pipeline (see docs/formats/LEVEL_FORMAT.md):
   1. Parse the Valve-220 .map (ps2lib.mapparse): entities + brush face polygons.
   2. Convert Quake Z-up map units to engine Y-up world units (scale _map_scale).
   3. Partition world geometry into a fixed square grid of sectors (_sector_size).

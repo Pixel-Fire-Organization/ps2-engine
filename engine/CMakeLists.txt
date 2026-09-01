@@ -1,81 +1,111 @@
-option(ENGINE_SANDBOX_MODE
-    "Restrict the app target to the curated app_public headers only. \
-OFF exposes the full engine include directory (dev/test mode)."
-    ON
-)
+# ---------------------------------------------------------------------------
+# The engine library, built once per active platform.
+#
+# Each platform gets its own library rather than one shared build: platform
+# constants are compile-time (PlatformConstants.h resolves through the include
+# path), and the PAL/NTSC screen dimensions in particular are multiplied per
+# transformed vertex in the GIFTAG renderer, where a runtime lookup would cost
+# the EE dearly.
+# ---------------------------------------------------------------------------
 
-add_library(ps2_engine STATIC
-        src/EngineCore.cpp
-        src/EngineDebug.cpp
-        src/EngineMemory.cpp
-        src/EngineIO.cpp
-        src/EngineArchive.cpp
-        src/EngineResource.cpp
-        src/EngineLevel.cpp
-        src/EngineSector.cpp
-        src/EngineApp.cpp
-        src/GameAPI.cpp
-        src/EngineInput.cpp
-        src/graphics/GLRenderer.cpp
-        src/graphics/TagRenderer.cpp
-        src/graphics/tim2.cpp
-        src/graphics/ModelLoad.cpp
-        src/graphics/Transform3D.cpp
-        src/graphics/DrawList.cpp
-        src/graphics/Frustum.cpp
+set(ENGINE_CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CommandLine.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineMain.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/PlatformRegistry.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineCore.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineDebug.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineMemory.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineSubsystems.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/PlatformContract.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineIO.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineArchive.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineResource.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineLevel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineSector.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineApp.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/GameAPI.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineInput.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/NullRenderer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/tim2.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/ModelLoad.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/Transform3D.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/DrawList.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/Frustum.cpp"
+    CACHE INTERNAL "")
 
-        # Headers
-        include/Engine.h
-        include/EngineApp.h
-        include/GameAPI.h
-        include/app_public/GameAPI.h
-        include/Constants.h
-        include/Macros.h
-        include/EngineCore.h
-        include/EngineDebug.h
-        include/EngineIO.h
-        include/EngineArchive.h
-        include/EngineMemory.h
-        include/EngineResource.h
-        include/EngineLevel.h
-        include/EngineLevelFormat.h
-        include/EngineSector.h
-        include/EngineInput.h
-        include/graphics/EngineGraphics.h
-        include/graphics/Renderer.h
-        include/graphics/Primitives.h
-        include/graphics/Types.h
-        include/graphics/UI.h
-        include/graphics/DrawList.h
-        include/graphics/Frustum.h
-        include/graphics/GLRenderer.h
-        include/graphics/TagRenderer.h
-        include/graphics/tim2.h
-        include/graphics/ModelFormat.h
-)
+set(ENGINE_CORE_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/CommandLine.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineMain.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/Platform.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MemoryContract.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/PlatformKeys.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/PlatformRegistry.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/PlatformTypes.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Engine.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineApp.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/GameAPI.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Macros.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineCore.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineDebug.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineIO.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineArchive.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineMemory.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineSubsystems.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineResource.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineLevel.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineLevelFormat.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineSector.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineInput.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/EngineGraphics.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/NullRenderer.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Renderer.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Primitives.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Types.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/UI.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/DrawList.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Frustum.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/ModelFormat.h"
+    CACHE INTERNAL "")
 
-# Internal engine code always sees the full include directory.
-target_include_directories(ps2_engine PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
-)
+set(ENGINE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" CACHE INTERNAL "")
 
-if(ENGINE_SANDBOX_MODE)
-    # App can only see the curated app_public headers — memory, IO, resource,
-    # and other engine internals are not reachable from app code.
-    target_include_directories(ps2_engine PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/app_public"
+# Build the engine library for one platform. That platform.cmake fragment has
+# already run and set ENGINE_PLATFORM_<P>_SOURCES / _LIBS / _DEFINES / _INCLUDES.
+function(engine_add_library PLATFORM OUT_TARGET)
+    string(TOLOWER "${PLATFORM}" _lower)
+    set(_target "engine_${_lower}")
+
+    engine_platform_dirs(${PLATFORM} _variantDir _baseDir)
+
+    add_library(${_target} STATIC
+        ${ENGINE_CORE_SOURCES}
+        ${ENGINE_CORE_HEADERS}
+        ${ENGINE_PLATFORM_${PLATFORM}_SOURCES}
     )
-    message(STATUS "ENGINE_SANDBOX_MODE: ON — app restricted to app_public headers")
-else()
-    # Dev/test mode: full engine header surface exposed.
-    target_include_directories(ps2_engine PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
+
+    # "PlatformConstants.h" resolves here: the variant directory first, then the
+    # shared base. This is what lets platform constants stay compile-time without
+    # any shared engine file naming a platform.
+    target_include_directories(${_target} PUBLIC
+        "${ENGINE_INCLUDE_DIR}"
+        "${_variantDir}"
     )
-    message(STATUS "ENGINE_SANDBOX_MODE: OFF — full engine headers exposed")
-endif()
+    if(_baseDir)
+        target_include_directories(${_target} PUBLIC "${_baseDir}")
+    endif()
+    if(ENGINE_PLATFORM_${PLATFORM}_INCLUDES)
+        target_include_directories(${_target} PUBLIC ${ENGINE_PLATFORM_${PLATFORM}_INCLUDES})
+    endif()
 
-target_compile_options(ps2_engine PRIVATE -Wall -Wextra -Werror)
+    if(ENGINE_PLATFORM_${PLATFORM}_DEFINES)
+        target_compile_definitions(${_target} PUBLIC ${ENGINE_PLATFORM_${PLATFORM}_DEFINES})
+    endif()
+    if(ENGINE_PLATFORM_${PLATFORM}_LIBS)
+        target_link_libraries(${_target} PUBLIC ${ENGINE_PLATFORM_${PLATFORM}_LIBS})
+    endif()
 
+    target_compile_options(${_target} PRIVATE -Wall -Wextra -Werror)
+    set_target_properties(${_target} PROPERTIES LINKER_LANGUAGE CXX)
 
+    set(${OUT_TARGET} "${_target}" PARENT_SCOPE)
+endfunction()

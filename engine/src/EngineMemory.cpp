@@ -112,9 +112,15 @@ bool Engine_LoadToSlot(ArenaType type, uint32_t slotIndex, const void* data, siz
 
     ResourceSlot* slot = &s_Slots[type][slotIndex];
     if (slot->locked)
+    {
+        Engine_LogError("Arena: slot %u of segment %d is locked; write of %zu bytes refused", slotIndex, static_cast<int>(type), size);
         return false;
+    }
     if (size > slot->capacity)
+    {
+        Engine_LogError("Arena: %zu bytes exceeds slot %u capacity %zu in segment %d; refused", size, slotIndex, slot->capacity, static_cast<int>(type));
         return false;
+    }
 
     if (data && size > 0)
     {
@@ -283,6 +289,7 @@ void* Engine_PoolAlloc(MemoryPool* pool)
 {
     if (pool->head == nullptr)
     {
+        Engine_LogError("Pool: exhausted (%zu byte chunks); allocation refused", pool->chunk_size);
         return nullptr;
     }
     PoolFreeNode* node = pool->head;
@@ -324,14 +331,39 @@ void Engine_GetPoolStatsMain(size_t* outCapacity, size_t* outUsed)
     }
 }
 
-#include <malloc.h>
+#include "platform/Platform.h"
+
+// The single pair through which shared engine code reaches platform memory.
+// Routing both halves through here is what keeps an allocation and its release
+// on the same allocator.
+void* Engine_PlatformAlloc(size_t size, size_t alignment)
+{
+    Platform* platform = Engine_GetPlatform();
+    return platform ? platform->GetMemory().Alloc(size, alignment) : nullptr;
+}
+
+void Engine_PlatformFree(void* ptr)
+{
+    if (!ptr)
+        return;
+    Platform* platform = Engine_GetPlatform();
+    if (platform)
+        platform->GetMemory().Free(ptr);
+}
+
 void Engine_GetHeapStats(size_t* outTotal, size_t* outUsed, size_t* outFree)
 {
-    struct mallinfo mi = mallinfo();
-    if (outUsed)
-        *outUsed = (size_t)mi.uordblks;
+    // Heap accounting is platform-specific: newlib/glibc expose mallinfo(),
+    // MinGW does not, and a platform may track its own reservations instead.
+    HeapStats stats{};
+    Platform* platform = Engine_GetPlatform();
+    if (platform)
+        platform->GetMemory().GetHeapStats(&stats);
+
     if (outTotal)
-        *outTotal = (size_t)MEM_LIMIT_MAX_EE_RAM;
+        *outTotal = stats.totalBytes;
+    if (outUsed)
+        *outUsed = stats.usedBytes;
     if (outFree)
-        *outFree = (size_t)mi.fordblks;
+        *outFree = stats.freeBytes;
 }

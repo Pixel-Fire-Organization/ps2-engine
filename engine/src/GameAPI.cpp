@@ -9,17 +9,19 @@
 
 #include "GameAPI.h"
 
+#include <cstdlib>
 #include <cstring>
 
-#include "Constants.h"
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineInput.h"
 #include "EngineLevel.h"
 #include "EngineResource.h"
+#include "PlatformConstants.h"
 #include "graphics/Primitives.h"
 #include "graphics/Renderer.h"
 #include "graphics/Types.h"
+#include "platform/Platform.h"
 
 // Defined in EngineApp.cpp — sets the internal exit flag polled by EngineExited().
 void EngineApp_OnExitRequested();
@@ -29,44 +31,124 @@ namespace
 
     inline Color3 MakeColor(int r, int g, int b) { return Color3{static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f}; }
 
+    // Map a key name to the platform enum. Kept string-keyed because GameAPI is
+    // the documented public surface and plain scalars are its stated design; the
+    // enums are the platform interface, and this is the seam between them.
+    KeyboardKey KeyFromName(const char* name)
+    {
+        if (!name || !name[0])
+            return KeyboardKey::Unknown;
+
+        // Single characters cover a-z and 0-9 without a 36-entry table.
+        if (name[1] == '\0')
+        {
+            const char c = name[0];
+            if (c >= 'a' && c <= 'z')
+                return static_cast<KeyboardKey>(static_cast<uint16_t>(KeyboardKey::A) + (c - 'a'));
+            if (c >= 'A' && c <= 'Z')
+                return static_cast<KeyboardKey>(static_cast<uint16_t>(KeyboardKey::A) + (c - 'A'));
+            if (c >= '0' && c <= '9')
+                return static_cast<KeyboardKey>(static_cast<uint16_t>(KeyboardKey::Num0) + (c - '0'));
+        }
+
+        // f1..f12
+        if ((name[0] == 'f' || name[0] == 'F') && name[1] >= '0' && name[1] <= '9')
+        {
+            int n = atoi(name + 1);
+            if (n >= 1 && n <= 12)
+                return static_cast<KeyboardKey>(static_cast<uint16_t>(KeyboardKey::F1) + (n - 1));
+        }
+
+        static const struct
+        {
+            const char* name;
+            KeyboardKey key;
+        } kNamed[] = {
+            {"up", KeyboardKey::Up},
+            {"down", KeyboardKey::Down},
+            {"left", KeyboardKey::Left},
+            {"right", KeyboardKey::Right},
+            {"space", KeyboardKey::Space},
+            {"enter", KeyboardKey::Enter},
+            {"return", KeyboardKey::Enter},
+            {"escape", KeyboardKey::Escape},
+            {"esc", KeyboardKey::Escape},
+            {"tab", KeyboardKey::Tab},
+            {"backspace", KeyboardKey::Backspace},
+            {"delete", KeyboardKey::Delete},
+            {"insert", KeyboardKey::Insert},
+            {"home", KeyboardKey::Home},
+            {"end", KeyboardKey::End},
+            {"pageup", KeyboardKey::PageUp},
+            {"pagedown", KeyboardKey::PageDown},
+            {"shift", KeyboardKey::LeftShift},
+            {"lshift", KeyboardKey::LeftShift},
+            {"rshift", KeyboardKey::RightShift},
+            {"ctrl", KeyboardKey::LeftControl},
+            {"lctrl", KeyboardKey::LeftControl},
+            {"rctrl", KeyboardKey::RightControl},
+            {"alt", KeyboardKey::LeftAlt},
+            {"lalt", KeyboardKey::LeftAlt},
+            {"ralt", KeyboardKey::RightAlt},
+            {"minus", KeyboardKey::Minus},
+            {"equal", KeyboardKey::Equal},
+            {"comma", KeyboardKey::Comma},
+            {"period", KeyboardKey::Period},
+            {"slash", KeyboardKey::Slash},
+            {"backslash", KeyboardKey::Backslash},
+            {"semicolon", KeyboardKey::Semicolon},
+            {"apostrophe", KeyboardKey::Apostrophe},
+            {"grave", KeyboardKey::Grave},
+            {"lbracket", KeyboardKey::LeftBracket},
+            {"rbracket", KeyboardKey::RightBracket},
+        };
+
+        for (size_t i = 0; i < sizeof(kNamed) / sizeof(kNamed[0]); ++i)
+        {
+            if (strcmp(name, kNamed[i].name) == 0)
+                return kNamed[i].key;
+        }
+        return KeyboardKey::Unknown;
+    }
+
     // Map a button name to the engine enum. Mirrors the old input.is_pad_pressed
     // binding one-for-one so ported scripts behave identically.
-    GamePadButton ButtonFromName(const char* btn)
+    GamepadButton ButtonFromName(const char* btn)
     {
         if (strcmp(btn, "x") == 0)
-            return GamePadButton::Cross;
+            return GamepadButton::Cross;
         if (strcmp(btn, "cir") == 0)
-            return GamePadButton::Circle;
+            return GamepadButton::Circle;
         if (strcmp(btn, "squ") == 0)
-            return GamePadButton::Square;
+            return GamepadButton::Square;
         if (strcmp(btn, "tri") == 0)
-            return GamePadButton::Triangle;
+            return GamepadButton::Triangle;
         if (strcmp(btn, "dpad_up") == 0)
-            return GamePadButton::DPadUp;
+            return GamepadButton::DPadUp;
         if (strcmp(btn, "dpad_down") == 0)
-            return GamePadButton::DPadDown;
+            return GamepadButton::DPadDown;
         if (strcmp(btn, "dpad_left") == 0)
-            return GamePadButton::DPadLeft;
+            return GamepadButton::DPadLeft;
         if (strcmp(btn, "dpad_right") == 0)
-            return GamePadButton::DPadRight;
+            return GamepadButton::DPadRight;
         if (strcmp(btn, "l1") == 0)
-            return GamePadButton::L1;
+            return GamepadButton::L1;
         if (strcmp(btn, "l2") == 0)
-            return GamePadButton::L2;
+            return GamepadButton::L2;
         if (strcmp(btn, "r1") == 0)
-            return GamePadButton::R1;
+            return GamepadButton::R1;
         if (strcmp(btn, "r2") == 0)
-            return GamePadButton::R2;
+            return GamepadButton::R2;
         if (strcmp(btn, "l3") == 0)
-            return GamePadButton::L3;
+            return GamepadButton::L3;
         if (strcmp(btn, "r3") == 0)
-            return GamePadButton::R3;
+            return GamepadButton::R3;
         if (strcmp(btn, "start") == 0)
-            return GamePadButton::Start;
+            return GamepadButton::Start;
         if (strcmp(btn, "select") == 0)
-            return GamePadButton::Select;
+            return GamepadButton::Select;
         Engine_LogError("[Game] IsPadPressed: unknown button '%s'", btn);
-        return GamePadButton::Unknown;
+        return GamepadButton::Unknown;
     }
 
 } // namespace
@@ -164,8 +246,8 @@ namespace game
     // --- Input ------------------------------------------------------------------
     bool IsPadPressed(int pad, const char* button)
     {
-        GamePadButton b = ButtonFromName(button);
-        if (b == GamePadButton::Unknown)
+        GamepadButton b = ButtonFromName(button);
+        if (b == GamepadButton::Unknown)
             return false;
         return IsGamePadButtonPressed(static_cast<uint8_t>(pad), b);
     }
@@ -173,15 +255,15 @@ namespace game
     void GetJoyAxis(int pad, const char* side, float* outX, float* outY)
     {
         float x = 0.0f, y = 0.0f;
-        GamePadJoystick joy = GamePadJoystick::UnknownJoystick;
+        GamepadStick joy = GamepadStick::Count;
         if (strcmp(side, "left") == 0)
-            joy = GamePadJoystick::LeftJoystick;
+            joy = GamepadStick::Left;
         else if (strcmp(side, "right") == 0)
-            joy = GamePadJoystick::RightJoystick;
+            joy = GamepadStick::Right;
         else
             Engine_LogError("[Game] GetJoyAxis: unknown side '%s' (expected 'left' or 'right')", side);
 
-        if (joy != GamePadJoystick::UnknownJoystick)
+        if (joy != GamepadStick::Count)
         {
             const Vector2 v = GetGamePadAxis(static_cast<uint8_t>(pad), joy);
             x = v.x;
@@ -191,6 +273,69 @@ namespace game
             *outX = x;
         if (outY)
             *outY = y;
+    }
+
+    bool WasPadPressed(int pad, const char* button)
+    {
+        GamepadButton b = ButtonFromName(button);
+        if (b == GamepadButton::Unknown)
+            return false;
+        return WasGamePadButtonPressed(static_cast<uint8_t>(pad), b);
+    }
+
+    bool IsKeyDown(const char* key) { return ::IsKeyDown(KeyFromName(key)); }
+
+    bool WasKeyPressed(const char* key) { return ::WasKeyPressed(KeyFromName(key)); }
+
+    bool IsMouseButtonDown(int button)
+    {
+        if (button < 0 || button >= static_cast<int>(MouseButton::Count))
+            return false;
+        return ::IsMouseButtonDown(static_cast<MouseButton>(button));
+    }
+
+    bool WasMouseButtonPressed(int button)
+    {
+        if (button < 0 || button >= static_cast<int>(MouseButton::Count))
+            return false;
+        return ::WasMouseButtonPressed(static_cast<MouseButton>(button));
+    }
+
+    void GetMousePosition(float* outX, float* outY)
+    {
+        const Vector2 p = ::GetMousePosition();
+        if (outX)
+            *outX = p.x;
+        if (outY)
+            *outY = p.y;
+    }
+
+    void GetMouseDelta(float* outX, float* outY)
+    {
+        const Vector2 d = ::GetMouseDelta();
+        if (outX)
+            *outX = d.x;
+        if (outY)
+            *outY = d.y;
+    }
+
+    float GetMouseWheel() { return ::GetMouseWheelDelta(); }
+
+    bool HasInputDevice(const char* device)
+    {
+        Platform* platform = Engine_GetPlatform();
+        if (!platform || !device)
+            return false;
+
+        if (strcmp(device, "gamepad") == 0)
+            return platform->HasCapability(PlatformCapability::Gamepad);
+        if (strcmp(device, "keyboard") == 0)
+            return platform->HasCapability(PlatformCapability::Keyboard);
+        if (strcmp(device, "mouse") == 0)
+            return platform->HasCapability(PlatformCapability::Mouse);
+
+        Engine_LogError("game::HasInputDevice: unknown device '%s'", device);
+        return false;
     }
 
     // --- Resources --------------------------------------------------------------

@@ -1,0 +1,22 @@
+{
+  "platform": "ps2",
+  "description": "Video memory is 4 MB and paged. 'source' keeps the format each asset was authored with; setting it to pal8 cooks palettised instead, which is far cheaper per page at the cost of one colour-table page. The per-texture ceiling matches the largest slot the memory layout registers. See docs/ps2/TEXTURE_BUDGET.md.",
+  "assets": {
+    "TEXTURE": {
+      "enabled": true,
+      "format": "source",
+      "max_width": 512,
+      "max_height": 512,
+      "budget_bytes": 2162688
+    },
+    "MODEL": {
+      "enabled": true
+    },
+    "SOUND": {
+      "enabled": false
+    },
+    "FONT": {
+      "enabled": false
+    }
+  }
+}

@@ -1,0 +1,135 @@
+# Platform — Win32
+
+A native desktop target: a real window, an arbitrary resolution, keyboard and
+mouse, and a heap that is not policed against a hardware ceiling.
+
+Build instructions are in [BUILD.md](BUILD.md); renderers are in
+[renderers/](renderers/).
+
+## What is different in kind from the console
+
+Most values here are **budgets, not hardware limits**. The console numbers
+describe a machine; these describe a policy. The policy is kept because the
+engine contract is that an over-budget load fails loudly rather than being
+silently paged out, and that only means something if a budget exists at all.
+
+Two consequences worth stating plainly:
+
+- **The framebuffer size is not fixed.** The window is resizable and renderers
+  must ask for the framebuffer size each frame rather than caching it. Anything
+  that bakes a resolution in will be wrong the first time the window is dragged.
+- **Pixels are square**, so the projection aspect is simply the framebuffer
+  aspect — unlike the console, where the display aspect and the framebuffer ratio
+  differ.
+
+## Capabilities
+
+| Capability | Available | Note |
+|---|---|---|
+| Gamepad | Yes | Four ports |
+| Keyboard | Yes | |
+| Mouse | Yes | |
+| Analog triggers | Yes | Real pressure, unlike the console pad |
+| Resizable window | Yes | |
+| Async IO | Yes | |
+| File write | Yes | |
+
+## Memory
+
+| | Size | Slots | Per slot |
+|---|---|---|---|
+| Engine budget | 512 MB | | A policy ceiling, not a hardware one |
+| Config arena | 1 MB | 4 | 256 KB |
+| Level-data arena | 32 MB | 16 | 2 MB |
+| Renderer arena | 16 MB | 1 | 16 MB |
+| Main pool | 4 MB | | 256 B chunks |
+
+Slot alignment stays at 16 KB even though the desktop has no transfer-alignment
+requirement of its own. Matching the console means slot arithmetic behaves
+identically on both platforms, so a slot-boundary bug cannot appear on one
+platform and hide on the other.
+
+Aligned allocations come from a **separate heap** here, and must be released
+through the matching call. This is the concrete reason allocation sits behind the
+platform contract at all — see [MEMORY.md](../subsystems/MEMORY.md).
+
+## Storage and IO
+
+| | |
+|---|---|
+| Max async read | 4 MB |
+| Queued requests | 32 |
+| Mounted archives | 4 |
+| Resource handles | 256 |
+
+The read buffer is far larger than the console's because there is no address
+coverage window to stay inside.
+
+Paths resolve relative to the executable, so a distribution directory is
+self-contained and can be copied anywhere and run.
+
+## Input
+
+Gamepads through XInput, up to four. Sticks are converted to the same convention
+the console uses, so deadzone handling and the analog range mean the same thing
+on both platforms.
+
+**Keyboard and mouse are read from the window message queue**, not by sampling
+device state. Sampling misses a key that is pressed and released inside one
+frame, which is exactly what happens with a quick tap; the queue does not. Held
+keys are cleared when the window loses focus, so alt-tabbing away does not leave
+a key stuck down forever.
+
+**A keyboard-to-virtual-pad map is installed by default.** It exists so content
+written for a pad runs on the desktop unmodified — the movement keys drive the
+left stick, the arrows the directional pad, and so on. It is a separate,
+disableable layer, not part of the keyboard queries: with it disabled the
+keyboard still reports as a keyboard and only the virtual pad disappears. See
+[INPUT.md](../subsystems/INPUT.md).
+
+## Window
+
+The window is created directly against the operating system, with no windowing
+library. Everything else on this platform is already native — threads,
+controllers, aligned allocation — so a library would add a dependency and a
+cross-compile step to replace about a hundred lines. A future desktop platform
+gets its own directory and may choose differently without affecting this one.
+
+**The message pump runs as part of polling input**, once per frame. The queue is
+where resize, close and wheel events arrive, so draining it is part of reading
+input rather than a separate step a caller could forget to perform.
+
+## Graphics
+
+| | |
+|---|---|
+| Default window | 1280 x 720, resizable |
+| Frame budget | 16667 us |
+| Display aspect | Framebuffer aspect; pixels are square |
+| Draw list capacity | 4096 |
+
+## Renderers
+
+| Backend | Role |
+|---|---|
+| [webgpu](renderers/WEBGPU.md) | **Default.** Modern explicit API |
+| [opengl](renderers/OPENGL.md) | Version-configurable, down to a legacy path |
+| null | Final fallback; headless. See [RENDERER.md](../subsystems/RENDERER.md) |
+
+Fallback order is webgpu, then opengl, then null.
+
+The desktop OpenGL backend is **unrelated to the console backend of a similar
+name**. One is the real graphics API at a modern version; the other is a
+library implementing a small subset of an old version on top of vector microcode.
+They share no code.
+
+## Known limitations
+
+- **Neither desktop backend draws the sky.** World geometry, models, primitives
+  and interface elements all render; the sky does not. The console backends do
+  draw it, so this is a desktop gap.
+- **Far-field geometry is drawn by no backend on any platform** — the level
+  format describes it, nothing renders it.
+- Sound and font assets are unimplemented, as on every platform.
+- Sector recentring is synchronous, though on desktop storage the hitch is far
+  smaller than on optical media.

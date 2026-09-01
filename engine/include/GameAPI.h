@@ -8,7 +8,7 @@
 // every function takes plain scalars (floats / ints / const char*), so a game
 // module needs no engine internals and no engine types.
 //
-//   * The GAME implements  GameInit() / GameUpdate(dt)  (engine calls them).
+//   * The GAME implements  GameConfigure() / GameInit() / GameUpdate(dt).
 //   * The ENGINE implements everything in namespace game (game calls them).
 //
 // Mirrors the semantics of the retired graphics.*/input.*/resources.* bindings
@@ -16,9 +16,13 @@
 // ---------------------------------------------------------------------------
 
 // --- Entry points the game module must define -------------------------------
+// GameConfigure() runs FIRST, before the engine or its memory exist. Choose the
+//                 subsystems here; touching anything else is too early.
 // GameInit()      is called once, after the engine is initialised.
 // GameUpdate(dt)  is called every frame (dt = seconds since last frame). Do all
 //                 per-frame gameplay + draw submission here.
+struct EngineConfig;
+void GameConfigure(EngineConfig* config);
 void GameInit();
 void GameUpdate(float dt);
 
@@ -68,6 +72,35 @@ namespace game
     // side: "left" or "right". Writes analog stick axes in [-1,+1] (deadzone
     // applied C-side). Writes 0,0 on any error.
     void GetJoyAxis(int pad, const char* side, float* outX, float* outY);
+
+    // Rising edge: true only on the frame the button went down. Saves every
+    // caller keeping its own "was held" flag.
+    bool WasPadPressed(int pad, const char* button);
+
+    // --- Keyboard ---------------------------------------------------------------
+    // key: "a".."z", "0".."9", "f1".."f12", "up","down","left","right", "space",
+    //      "enter", "escape", "tab", "backspace", "shift", "ctrl", "alt", and the
+    //      punctuation names in PlatformKeys.h.
+    //
+    // Always false on a platform with no keyboard (the PS2), so code using these
+    // still compiles and runs everywhere. Use HasInputDevice("keyboard") to branch
+    // on presence rather than testing the platform name.
+    bool IsKeyDown(const char* key);
+    bool WasKeyPressed(const char* key);
+
+    // --- Mouse ------------------------------------------------------------------
+    // button: 0 = left, 1 = right, 2 = middle, 3/4 = extra.
+    // Position is in client pixels, origin top-left. Zero on a platform with no
+    // mouse.
+    bool IsMouseButtonDown(int button);
+    bool WasMouseButtonPressed(int button);
+    void GetMousePosition(float* outX, float* outY);
+    void GetMouseDelta(float* outX, float* outY);
+    float GetMouseWheel();
+
+    // device: "gamepad", "keyboard", "mouse". Branch on this, never on which
+    // platform is running.
+    bool HasInputDevice(const char* device);
 
     // --- Resources (async streaming; poll IsResourceReady) ----------------------
     // type: "TEXTURE","MODEL","SOUND","FONT". Returns a handle >= 0, or -1.

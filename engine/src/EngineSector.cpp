@@ -5,6 +5,8 @@
 #include "Engine.h"
 #include "EngineSector.h"
 
+#include "EngineSubsystems.h"
+
 // Nine residents (a 3x3 ring); each owns one ARENA_LEVEL_DATA slot. Slots hold
 // the PSEC blob and the Mesh views point straight into that slot memory.
 static const Level* s_Level = nullptr;
@@ -111,6 +113,11 @@ static void Internal_LoadSector(int cx, int cz, SectorResident* res)
 
 bool Engine_Sector_Begin(const Level* level)
 {
+    // Not an error: a level without streamed geometry is a supported
+    // configuration, so report success and stay empty.
+    if (!Engine_Subsystem_IsEnabled(EngineSubsystem::Sector))
+        return true;
+
     if (!level || !level->info)
         return false;
     s_Level = level;

@@ -28,7 +28,9 @@
 - **Fixed-width**: **ALWAYS** use `<stdint.h>` types (`uint32_t`, `int16_t`, `uint8_t`, etc.). Never plain `int`,
   `long`, or `unsigned`.
 - **Booleans**: Use `<stdbool.h>` (`bool`, `true`, `false`).
-- **Constants**: Place all engine-wide constants in `engine/include/Constants.h` (split by category `Constants.XXX.h`).
+- **Constants**: Format constants go next to the struct they describe (`EngineArchive.h`, `EngineLevelFormat.h`,
+  ...); platform constants go in `engine/platform/<name>/PlatformConstants*.h`, reached via
+  `#include "PlatformConstants.h"`. See the Constants standard in `.github/copilot-instructions.md`.
 - **Magic Numbers**: Prohibited. Use descriptive macros or enums.
 - **Bitwise**: Use enums or macros for bitmasks.
 - **Enums**: Always `typedef enum { ... } TypeName;` — prefix all values with the type name to avoid pollution:

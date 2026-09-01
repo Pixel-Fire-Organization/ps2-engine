@@ -2,8 +2,7 @@
 #include <cstring>
 #include "Engine.h"
 
-#include <delaythread.h>
-#include <kernel.h>
+#include "platform/Platform.h"
 
 #define MAX_IO_REQUESTS IO_ASYNC_MAX_REQUESTS
 
@@ -30,57 +29,53 @@ typedef struct
 static IORequest s_Requests[MAX_IO_REQUESTS];
 static volatile bool s_IOThreadActive = false;
 
-static int s_IOThreadID = -1;
-static int s_IOMutex = -1;
+static PlatformThread* s_IOThread = nullptr;
+static PlatformSemaphore* s_IOMutex = nullptr;
 
 // Binary semaphore protecting s_SharedReadBuffer.
 // Initialised to 1 (buffer free). The IO thread acquires it before reading a
 // file; the main thread releases it once the callback has finished consuming
 // the data and the slot is marked IDLE.
-static int s_IOBufferSema = -1;
+static PlatformSemaphore* s_IOBufferSema = nullptr;
 
-static int s_FileSema = -1;
+static PlatformSemaphore* s_FileSema = nullptr;
 
 void Engine_IO_AcquireFileAccess()
 {
-    if (s_FileSema >= 0)
-        WaitSema(s_FileSema);
+    if (s_FileSema)
+        Engine_GetPlatform()->SemaphoreWait(s_FileSema);
 }
 
 void Engine_IO_ReleaseFileAccess()
 {
-    if (s_FileSema >= 0)
-        SignalSema(s_FileSema);
+    if (s_FileSema)
+        Engine_GetPlatform()->SemaphoreSignal(s_FileSema);
 }
 
-extern void* _gp;
-
-// Stack for the IO thread. Must be statically allocated and 16-byte aligned
-// so that the PS2 kernel can map it correctly. Never use a local/heap buffer
-// here — the kernel holds a pointer to this for the thread's lifetime.
-static uint8_t s_IOThreadStack[IO_THREAD_STACK_SIZE] __attribute__((aligned(16)));
-
-// Single shared read buffer — replaces the previous per-slot array.
-// Using one buffer (512 KB) instead of one per slot (16 × 512 KB = 8 MB) keeps
-// BSS inside the PS2 EE TLB coverage window. Per-slot buffers pushed .bss to
-// virtual address 0x30000000, which has no TLB mapping, causing a store TLB
-// miss cascade during the crt0 BSS-zero loop at startup.
+// Single shared read buffer — deliberately not one per slot.
+// Using one buffer instead of one per slot keeps BSS inside the PS2 EE TLB
+// coverage window. Per-slot buffers pushed .bss to virtual address 0x30000000,
+// which has no TLB mapping, causing a store TLB miss cascade during the crt0
+// BSS-zero loop at startup.
 // Ownership alternates: IO thread acquires s_IOBufferSema before reading, main
 // thread releases it after the callback returns — enforcing serial buffer use.
-// 16-byte alignment is required for GS DMA (LoadImageFromMemory, etc.).
+// 16-byte aligned: the strictest alignment any supported platform's transfer
+// path requires of a source buffer.
 static uint8_t s_SharedReadBuffer[IO_READ_BUFFER_SIZE] __attribute__((aligned(16)));
 
 static void IOThreadEntry(void* arg)
 {
     UNUSED_VAR(arg);
+    Platform* platform = Engine_GetPlatform();
+
     while (s_IOThreadActive)
     {
         int reqIndex = -1;
         char filepath[IO_FILE_MAX_PATH];
 
-        if (s_IOMutex >= 0)
+        if (s_IOMutex)
         {
-            WaitSema(s_IOMutex);
+            platform->SemaphoreWait(s_IOMutex);
             for (int i = 0; i < MAX_IO_REQUESTS; ++i)
             {
                 if (s_Requests[i].state == IO_STATE_QUEUED)
@@ -91,7 +86,7 @@ static void IOThreadEntry(void* arg)
                     break;
                 }
             }
-            SignalSema(s_IOMutex);
+            platform->SemaphoreSignal(s_IOMutex);
         }
 
         if (reqIndex != -1)
@@ -100,8 +95,8 @@ static void IOThreadEntry(void* arg)
             // Blocks until Engine_IO_Update has finished dispatching the previous
             // callback — i.e. the callback has returned and s_SharedReadBuffer is
             // no longer referenced by the main thread.
-            if (s_IOBufferSema >= 0)
-                WaitSema(s_IOBufferSema);
+            if (s_IOBufferSema)
+                platform->SemaphoreWait(s_IOBufferSema);
 
             // Engine_IO_Shutdown signals the sema to unblock a waiting IO thread.
             // Exit immediately if that is why we woke up.
@@ -131,13 +126,13 @@ static void IOThreadEntry(void* arg)
                     Engine_LogError("IO: archive read failed for '%s'", filepath);
                 }
 
-                if (s_IOMutex >= 0)
+                if (s_IOMutex)
                 {
-                    WaitSema(s_IOMutex);
+                    platform->SemaphoreWait(s_IOMutex);
                     s_Requests[reqIndex].loadedData = data;
                     s_Requests[reqIndex].loadedSize = size;
                     s_Requests[reqIndex].state = IO_STATE_COMPLETED;
-                    SignalSema(s_IOMutex);
+                    platform->SemaphoreSignal(s_IOMutex);
                 }
                 continue; // handled via archive; skip the loose-file path
             }
@@ -145,40 +140,29 @@ static void IOThreadEntry(void* arg)
             // Loose-file fallback: no mounted archive holds it (host: dev builds,
             // and the loose->archive transition). Unchanged whole-file read.
             Engine_IO_AcquireFileAccess();
-            FILE* f = fopen(filepath, "rb");
+            FileHandle f = platform->FileOpen(filepath, FileMode::Read);
             if (f)
             {
-                fseek(f, 0, SEEK_END);
-                const long sizeL = ftell(f);
-                if (sizeL < 0)
+                const uint64_t fileSize = platform->FileSize(f);
+
+                if (fileSize > IO_READ_BUFFER_SIZE)
                 {
-                    Engine_LogError("IO: File seek failed. File: %s", filepath);
-                    fclose(f);
+                    Engine_LogError("IO: '%s' is %llu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath, static_cast<unsigned long long>(fileSize), IO_READ_BUFFER_SIZE);
+                    platform->FileClose(f);
                 }
                 else
                 {
-                    size = static_cast<size_t>(sizeL);
-                    fseek(f, 0, SEEK_SET);
-
-                    if (size > IO_READ_BUFFER_SIZE)
+                    size = static_cast<size_t>(fileSize);
+                    const size_t bytesRead = platform->FileRead(f, s_SharedReadBuffer, size);
+                    platform->FileClose(f);
+                    if (bytesRead != size)
                     {
-                        Engine_LogError("IO: '%s' is %zu bytes, exceeds IO_READ_BUFFER_SIZE (%d). Rejected.", filepath, size, IO_READ_BUFFER_SIZE);
-                        fclose(f);
+                        Engine_LogError("IO: Short read for '%s': expected %zu, got %zu", filepath, size, bytesRead);
                         size = 0;
                     }
                     else
                     {
-                        const size_t bytesRead = fread(s_SharedReadBuffer, 1, size, f);
-                        fclose(f);
-                        if (bytesRead != size)
-                        {
-                            Engine_LogError("IO: Short read for '%s': expected %zu, got %zu", filepath, size, bytesRead);
-                            size = 0;
-                        }
-                        else
-                        {
-                            data = s_SharedReadBuffer;
-                        }
+                        data = s_SharedReadBuffer;
                     }
                 }
             }
@@ -188,42 +172,37 @@ static void IOThreadEntry(void* arg)
             }
             Engine_IO_ReleaseFileAccess();
 
-            if (s_IOMutex >= 0)
+            if (s_IOMutex)
             {
-                WaitSema(s_IOMutex);
+                platform->SemaphoreWait(s_IOMutex);
                 s_Requests[reqIndex].loadedData = data;
                 s_Requests[reqIndex].loadedSize = size;
                 s_Requests[reqIndex].state = IO_STATE_COMPLETED;
-                SignalSema(s_IOMutex);
+                platform->SemaphoreSignal(s_IOMutex);
             }
         }
         else
         {
-            DelayThread(IO_THREAD_SLEEP_USEC);
+            platform->SleepMicros(IO_THREAD_SLEEP_USEC);
         }
     }
 }
 
 bool Engine_IO_Init()
 {
+    Platform* platform = Engine_GetPlatform();
+    if (!platform)
+        return false;
+
     memset(s_Requests, 0, sizeof(s_Requests));
     s_IOThreadActive = true;
 
-    ee_sema_t fSema;
-    fSema.init_count = 1;
-    fSema.max_count = 1;
-    fSema.option = 0;
-    s_FileSema = CreateSema(&fSema);
+    s_FileSema = platform->SemaphoreCreate(1, 1);
+    s_IOMutex = platform->SemaphoreCreate(1, 1);
 
-    ee_sema_t sema;
-    sema.init_count = 1;
-    sema.max_count = 1;
-    sema.option = 0;
-    s_IOMutex = CreateSema(&sema);
-
-    if (s_IOMutex < 0)
+    if (!s_IOMutex)
     {
-        Engine_LogError("Failed to create IO semaphore! Error: %d", s_IOMutex);
+        Engine_LogError("Failed to create IO semaphore!");
         return false;
     }
 
@@ -231,42 +210,21 @@ bool Engine_IO_Init()
     // Acquiring it before a read and releasing it after the callback guarantees
     // the IO thread never overwrites the buffer while the main thread is inside
     // the callback using the pointer.
-    ee_sema_t bufSema;
-    bufSema.init_count = 1;
-    bufSema.max_count = 1;
-    bufSema.option = 0;
-    s_IOBufferSema = CreateSema(&bufSema);
-    if (s_IOBufferSema < 0)
+    s_IOBufferSema = platform->SemaphoreCreate(1, 1);
+    if (!s_IOBufferSema)
     {
-        Engine_LogError("Failed to create IO buffer semaphore! Error: %d", s_IOBufferSema);
-        DeleteSema(s_IOMutex);
-        s_IOMutex = -1;
+        Engine_LogError("Failed to create IO buffer semaphore!");
+        platform->SemaphoreDestroy(s_IOMutex);
+        s_IOMutex = nullptr;
         return false;
     }
 
-    // Zero-initialise the entire struct first so that the 'attr', 'option',
-    // 'status', and 'current_priority' fields never contain stack garbage.
-    // PS2 kernel behaviour on CreateThread is undefined for non-zero 'attr'
-    // bits that do not correspond to recognised flags; a garbage value here
-    // changes every time the call-stack above changes (e.g. when an unrelated
-    // caller is modified) and can corrupt the EE kernel's thread table, which then
-    // manifests as a crash inside an unrelated ISR (typically libpad's DMA
-    // handler in the pad polling interrupt).
-    ee_thread_t threadParam = {};
-    threadParam.func = reinterpret_cast<void*>(IOThreadEntry);
-    threadParam.stack = s_IOThreadStack;
-    threadParam.stack_size = IO_THREAD_STACK_SIZE;
-    threadParam.gp_reg = &_gp;
-    threadParam.initial_priority = 0x18;
-
-    s_IOThreadID = CreateThread(&threadParam);
-    if (s_IOThreadID < 0)
+    s_IOThread = platform->ThreadCreate(&IOThreadEntry, nullptr, IO_THREAD_STACK_SIZE);
+    if (!s_IOThread)
     {
-        Engine_LogError("Failed to create IO thread! Error: %d", s_IOThreadID);
+        Engine_LogError("Failed to create IO thread!");
         return false;
     }
-
-    StartThread(s_IOThreadID, nullptr);
 
     Engine_LogInfo("Async IO system initialized.");
     return true;
@@ -274,11 +232,12 @@ bool Engine_IO_Init()
 
 bool Engine_IO_ReadAsync(const char* filepath, IO_Callback callback, void* userData)
 {
-    if (s_IOMutex < 0)
+    Platform* platform = Engine_GetPlatform();
+    if (!s_IOMutex || !platform)
         return false;
 
     bool queued = false;
-    WaitSema(s_IOMutex);
+    platform->SemaphoreWait(s_IOMutex);
 
     for (int i = 0; i < MAX_IO_REQUESTS; ++i)
     {
@@ -294,7 +253,7 @@ bool Engine_IO_ReadAsync(const char* filepath, IO_Callback callback, void* userD
         }
     }
 
-    SignalSema(s_IOMutex);
+    platform->SemaphoreSignal(s_IOMutex);
 
     if (!queued)
     {
@@ -305,10 +264,11 @@ bool Engine_IO_ReadAsync(const char* filepath, IO_Callback callback, void* userD
 
 void Engine_IO_Update()
 {
-    if (s_IOMutex < 0)
+    Platform* platform = Engine_GetPlatform();
+    if (!s_IOMutex || !platform)
         return;
 
-    WaitSema(s_IOMutex);
+    platform->SemaphoreWait(s_IOMutex);
 
     for (int i = 0; i < MAX_IO_REQUESTS; ++i)
     {
@@ -329,7 +289,7 @@ void Engine_IO_Update()
             // from racing with the callback's use of the buffer pointer.
             s_Requests[i].state = IO_STATE_DISPATCHING;
 
-            SignalSema(s_IOMutex);
+            platform->SemaphoreSignal(s_IOMutex);
 
             if (cb)
             {
@@ -338,28 +298,37 @@ void Engine_IO_Update()
             // data points into s_SharedReadBuffer (or NULL on error) — no free() needed.
 
             // Re-acquire to mark the slot idle and continue the scan.
-            WaitSema(s_IOMutex);
+            platform->SemaphoreWait(s_IOMutex);
             s_Requests[i].loadedData = nullptr;
             s_Requests[i].state = IO_STATE_IDLE;
 
             // Release the shared read buffer AFTER setting the slot to IDLE, so
             // that any new request the callback may have queued during DISPATCHING
             // is already visible to the IO thread when it next scans.
-            if (s_IOBufferSema >= 0)
-                SignalSema(s_IOBufferSema);
+            if (s_IOBufferSema)
+                platform->SemaphoreSignal(s_IOBufferSema);
         }
     }
 
-    SignalSema(s_IOMutex);
+    platform->SemaphoreSignal(s_IOMutex);
 }
 
 void Engine_IO_Shutdown()
 {
+    Platform* platform = Engine_GetPlatform();
     s_IOThreadActive = false;
-    // Wake the IO thread if it is blocked on WaitSema(s_IOBufferSema).
+
+    // Wake the IO thread if it is blocked on the buffer semaphore.
     // Without this signal the thread would stall indefinitely after shutdown.
-    if (s_IOBufferSema >= 0)
-        SignalSema(s_IOBufferSema);
-    // Note: Full thread cleanup (DeleteThread / DeleteSema) requires waiting
-    // for the thread to exit — deferred until proper join support is added.
+    if (s_IOBufferSema && platform)
+        platform->SemaphoreSignal(s_IOBufferSema);
+
+    // Note: full thread cleanup (join, then destroy the semaphores) still needs
+    // join support in the platform layer. Until then the worker is left to exit
+    // on its own and its handle is released without waiting.
+    if (s_IOThread && platform)
+    {
+        platform->ThreadDestroy(s_IOThread);
+        s_IOThread = nullptr;
+    }
 }

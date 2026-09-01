@@ -2,12 +2,14 @@
 
 #include <stdint.h>
 
-#include "Constants.h"
+#include "EngineIO.h" // IO_FILE_MAX_PATH - part of the .ps2a header layout
+#include "PlatformConstants.h"
 
-// Engine resource categories.
-// NOTE: RES_SOUND and RES_FONT are unsupported since raylib was removed —
-//       Engine_Resource_Load(RES_SOUND/RES_FONT, ...) logs an error and returns
-//       -1. Textures are baked to TIM2; models to separated unindexed arrays.
+// --- .ps2a on-disc format (written by tools/pack_assets.py) --------------
+// FORMAT CONSTANTS - shared with the packer, identical on every platform.
+#define RES_ASSET_MAGIC 0x50533241 /* "PS2A" in little-endian */
+#define RES_MAX_DEPENDENCIES 8
+
 typedef enum
 {
     RES_TEXTURE,
@@ -44,7 +46,7 @@ bool Engine_Resource_Init();
 void Engine_Resource_Shutdown();
 
 // Load a resource from a .ps2a file on disc. All types stream via
-// Engine_IO_ReadAsync and decode from memory: TIM2 for textures (uploaded to GS
+// Engine_IO_ReadAsync and decode from memory: cooked textures (uploaded by the
 // VRAM by the active renderer) and the baked blob for models. Dependencies
 // declared in the .ps2a header are loaded first.
 // Returns a handle >= 0 on success, or -1 on failure.
@@ -80,11 +82,7 @@ void Engine_Resource_UnloadAll();
 // Called once per frame (from Engine_Update) to advance the current frame counter.
 void Engine_Resource_Update();
 
-// Returns the number of GS VRAM pages currently occupied by loaded textures.
-// Compared against GFX_GS_TEXTURE_PAGE_BUDGET (264) to detect VRAM pressure.
-// When over budget ps2gl performs silent LRU eviction — textures are re-uploaded
-// from CPU RAM on next use at a performance cost.
-uint32_t Engine_Resource_GetAllocatedGsPages();
+uint32_t Engine_Resource_GetTextureBudgetUsed();
 
-// Returns the compile-time GS VRAM texture page budget (GFX_GS_TEXTURE_PAGE_BUDGET).
-uint32_t Engine_Resource_GetGsPageBudget();
+// The active platform's total texture budget, in bytes.
+uint32_t Engine_Resource_GetTextureBudget();

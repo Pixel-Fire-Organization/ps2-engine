@@ -7,12 +7,251 @@
     },
     "configurePresets": [
         {
-            "name": "ps2-base",
-            "hidden": true,
+            "name": "ps2-debug",
+            "displayName": "PS2 Debug (PAL + NTSC)",
+            "description": "Debug build, both PS2 regions, each into its own dist/ bundle",
             "generator": "Unix Makefiles",
-            "toolchainFile": "${sourceDir}/ps2dev.cmake",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-debug",
+            "cacheVariables": {
+                "DEBUG": "ON"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "WSL"
+                }
+            },
             "environment": {
                 "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-debug-pal",
+            "displayName": "PS2 Debug (PAL)",
+            "description": "Debug build, PAL only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-debug-pal",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "PLATFORMS_TO_SUPPORT": "PS2PAL"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "WSL"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-debug-ntsc",
+            "displayName": "PS2 Debug (NTSC)",
+            "description": "Debug build, NTSC only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-debug-ntsc",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "PLATFORMS_TO_SUPPORT": "PS2NTSC"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "WSL"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-release",
+            "displayName": "PS2 Release (PAL + NTSC)",
+            "description": "Release build, both PS2 regions, each into its own dist/ bundle",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-release",
+            "cacheVariables": {
+                "DEBUG": "OFF"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "WSL"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-release-pal",
+            "displayName": "PS2 Release (PAL)",
+            "description": "Release build, PAL only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-release-pal",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "PLATFORMS_TO_SUPPORT": "PS2PAL"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "WSL"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-release-ntsc",
+            "displayName": "PS2 Release (NTSC)",
+            "description": "Release build, NTSC only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-release-ntsc",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "PLATFORMS_TO_SUPPORT": "PS2NTSC"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "WSL"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-debug-linux",
+            "displayName": "PS2 Debug (PAL + NTSC) [Linux]",
+            "description": "Debug build, both PS2 regions, each into its own dist/ bundle",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-debug",
+            "cacheVariables": {
+                "DEBUG": "ON"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-debug-pal-linux",
+            "displayName": "PS2 Debug (PAL) [Linux]",
+            "description": "Debug build, PAL only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-debug-pal",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "PLATFORMS_TO_SUPPORT": "PS2PAL"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-debug-ntsc-linux",
+            "displayName": "PS2 Debug (NTSC) [Linux]",
+            "description": "Debug build, NTSC only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-debug-ntsc",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "PLATFORMS_TO_SUPPORT": "PS2NTSC"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-release-linux",
+            "displayName": "PS2 Release (PAL + NTSC) [Linux]",
+            "description": "Release build, both PS2 regions, each into its own dist/ bundle",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-release",
+            "cacheVariables": {
+                "DEBUG": "OFF"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-release-pal-linux",
+            "displayName": "PS2 Release (PAL) [Linux]",
+            "description": "Release build, PAL only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-release-pal",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "PLATFORMS_TO_SUPPORT": "PS2PAL"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "ps2-release-ntsc-linux",
+            "displayName": "PS2 Release (NTSC) [Linux]",
+            "description": "Release build, NTSC only",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/ps2dev.cmake",
+            "binaryDir": "${sourceDir}/build/ps2dev-release-ntsc",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "PLATFORMS_TO_SUPPORT": "PS2NTSC"
+            },
+            "vendor": {
+                "jetbrains.com/clion": {
+                    "toolchain": "Default"
+                }
+            },
+            "environment": {
+                "PS2DEV": "/usr/local/ps2dev"
+            }
+        },
+        {
+            "name": "win32-debug",
+            "displayName": "Win32 Debug",
+            "description": "Debug Windows build, cross-compiled with MinGW-w64 (needs: apt install mingw-w64)",
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/toolchains/mingw-w64.cmake",
+            "binaryDir": "${sourceDir}/build/win32-debug",
+            "cacheVariables": {
+                "DEBUG": "ON",
+                "PLATFORMS_TO_SUPPORT": "WIN32"
             },
             "vendor": {
                 "jetbrains.com/clion": {
@@ -21,106 +260,121 @@
             }
         },
         {
-            "name": "ps2-base-linux",
-            "hidden": true,
+            "name": "win32-release",
+            "displayName": "Win32 Release",
+            "description": "Release Windows build, cross-compiled with MinGW-w64 (needs: apt install mingw-w64)",
             "generator": "Unix Makefiles",
-            "toolchainFile": "${sourceDir}/ps2dev.cmake",
-            "environment": {
-                "PS2DEV": "/usr/local/ps2dev"
+            "toolchainFile": "${sourceDir}/toolchains/mingw-w64.cmake",
+            "binaryDir": "${sourceDir}/build/win32-release",
+            "cacheVariables": {
+                "DEBUG": "OFF",
+                "PLATFORMS_TO_SUPPORT": "WIN32"
             },
             "vendor": {
                 "jetbrains.com/clion": {
-                    "toolchain": "Default"
+                    "toolchain": "WSL"
                 }
             }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "ps2-debug",
+            "configurePreset": "ps2-debug",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-debug-pal",
-            "displayName": "PS2 Debug (PAL)",
-            "description": "Debug build, PAL region",
-            "inherits": "ps2-base",
-            "binaryDir": "${sourceDir}/build/debug-pal",
-            "cacheVariables": {
-                "DEBUG": "ON",
-                "REGION": "PAL"
-            }
+            "configurePreset": "ps2-debug-pal",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-debug-ntsc",
-            "displayName": "PS2 Debug (NTSC)",
-            "description": "Debug build, NTSC region",
-            "inherits": "ps2-base",
-            "binaryDir": "${sourceDir}/build/debug-ntsc",
-            "cacheVariables": {
-                "DEBUG": "ON",
-                "REGION": "NTSC"
-            }
+            "configurePreset": "ps2-debug-ntsc",
+            "targets": [
+                "dist"
+            ]
+        },
+        {
+            "name": "ps2-release",
+            "configurePreset": "ps2-release",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-release-pal",
-            "displayName": "PS2 Release (PAL)",
-            "description": "Release build, PAL region",
-            "inherits": "ps2-base",
-            "binaryDir": "${sourceDir}/build/release-pal",
-            "cacheVariables": {
-                "DEBUG": "OFF",
-                "REGION": "PAL"
-            }
+            "configurePreset": "ps2-release-pal",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-release-ntsc",
-            "displayName": "PS2 Release (NTSC)",
-            "description": "Release build, NTSC region",
-            "inherits": "ps2-base",
-            "binaryDir": "${sourceDir}/build/release-ntsc",
-            "cacheVariables": {
-                "DEBUG": "OFF",
-                "REGION": "NTSC"
-            }
+            "configurePreset": "ps2-release-ntsc",
+            "targets": [
+                "dist"
+            ]
+        },
+        {
+            "name": "ps2-debug-linux",
+            "configurePreset": "ps2-debug-linux",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-debug-pal-linux",
-            "displayName": "PS2 Debug (PAL) [Linux]",
-            "description": "Debug build, PAL region — native Linux toolchain",
-            "inherits": "ps2-base-linux",
-            "binaryDir": "${sourceDir}/build/debug-pal",
-            "cacheVariables": {
-                "DEBUG": "ON",
-                "REGION": "PAL"
-            }
+            "configurePreset": "ps2-debug-pal-linux",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-debug-ntsc-linux",
-            "displayName": "PS2 Debug (NTSC) [Linux]",
-            "description": "Debug build, NTSC region — native Linux toolchain",
-            "inherits": "ps2-base-linux",
-            "binaryDir": "${sourceDir}/build/debug-ntsc",
-            "cacheVariables": {
-                "DEBUG": "ON",
-                "REGION": "NTSC"
-            }
+            "configurePreset": "ps2-debug-ntsc-linux",
+            "targets": [
+                "dist"
+            ]
+        },
+        {
+            "name": "ps2-release-linux",
+            "configurePreset": "ps2-release-linux",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-release-pal-linux",
-            "displayName": "PS2 Release (PAL) [Linux]",
-            "description": "Release build, PAL region — native Linux toolchain",
-            "inherits": "ps2-base-linux",
-            "binaryDir": "${sourceDir}/build/release-pal",
-            "cacheVariables": {
-                "DEBUG": "OFF",
-                "REGION": "PAL"
-            }
+            "configurePreset": "ps2-release-pal-linux",
+            "targets": [
+                "dist"
+            ]
         },
         {
             "name": "ps2-release-ntsc-linux",
-            "displayName": "PS2 Release (NTSC) [Linux]",
-            "description": "Release build, NTSC region — native Linux toolchain",
-            "inherits": "ps2-base-linux",
-            "binaryDir": "${sourceDir}/build/release-ntsc",
-            "cacheVariables": {
-                "DEBUG": "OFF",
-                "REGION": "NTSC"
-            }
+            "configurePreset": "ps2-release-ntsc-linux",
+            "targets": [
+                "dist"
+            ]
+        },
+        {
+            "name": "win32-debug",
+            "configurePreset": "win32-debug",
+            "targets": [
+                "dist"
+            ]
+        },
+        {
+            "name": "win32-release",
+            "configurePreset": "win32-release",
+            "targets": [
+                "dist"
+            ]
         }
     ]
 }

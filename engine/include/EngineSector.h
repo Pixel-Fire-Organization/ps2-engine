@@ -2,19 +2,10 @@
 
 #include <cstdint>
 
-#include "Constants.h"
+#include "PlatformConstants.h"
 #include "EngineLevel.h"
 #include "graphics/Frustum.h"
 #include "graphics/Types.h"
-
-// ---------------------------------------------------------------------------
-// Sector residency manager. Keeps a 3x3 ring of sector geometry resident in
-// ARENA_LEVEL_DATA slots around the streaming centre, recentered on crossings.
-// Each resident sector exposes Mesh views pointing straight into its arena slot
-// (zero-copy into the renderer's existing mesh path).
-//
-// Phase D1 loads the ring synchronously; Phase D2 swaps in async streaming.
-// ---------------------------------------------------------------------------
 
 typedef enum
 {

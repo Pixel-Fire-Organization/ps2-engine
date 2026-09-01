@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 typedef struct
 {
@@ -86,3 +87,23 @@ void* Engine_PoolAlloc(MemoryPool* pool);
 void Engine_PoolFree(MemoryPool* pool, void* ptr);
 
 void Engine_PoolReset(MemoryPool* pool);
+
+void* Engine_PlatformAlloc(size_t size, size_t alignment);
+void Engine_PlatformFree(void* ptr);
+
+struct PlatformDeleter
+{
+    void operator()(void* ptr) const { Engine_PlatformFree(ptr); }
+};
+
+// Owning handle to a platform-allocated array of trivially-copyable elements.
+// No constructors run: the memory is filled by reading into it, exactly as the
+// raw allocation it replaces.
+template <class T>
+using PlatformArray = std::unique_ptr<T[], PlatformDeleter>;
+
+template <class T>
+PlatformArray<T> Engine_PlatformArray(size_t count, size_t alignment = 16)
+{
+    return PlatformArray<T>(static_cast<T*>(Engine_PlatformAlloc(count * sizeof(T), alignment)));
+}

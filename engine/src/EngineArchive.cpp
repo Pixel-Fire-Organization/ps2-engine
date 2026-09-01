@@ -1,18 +1,15 @@
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <malloc.h>
+#include <utility>
 
 #include "Engine.h"
+#include "EngineMemory.h"
+#include "platform/Platform.h"
 
-// A mounted archive: the open file plus its TOC and string table in heap memory.
-// The FILE* stays open for the archive's lifetime so streaming reads are a bare
-// fseek + fread with no per-file open cost. Unmounting closes it — the fast drop.
 typedef struct
 {
-    FILE* file;
-    ArchiveTocEntry* toc; // heap array [entryCount]
-    char* strings; // heap string table [stringsSize]
+    FileHandle file;
+    PlatformArray<ArchiveTocEntry> toc; // [entryCount], released with the mount
+    PlatformArray<char> strings; // string table [stringsSize]
     uint32_t entryCount;
     bool inUse;
 } MountedArchive;
@@ -33,7 +30,10 @@ static uint32_t Internal_Fnv1a32(const char* s)
 
 bool Engine_Archive_Init()
 {
-    memset(s_Mounts, 0, sizeof(s_Mounts));
+    // Not memset: a mount owns its TOC, and overwriting the object
+    // representation would leak it and corrupt the handle.
+    for (int32_t i = 0; i < ARCH_MAX_MOUNTED; ++i)
+        Engine_Archive_Unmount(i);
     return true;
 }
 
@@ -57,8 +57,10 @@ int32_t Engine_Archive_Mount(const char* discPath)
         return -1;
     }
 
+    Platform* platform = Engine_GetPlatform();
+
     Engine_IO_AcquireFileAccess();
-    FILE* f = fopen(discPath, "rb");
+    FileHandle f = platform->FileOpen(discPath, FileMode::Read);
     if (!f)
     {
         Engine_IO_ReleaseFileAccess();
@@ -67,9 +69,9 @@ int32_t Engine_Archive_Mount(const char* discPath)
     }
 
     ArchiveFileHeader header;
-    bool ok = (fread(&header, 1, sizeof(header), f) == sizeof(header));
-    ArchiveTocEntry* toc = nullptr;
-    char* strings = nullptr;
+    bool ok = (platform->FileRead(f, &header, sizeof(header)) == sizeof(header));
+    PlatformArray<ArchiveTocEntry> toc;
+    PlatformArray<char> strings;
 
     if (ok && (header.magic != ARCH_FILE_MAGIC || header.version != ARCH_FILE_VERSION))
     {
@@ -80,23 +82,23 @@ int32_t Engine_Archive_Mount(const char* discPath)
     if (ok && header.entryCount > 0)
     {
         const size_t tocBytes = static_cast<size_t>(header.entryCount) * sizeof(ArchiveTocEntry);
-        toc = static_cast<ArchiveTocEntry*>(memalign(16, tocBytes));
-        strings = static_cast<char*>(malloc(header.stringsSize ? header.stringsSize : 1));
+        toc = Engine_PlatformArray<ArchiveTocEntry>(header.entryCount);
+        strings = Engine_PlatformArray<char>(header.stringsSize ? header.stringsSize : 1);
         if (!toc || !strings)
         {
             Engine_LogError("Archive: out of memory mounting '%s'", discPath);
             ok = false;
         }
         // TOC immediately follows the header; string table is at stringsOffset.
-        if (ok && fseek(f, static_cast<long>(sizeof(ArchiveFileHeader)), SEEK_SET) != 0)
+        if (ok && !platform->FileSeek(f, sizeof(ArchiveFileHeader)))
             ok = false;
-        if (ok && fread(toc, 1, tocBytes, f) != tocBytes)
+        if (ok && platform->FileRead(f, toc.get(), tocBytes) != tocBytes)
             ok = false;
         if (ok && header.stringsSize > 0)
         {
-            if (fseek(f, static_cast<long>(header.stringsOffset), SEEK_SET) != 0)
+            if (!platform->FileSeek(f, header.stringsOffset))
                 ok = false;
-            else if (fread(strings, 1, header.stringsSize, f) != header.stringsSize)
+            else if (platform->FileRead(f, strings.get(), header.stringsSize) != header.stringsSize)
                 ok = false;
         }
     }
@@ -104,15 +106,13 @@ int32_t Engine_Archive_Mount(const char* discPath)
 
     if (!ok)
     {
-        free(toc);
-        free(strings);
-        fclose(f);
+        platform->FileClose(f);
         return -1;
     }
 
     s_Mounts[slot].file = f;
-    s_Mounts[slot].toc = toc;
-    s_Mounts[slot].strings = strings;
+    s_Mounts[slot].toc = std::move(toc);
+    s_Mounts[slot].strings = std::move(strings);
     s_Mounts[slot].entryCount = header.entryCount;
     s_Mounts[slot].inUse = true;
 
@@ -127,12 +127,14 @@ void Engine_Archive_Unmount(int32_t handle)
 
     Engine_IO_AcquireFileAccess();
     if (s_Mounts[handle].file)
-        fclose(s_Mounts[handle].file);
+        Engine_GetPlatform()->FileClose(s_Mounts[handle].file);
     Engine_IO_ReleaseFileAccess();
 
-    free(s_Mounts[handle].toc);
-    free(s_Mounts[handle].strings);
-    memset(&s_Mounts[handle], 0, sizeof(MountedArchive));
+    s_Mounts[handle].toc.reset();
+    s_Mounts[handle].strings.reset();
+    s_Mounts[handle].file = nullptr;
+    s_Mounts[handle].entryCount = 0;
+    s_Mounts[handle].inUse = false;
 }
 
 bool Engine_Archive_Find(const char* assetPath, ArchiveLocator* outLoc)
@@ -155,7 +157,7 @@ bool Engine_Archive_Find(const char* assetPath, ArchiveLocator* outLoc)
             const ArchiveTocEntry* e = &m->toc[i];
             // Hash narrows the search; strcmp confirms (collisions are rare but must
             // never silently resolve to the wrong asset).
-            if (e->nameHash == hash && strcmp(key, m->strings + e->nameOffset) == 0)
+            if (e->nameHash == hash && strcmp(key, m->strings.get() + e->nameOffset) == 0)
             {
                 outLoc->archive = s;
                 outLoc->offset = e->offset;
@@ -178,10 +180,12 @@ bool Engine_Archive_ReadSync(const ArchiveLocator* loc, uint32_t spanOffset, voi
     if (spanOffset > loc->size || bytes > loc->size - spanOffset)
         return false;
 
+    Platform* platform = Engine_GetPlatform();
+
     bool ok = false;
     Engine_IO_AcquireFileAccess();
-    if (fseek(m->file, static_cast<long>(loc->offset + spanOffset), SEEK_SET) == 0)
-        ok = (fread(dst, 1, bytes, m->file) == bytes);
+    if (platform->FileSeek(m->file, static_cast<uint64_t>(loc->offset) + spanOffset))
+        ok = (platform->FileRead(m->file, dst, bytes) == bytes);
     Engine_IO_ReleaseFileAccess();
     return ok;
 }

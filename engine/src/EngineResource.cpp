@@ -1,10 +1,10 @@
-﻿#include <cstdio>
-#include <cstring>
+﻿#include <cstring>
 #include "Engine.h"
 #include "graphics/ModelFormat.h"
 #include "graphics/Renderer.h"
 #include "graphics/Types.h"
 #include "graphics/tim2.h"
+#include "platform/Platform.h"
 
 // Stable per-dependency reference: packs a slot index and a generation counter
 // into 4 bytes (same width as the old int32_t). The generation must match the
@@ -23,7 +23,7 @@ typedef struct
     ResourceState state;
     uint32_t refCount;
     uint32_t lastUsedFrame;
-    uint32_t gsPages; // GS VRAM pages consumed (RES_TEXTURE only; 0 otherwise)
+    uint32_t textureBytes; // texture VRAM footprint (RES_TEXTURE only; 0 otherwise)
     char key[IO_FILE_MAX_PATH];
     bool pinned;
     // Generation counter — incremented every time this slot is cleared.
@@ -45,11 +45,10 @@ typedef struct
 
 static ResourceEntry s_Entries[RES_MAX_ENTRIES];
 static uint32_t s_CurrentFrame = 0;
-// Shadow counter: total GS VRAM pages occupied by all currently READY textures.
-// ps2gl has no public query API for this; we maintain it ourselves.
-// When the budget is exceeded ps2gl silently LRU-evicts the oldest texture slot
-// from GS VRAM — the texture object stays in CPU RAM and is re-uploaded on demand.
-static uint32_t s_AllocatedGsPages = 0;
+// Bytes occupied by every READY texture. The engine tracks this itself: a
+// backend need not expose a query, and must not be left to resolve an overrun
+// on its own terms.
+static uint32_t s_TextureBytesUsed = 0;
 
 // --- Internal helpers ---
 
@@ -81,12 +80,12 @@ static void Internal_UnloadEntry(int32_t index);
 
 static bool Internal_ParseHeaderAndLoadDeps(const void* data, size_t size, AssetFileHeader* outHeader, int32_t entryIndex);
 
-// Sum the GS pages that COULD be freed right now (non-pinned, reference-free,
-// READY textures). Used only to produce an actionable error message when the
-// budget is exceeded — does NOT perform any eviction.
-static void Internal_CalcEvictablePages(uint32_t* outPages, int32_t* outCount)
+// Bytes that COULD be freed right now (non-pinned, reference-free, READY
+// textures). Used only to make the over-budget error actionable - it evicts
+// nothing.
+static void Internal_CalcEvictableBytes(uint32_t* outBytes, int32_t* outCount)
 {
-    *outPages = 0;
+    *outBytes = 0;
     *outCount = 0;
     for (int32_t i = 0; i < RES_MAX_ENTRIES; i++)
     {
@@ -98,7 +97,7 @@ static void Internal_CalcEvictablePages(uint32_t* outPages, int32_t* outCount)
             continue;
         if (s_Entries[i].refCount > 0)
             continue;
-        *outPages += s_Entries[i].gsPages;
+        *outBytes += s_Entries[i].textureBytes;
         (*outCount)++;
     }
 }
@@ -184,9 +183,9 @@ static void Internal_UnloadEntry(int32_t index)
     Internal_UnloadHandle(entry);
 
     // Release shadow GS page accounting for textures
-    if (entry->type == RES_TEXTURE && entry->gsPages > 0)
+    if (entry->type == RES_TEXTURE && entry->textureBytes > 0)
     {
-        s_AllocatedGsPages = (s_AllocatedGsPages >= entry->gsPages) ? s_AllocatedGsPages - entry->gsPages : 0;
+        s_TextureBytesUsed = (s_TextureBytesUsed >= entry->textureBytes) ? s_TextureBytesUsed - entry->textureBytes : 0;
     }
 
     // Bump the generation BEFORE clearing the slot so any parent whose async
@@ -296,53 +295,34 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
                 return;
             }
 
-            // GS page dimensions vary by pixel storage mode: 64x32 @ PSMCT32,
-            // 64x64 @ PSMCT16, 128x64 @ PSMT8. Sum pages over all mip levels;
-            // PAL8 adds one page for the CLUT.
-            uint32_t pageW, pageH;
-            switch (img.format)
-            {
-            case PixelFormat::RGBA16:
-                pageW = 64u;
-                pageH = 64u;
-                break;
-            case PixelFormat::PAL8:
-                pageW = 128u;
-                pageH = 64u;
-                break;
-            default:
-                pageW = GFX_GS_PAGE_WIDTH_PSM32;
-                pageH = GFX_GS_PAGE_HEIGHT_PSM32;
-                break;
-            }
-            uint32_t pages = 0;
-            for (uint8_t lvl = 0; lvl < img.mipCount; ++lvl)
-            {
-                const uint32_t w = (img.width >> lvl) ? static_cast<uint32_t>(img.width >> lvl) : 1u;
-                const uint32_t h = (img.height >> lvl) ? static_cast<uint32_t>(img.height >> lvl) : 1u;
-                pages += ((w + pageW - 1) / pageW) * ((h + pageH - 1) / pageH);
-            }
-            if (img.format == PixelFormat::PAL8)
-                pages += 1u; // CLUT
+            // How much texture memory this costs is the platform's business:
+            // the PS2 rounds every mip level up to whole GS pages (whose size
+            // depends on the pixel format), a desktop GPU does not.
+            Platform* platform = Engine_GetPlatform();
+            const uint32_t footprint = platform->GetTextureFootprintBytes(static_cast<uint32_t>(img.width), static_cast<uint32_t>(img.height), img.format, img.mipCount);
+            const uint32_t budgetBytes = platform->GetConstant(PlatformConstant::TextureBudgetBytes);
+            const uint32_t maxTextureBytes = platform->GetConstant(PlatformConstant::MaxTextureBytes);
+            const uint32_t maxWidth = platform->GetConstant(PlatformConstant::MaxTextureWidth);
+            const uint32_t maxHeight = platform->GetConstant(PlatformConstant::MaxTextureHeight);
 
-            if (img.width > GFX_MAX_TEXTURE_WIDTH || img.height > GFX_MAX_TEXTURE_HEIGHT || pages > GFX_MAX_TEXTURE_GS_PAGES)
+            if (static_cast<uint32_t>(img.width) > maxWidth || static_cast<uint32_t>(img.height) > maxHeight || footprint > maxTextureBytes)
             {
-                Engine_LogError("Resource: texture rejected — %dx%d (%u pages) exceeds budget "
-                                "(max %u pages, dimension cap %dx%d) in slot %d '%s'",
-                                img.width, img.height, pages, GFX_MAX_TEXTURE_GS_PAGES, GFX_MAX_TEXTURE_WIDTH, GFX_MAX_TEXTURE_HEIGHT, idx, entry->key);
+                Engine_LogError("Resource: texture rejected — %dx%d (%u KB) exceeds budget "
+                                "(max %u KB, dimension cap %ux%u) in slot %d '%s'",
+                                img.width, img.height, footprint / 1024u, maxTextureBytes / 1024u, maxWidth, maxHeight, idx, entry->key);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
             }
 
-            if (s_AllocatedGsPages + pages > GFX_GS_TEXTURE_PAGE_BUDGET)
+            if (s_TextureBytesUsed + footprint > budgetBytes)
             {
-                uint32_t evictablePages = 0;
+                uint32_t evictableBytes = 0;
                 int32_t evictableCount = 0;
-                Internal_CalcEvictablePages(&evictablePages, &evictableCount);
-                Engine_LogError("Resource: GS VRAM full — cannot load %dx%d (%u pages). Usage: %u/%u pages. "
-                                "Call Engine_Resource_Unload() to free up to %u pages across %d texture(s), then retry.",
-                                img.width, img.height, pages, s_AllocatedGsPages, GFX_GS_TEXTURE_PAGE_BUDGET, evictablePages, evictableCount);
+                Internal_CalcEvictableBytes(&evictableBytes, &evictableCount);
+                Engine_LogError("Resource: texture memory full — cannot load %dx%d (%u KB). Usage: %u/%u KB. "
+                                "Call Engine_Resource_Unload() to free up to %u KB across %d texture(s), then retry.",
+                                img.width, img.height, footprint / 1024u, s_TextureBytesUsed / 1024u, budgetBytes / 1024u, evictableBytes / 1024u, evictableCount);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
                 return;
@@ -361,7 +341,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             const uint32_t texId = renderer ? renderer->UploadTexture(upload) : 0u;
             if (texId == 0)
             {
-                // gsPages was not yet committed to the shadow counter, so no rollback needed.
+                // footprint was not yet committed to the shadow counter, so no rollback needed.
                 Engine_LogError("Resource: GPU texture upload failed for slot %d (%s)", idx, entry->key);
                 Internal_UnloadEntry(idx);
                 Engine_PoolFreeMain(ctx);
@@ -372,10 +352,10 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             entry->handle.texture.width = img.width;
             entry->handle.texture.height = img.height;
             entry->handle.texture.format = static_cast<int>(img.format);
-            entry->gsPages = pages;
-            s_AllocatedGsPages += pages;
+            entry->textureBytes = footprint;
+            s_TextureBytesUsed += footprint;
             entry->state = RES_STATE_READY;
-            Engine_LogInfo("Texture loaded (%dx%d). Remaining pages: %u", img.width, img.height, static_cast<uint32_t>(GFX_GS_TEXTURE_PAGE_BUDGET) - s_AllocatedGsPages);
+            Engine_LogInfo("Texture loaded (%dx%d). Remaining: %u KB", img.width, img.height, (budgetBytes - s_TextureBytesUsed) / 1024u);
         }
         break;
     case RES_MODEL:
@@ -430,16 +410,18 @@ static bool Internal_PeekAssetType(const char* path, ResourceType* outType)
     {
         // Loose fallback — take the file-access semaphore so this raw read never
         // races the IO worker's file access.
+        Platform* platform = Engine_GetPlatform();
+
         Engine_IO_AcquireFileAccess();
-        FILE* f = fopen(path, "rb");
+        FileHandle f = platform->FileOpen(path, FileMode::Read);
         size_t bytesRead = 0;
         if (f)
         {
-            bytesRead = fread(peek, sizeof(uint32_t), 2, f);
-            fclose(f);
+            bytesRead = platform->FileRead(f, peek, sizeof(peek));
+            platform->FileClose(f);
         }
         Engine_IO_ReleaseFileAccess();
-        if (!f || bytesRead < 2)
+        if (!f || bytesRead < sizeof(peek))
             return false;
     }
 
@@ -533,7 +515,7 @@ bool Engine_Resource_Init()
         s_Entries[i].state = RES_STATE_EMPTY;
     }
     s_CurrentFrame = 0;
-    s_AllocatedGsPages = 0;
+    s_TextureBytesUsed = 0;
     Engine_LogInfo("Resource Manager Initialized (%d slots)", RES_MAX_ENTRIES);
     return true;
 }
@@ -691,7 +673,7 @@ void Engine_Resource_Unload(int32_t handle)
 
 void Engine_Resource_UnloadAll()
 {
-    s_AllocatedGsPages = 0;
+    s_TextureBytesUsed = 0;
     for (int32_t i = 0; i < RES_MAX_ENTRIES; i++)
     {
         if (s_Entries[i].state != RES_STATE_EMPTY)
@@ -705,5 +687,9 @@ void Engine_Resource_UnloadAll()
 
 void Engine_Resource_Update() { s_CurrentFrame++; }
 
-uint32_t Engine_Resource_GetAllocatedGsPages() { return s_AllocatedGsPages; }
-uint32_t Engine_Resource_GetGsPageBudget() { return GFX_GS_TEXTURE_PAGE_BUDGET; }
+uint32_t Engine_Resource_GetTextureBudgetUsed() { return s_TextureBytesUsed; }
+uint32_t Engine_Resource_GetTextureBudget()
+{
+    Platform* platform = Engine_GetPlatform();
+    return platform ? platform->GetConstant(PlatformConstant::TextureBudgetBytes) : 0u;
+}

@@ -1,25 +1,49 @@
 # App API (`EngineApp`)
 
-The `EngineApp` module (plus `GameAPI.h`) is the **only** interface the application layer is
-permitted to include. All engine subsystems (memory arenas, async I/O, resource streaming, rendering)
-are driven internally. Gameplay is authored in C++ against the friendly `GameAPI` (`GameInit()` /
-`GameUpdate(dt)`); the app shell itself is intentionally minimal: it starts the engine, pumps the
-frame loop, and stops.
+`EngineApp` is the engine's own shell: it brings the subsystems up, advances a frame, and tears
+them down. All engine subsystems (memory arenas, async I/O, resource streaming, rendering) are
+driven internally.
+
+**Gameplay is authored against `GameAPI.h`** (`GameConfigure(config)` / `GameInit()` / `GameUpdate(dt)`) — that is the
+surface game code should reach for; see `engine/include/GameAPI.h`.
 
 ---
 
-## Enforcement
+## No sandbox — convention, not a fence
 
-Controlled by a CMake option in `engine/CMakeLists.txt`:
+Game code once had a curated include fence: `engine/include/app_public/` held forwarding shims and
+a CMake option (`ENGINE_SANDBOX_MODE`) restricted the app target's include path to that directory
+alone. Both are **gone**.
 
-```cmake
-option(ENGINE_SANDBOX_MODE "Restrict app to the curated app_public headers" ON)
-```
+That fence existed to keep a *scripted* app layer out of engine internals. With Lua removed and
+gameplay written natively in C++, the shims were forwarding headers whose entire body was
+`#include "../GameAPI.h"`, and the option existed only to make that indirection load-bearing.
 
-| Mode | App include path | Visible headers |
-| :--- | :--- | :--- |
-| `ON` (default) | `engine/include/app_public/` | `EngineApp.h`, `GameAPI.h` |
-| `OFF` (dev/test) | `engine/include/` | Full engine surface |
+Game code now uses the normal engine headers. The rule is unchanged, it is simply a convention
+rather than a build error:
+
+> Game code should include `GameAPI.h`. Reaching into `EngineMemory.h`, `EngineIO.h`,
+> `EngineResource.h` or the renderer from `game/**` means the API is missing something — extend
+> `GameAPI.h` rather than bypassing it.
+
+---
+
+## Input
+
+`GameAPI.h` exposes three separately named device groups, mirroring the platform layer:
+
+| Group | Functions |
+| :--- | :--- |
+| Gamepad | `IsPadPressed`, `WasPadPressed`, `GetJoyAxis` |
+| Keyboard | `IsKeyDown`, `WasKeyPressed` |
+| Mouse | `IsMouseButtonDown`, `WasMouseButtonPressed`, `GetMousePosition`, `GetMouseDelta`, `GetMouseWheel` |
+
+All of them compile and run everywhere. On a platform with no keyboard or mouse (the PS2) the corresponding calls
+return false/zero rather than pretending. Branch on `game::HasInputDevice("keyboard")`, never on which platform is
+running.
+
+Pad-only game code needs no change to be playable on desktop: Win32 maps a default keyboard layout onto virtual pad 0
+(see `docs/PLATFORMS.md`).
 
 ---
 
@@ -56,14 +80,17 @@ Shuts down all subsystems and releases all memory. Call once after the main loop
 
 ## Logging & Panic
 
-`EngineApp.h` re-declares three functions from `EngineDebug.c` as `extern` prototypes, making them
-available to the app without transitively including `EngineDebug.h`:
+`EngineApp.h` includes `EngineDebug.h`, so logging and panic come with it:
 
 ```c
-extern void Engine_LogInfo(const char *text, ...);
-extern void Engine_LogError(const char *text, ...);
-extern void Engine_Panic(const char *message);
+void Engine_LogInfo(const char *text, ...);
+void Engine_LogError(const char *text, ...);
+void Engine_Panic(const char *message);
 ```
+
+It previously hand-copied these three as `extern` prototypes to avoid pulling in `EngineDebug.h`
+"and transitively raylib.h". raylib is gone and so is the sandbox, so both reasons for the
+duplicate declarations are void — and a duplicated prototype is a prototype that can drift.
 
 ---
 
@@ -85,6 +112,7 @@ Gameplay itself lives in a separate game module implementing the `GameAPI.h` ent
 ```cpp
 #include "GameAPI.h"
 
+void GameConfigure(EngineConfig* config) { /* choose subsystems - see EngineSubsystems.h */ }
 void GameInit() { /* load resources, set initial state */ }
 void GameUpdate(float dt) { /* input, animation, game::Draw*, game::SetCamera3D, ... */ }
 ```
@@ -98,6 +126,7 @@ See `game/src/Game.cpp` and `game/src/SwarmSystem.cpp` for a complete example.
 ```
 EngineStart(token)
   └─ Engine_Init()   — arenas, pool, renderer, pad, IO, resources
+  └─ GameConfigure(config)       — choose subsystems, before the engine exists
   └─ GameInit()
 
 EngineUpdate()

@@ -1,5 +1,6 @@
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <float.h>
@@ -8,13 +9,15 @@
 #include "EngineInput.h"
 #include "graphics/DrawList.h"
 #include "graphics/Renderer.h"
+#include "platform/Platform.h"
 
 // Internal log severity levels for CustomLog(). Previously these matched
 // raylib's TraceLogLevel by name (CustomLog was installed as its trace
 // callback); now that raylib is gone they are just this file's own scheme.
+// Values line up with LogLevel in PlatformKeys.h - CustomLog casts across.
 enum
 {
-    LOG_DEBUG,
+    LOG_DEBUG = 0,
     LOG_INFO,
     LOG_WARNING,
     LOG_ERROR
@@ -40,37 +43,23 @@ static void CustomLog(int logLevel, const char* text, va_list args)
     if (logLevel == LOG_DEBUG)
         return;
 
-    char buffer[1024]; // Increased buffer for safety
-    const char* prefix = "INFO: ";
-
-    if (logLevel == LOG_WARNING)
-        prefix = "WARN: ";
-    else if (logLevel == LOG_ERROR)
-        prefix = "ERR : ";
-
-    int offset = snprintf(buffer, sizeof(buffer), "%s", prefix);
-    if (offset < (int)sizeof(buffer))
-    {
-        vsnprintf(buffer + offset, sizeof(buffer) - offset, text, args);
-    }
+    char buffer[1024];
+    vsnprintf(buffer, sizeof(buffer), text, args);
     buffer[sizeof(buffer) - 1] = '\0';
 
-    // CRITICAL: Replace ALL control characters (especially \n and \r) with spaces
-    // ps2client/plink can hang the EE if control sequences are malformed or too frequent.
-    for (int i = 0; buffer[i] != '\0'; i++)
+    // Severity prefixing, the sink, and any character scrubbing are the
+    // platform's business: the ps2client control-character rule that used to
+    // live here would mangle UTF-8 on a desktop console for no reason.
+    Platform* platform = Engine_GetPlatform();
+    if (platform)
     {
-        unsigned char c = static_cast<unsigned char>(buffer[i]);
-        if (c == '\n' || c == '\r' || c == '\t')
-        {
-            continue;
-        }
-        else if (c < 32 || c > 126)
-        {
-            buffer[i] = '?';
-        }
+        platform->ConsoleWrite(static_cast<LogLevel>(logLevel), buffer);
+        return;
     }
 
-    printf("%s\n", buffer); // Single newline at the end is safe for the kernel flush
+    // Before a platform exists (argv parsing, registry errors) there is nowhere
+    // else to go.
+    printf("%s\n", buffer);
 }
 
 void Engine_InitDebug() { Engine_LogInfo("Engine Debug initialized."); }
@@ -100,29 +89,20 @@ void Engine_DrawDebugOverlay()
 
 void Engine_DrawAsciiTable() {}
 
-void Engine_Panic(const char* message)
+[[noreturn]] void Engine_Panic(const char* message)
 {
-#ifdef DEBUG
-    Engine_LogError("!!! PS2 PANIC !!! %s", message);
+    const char* text = message ? message : "<no message>";
+    Engine_LogError("!!! PANIC !!! %s", text);
 
-    // Draw a red panic screen with the active renderer (PS2GL or GIFTAG). Both
-    // implement the BeginFrame/ClearFrame/DrawRect2D/EndFrame panic path.
-    Renderer* currentRenderer = Engine_GetRenderer();
-    if (currentRenderer && currentRenderer->IsInitialized())
-    {
-        while (true)
-        {
-            currentRenderer->BeginFrame();
-            currentRenderer->ClearFrame(Color3{1.0f, 0.0f, 0.0f});
-            currentRenderer->DrawRect2D(PANIC_UI_PADDING, PANIC_UI_PADDING, 320, 80, Color3{1.0f, 1.0f, 1.0f});
-            currentRenderer->EndFrame();
-        }
-    }
-#else
-    UNUSED_VAR(message);
-    while (1)
-        ;
-#endif
+    Platform* platform = Engine_GetPlatform();
+    if (platform)
+        platform->Panic(text);
+
+    // A panic can precede platform construction, so there is a floor below the
+    // platform: say it on whatever is available and stop.
+    fprintf(stderr, "ERR : !!! PANIC !!! %s\n", text);
+    fflush(stderr);
+    abort();
 }
 
 // ---------------------------------------------------------------------------
@@ -158,11 +138,11 @@ void Engine_PerfLogger_Tick()
 
     // Combo 1: L1+L2+R1+R2 (Console Snapshot)
     const bool snapshotNow =
-        IsGamePadButtonPressed(0, GamePadButton::L1) && IsGamePadButtonPressed(0, GamePadButton::L2) && IsGamePadButtonPressed(0, GamePadButton::R1) && IsGamePadButtonPressed(0, GamePadButton::R2);
+        IsGamePadButtonPressed(0, GamepadButton::L1) && IsGamePadButtonPressed(0, GamepadButton::L2) && IsGamePadButtonPressed(0, GamepadButton::R1) && IsGamePadButtonPressed(0, GamepadButton::R2);
 
     // Combo 2: L1+L2+L3+R3 (UI Toggle)
     const bool toggleNow =
-        IsGamePadButtonPressed(0, GamePadButton::L1) && IsGamePadButtonPressed(0, GamePadButton::L2) && IsGamePadButtonPressed(0, GamePadButton::L3) && IsGamePadButtonPressed(0, GamePadButton::R3);
+        IsGamePadButtonPressed(0, GamepadButton::L1) && IsGamePadButtonPressed(0, GamepadButton::L2) && IsGamePadButtonPressed(0, GamepadButton::L3) && IsGamePadButtonPressed(0, GamepadButton::R3);
 
     // Handle UI Toggle (Rising Edge)
     if (toggleNow)
@@ -202,8 +182,8 @@ void Engine_PerfLogger_Tick()
 
     const double timeSec = Engine_GetTotalTime();
     const uint32_t frameNum = Engine_GetFrameCount();
-    const uint32_t gsUsed = Engine_Resource_GetAllocatedGsPages();
-    const uint32_t gsBudget = Engine_Resource_GetGsPageBudget();
+    const uint32_t texUsed = Engine_Resource_GetTextureBudgetUsed();
+    const uint32_t texBudget = Engine_Resource_GetTextureBudget();
 
     // --- Print snapshot ---
     Engine_LogInfo("[PERF] ========== PERFORMANCE SNAPSHOT ==========");
@@ -212,11 +192,10 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] Engine FPS        : %.3f", Engine_GetFPS());
 
     Engine_LogInfo("[PERF] --- Frame Breakdown (ms) ---");
-#ifdef REGION_PAL
-    Engine_LogInfo("[PERF] Target Budget     : 20.00 ms (50 FPS)");
-#else
-    Engine_LogInfo("[PERF] Target Budget     : 16.67 ms (60 FPS)");
-#endif
+    // Frame budget comes from the platform, not a region #ifdef: PAL and NTSC are
+    // separate platforms now, and a desktop platform has its own answer.
+    const float targetMs = PLATFORM_TARGET_FRAME_MICROS / 1000.0f;
+    Engine_LogInfo("[PERF] Target Budget     : %5.2f ms (%.0f FPS)", targetMs, 1000.0f / targetMs);
 
     float logicMs = Engine_GetLogicTime() * 1000.0f;
     float renderMs = Engine_GetRenderTime() * 1000.0f;
@@ -226,7 +205,7 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] Game Logic        : %5.2f ms", logicMs);
     Engine_LogInfo("[PERF] C++ Render        : %5.2f ms", renderMs);
     Engine_LogInfo("[PERF] GPU Wait (Vsync)  : %5.2f ms", waitMs);
-    Engine_LogInfo("[PERF] GS Wait (EndFrame): %5.2f ms", ds.gsWaitMs);
+    Engine_LogInfo("[PERF] Present Wait      : %5.2f ms", ds.presentWaitMs);
     Engine_LogInfo("[PERF] Total Frame Time  : %5.2f ms", totalMs);
 
     Engine_LogInfo("[PERF] --- Renderer Throughput (measured) ---");
@@ -234,9 +213,10 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] Tris culled       : %u", ds.trisCulled);
     Engine_LogInfo("[PERF] Verts transformed : %u", ds.vertsTransformed);
     Engine_LogInfo("[PERF] Texture binds     : %u", ds.texBinds);
-    if (ds.packetQwordsUsed > 0)
+    if (ds.submitBufferCapacityBytes > 0)
     {
-        Engine_LogInfo("[PERF] GIF packet        : %u / %u qwords (%.1f KB)", ds.packetQwordsUsed, static_cast<unsigned>(GFX_GIFTAG_PACKET_QWORDS), (ds.packetQwordsUsed * 16.0f) / 1024.0f);
+        const float pct = (100.0f * ds.submitBufferUsedBytes) / ds.submitBufferCapacityBytes;
+        Engine_LogInfo("[PERF] Submit buffer     : %.1f / %.1f KB (%.0f%%)", ds.submitBufferUsedBytes / 1024.0f, ds.submitBufferCapacityBytes / 1024.0f, pct);
     }
 
     Engine_LogInfo("[PERF] --- Draw Lists ---");
@@ -249,14 +229,14 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] Target            : (%.2f, %.2f, %.2f)", cam.target.x, cam.target.y, cam.target.z);
     Engine_LogInfo("[PERF] FOV               : %.2f", cam.fovy);
 
-    Engine_LogInfo("[PERF] --- GS VRAM (Textures) ---");
-    Engine_LogInfo("[PERF] Pages used        : %u / %u (%u%% full)", gsUsed, gsBudget, gsBudget ? (gsUsed * 100u / gsBudget) : 0u);
+    Engine_LogInfo("[PERF] --- Texture Memory ---");
+    Engine_LogInfo("[PERF] Used              : %u / %u KB (%u%% full)", texUsed / 1024u, texBudget / 1024u, texBudget ? (texUsed * 100u / texBudget) : 0u);
 
     Engine_LogInfo("[PERF] --- Memory Management ---");
     size_t arenaTotalUsed = 0;
     size_t arenaTotalCap = 0;
 
-    // 1. System Heap (Authoritative total for all malloc/memalign)
+    // 1. System heap, as the platform reports it
     size_t heapTotal = 0, heapUsed = 0, heapFree = 0;
     Engine_GetHeapStats(&heapTotal, &heapUsed, &heapFree);
 
@@ -298,13 +278,11 @@ void Engine_PerfLogger_Tick()
             Engine_LogInfo("[PERF] Port %u            : CONNECTED", p);
     }
 
-#if defined(PLATFORM_PLAYSTATION2)
     Engine_LogInfo("[PERF] --- System ---");
-    Engine_LogInfo("[PERF] Platform         : PlayStation 2 (EE)");
-#else
-    Engine_LogInfo("[PERF] --- System ---");
-    Engine_LogInfo("[PERF] Platform         : PC (development build)");
-#endif
+    {
+        const Platform* platform = Engine_GetPlatform();
+        Engine_LogInfo("[PERF] Platform         : %s", platform ? platform->GetName() : "<none>");
+    }
 
     Engine_LogInfo("[PERF] =============================================");
 }

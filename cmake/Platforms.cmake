@@ -1,0 +1,118 @@
+# ---------------------------------------------------------------------------
+# Platform registry and selection.
+#
+# PLATFORMS_TO_SUPPORT lists which platforms this configure builds. It defaults
+# to every known platform and is then filtered against the active toolchain, so
+# the common case needs no flag:
+#
+#   cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/ps2dev.cmake    -B build/ps2
+#   cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/mingw-w64.cmake -B build/win32
+#
+# Each surviving platform gets its own engine library, its own executable, and
+# its own self-contained dist/<name>/ bundle. Nothing is shared between bundles,
+# so a PAL disc image can never be handed to a Win32 build.
+# ---------------------------------------------------------------------------
+
+set(ENGINE_KNOWN_PLATFORMS PS2PAL PS2NTSC WIN32)
+
+# Per-platform metadata. Keep these together: adding a platform should be one
+# block here plus one engine/platform/<dir>/ directory.
+#   _DIR     engine/platform subdirectory holding the concrete platform
+#   _BASE    shared base directory (empty when the platform has no base)
+#   _SYSTEM  CMAKE_SYSTEM_NAME this platform requires
+#   _EXE     executable file name
+#   _DIST    dist/<name>/ bundle directory
+set(PLATFORM_PS2PAL_DIR     "ps2/pal")
+set(PLATFORM_PS2PAL_BASE    "ps2")
+set(PLATFORM_PS2PAL_SYSTEM  "Generic")
+set(PLATFORM_PS2PAL_EXE     "main.elf")
+set(PLATFORM_PS2PAL_DIST    "ps2pal")
+
+set(PLATFORM_PS2NTSC_DIR    "ps2/ntsc")
+set(PLATFORM_PS2NTSC_BASE   "ps2")
+set(PLATFORM_PS2NTSC_SYSTEM "Generic")
+set(PLATFORM_PS2NTSC_EXE    "main.elf")
+set(PLATFORM_PS2NTSC_DIST   "ps2ntsc")
+
+set(PLATFORM_WIN32_DIR      "win32")
+set(PLATFORM_WIN32_BASE     "")
+set(PLATFORM_WIN32_SYSTEM   "Windows")
+set(PLATFORM_WIN32_EXE      "game.exe")
+set(PLATFORM_WIN32_DIST     "win32")
+
+set(PLATFORMS_TO_SUPPORT "${ENGINE_KNOWN_PLATFORMS}"
+    CACHE STRING "Platforms to build. Defaults to every known platform, filtered by the active toolchain.")
+
+# Did the user name platforms explicitly, or are we filtering the default list?
+# An explicit list naming an incompatible platform is a user error; the default
+# list fanning out across toolchains is not.
+set(_EXPLICIT_LIST TRUE)
+if("${PLATFORMS_TO_SUPPORT}" STREQUAL "${ENGINE_KNOWN_PLATFORMS}")
+    set(_EXPLICIT_LIST FALSE)
+endif()
+
+set(ENGINE_ACTIVE_PLATFORMS "")
+set(_SKIPPED "")
+
+foreach(_P ${PLATFORMS_TO_SUPPORT})
+    string(TOUPPER "${_P}" _P)
+
+    if(NOT _P IN_LIST ENGINE_KNOWN_PLATFORMS)
+        message(FATAL_ERROR
+            "Unknown platform '${_P}'.\n"
+            "Known platforms: ${ENGINE_KNOWN_PLATFORMS}")
+    endif()
+
+    set(_DIR "${CMAKE_SOURCE_DIR}/engine/platform/${PLATFORM_${_P}_DIR}")
+    set(_CMAKE_FRAGMENT "${CMAKE_SOURCE_DIR}/engine/platform/${PLATFORM_${_P}_BASE}/platform.cmake")
+    if(PLATFORM_${_P}_BASE STREQUAL "")
+        set(_CMAKE_FRAGMENT "${_DIR}/platform.cmake")
+    endif()
+
+    # A platform whose sources do not exist yet is skipped, never a hard error:
+    # the known-platform list is deliberately ahead of the implementation.
+    if(NOT EXISTS "${_CMAKE_FRAGMENT}")
+        list(APPEND _SKIPPED "${_P} (not implemented yet)")
+        continue()
+    endif()
+
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL PLATFORM_${_P}_SYSTEM)
+        if(_EXPLICIT_LIST)
+            message(FATAL_ERROR
+                "Platform '${_P}' needs CMAKE_SYSTEM_NAME=${PLATFORM_${_P}_SYSTEM}, "
+                "but this toolchain gives '${CMAKE_SYSTEM_NAME}'.\n"
+                "Use the matching toolchain file in toolchains/, or drop '${_P}' from PLATFORMS_TO_SUPPORT.")
+        endif()
+        list(APPEND _SKIPPED "${_P} (needs a ${PLATFORM_${_P}_SYSTEM} toolchain)")
+        continue()
+    endif()
+
+    list(APPEND ENGINE_ACTIVE_PLATFORMS "${_P}")
+endforeach()
+
+if(NOT ENGINE_ACTIVE_PLATFORMS)
+    message(FATAL_ERROR
+        "No platform survives this configuration.\n"
+        "Requested: ${PLATFORMS_TO_SUPPORT}\n"
+        "Toolchain reports CMAKE_SYSTEM_NAME='${CMAKE_SYSTEM_NAME}'.\n"
+        "Pick a toolchain from toolchains/ that matches one of: ${ENGINE_KNOWN_PLATFORMS}")
+endif()
+
+message(STATUS "Platforms: ${ENGINE_ACTIVE_PLATFORMS}")
+if(_SKIPPED)
+    message(STATUS "  skipped: ${_SKIPPED}")
+endif()
+
+# The first surviving platform is the default for anything that needs to pick
+# one (e.g. which ISO the run-emulator target launches).
+list(GET ENGINE_ACTIVE_PLATFORMS 0 ENGINE_DEFAULT_PLATFORM)
+
+# Absolute paths a platform's sources and constants live at.
+function(engine_platform_dirs PLATFORM OUT_VARIANT_DIR OUT_BASE_DIR)
+    set(${OUT_VARIANT_DIR} "${CMAKE_SOURCE_DIR}/engine/platform/${PLATFORM_${PLATFORM}_DIR}" PARENT_SCOPE)
+    if(PLATFORM_${PLATFORM}_BASE STREQUAL "")
+        set(${OUT_BASE_DIR} "" PARENT_SCOPE)
+    else()
+        set(${OUT_BASE_DIR} "${CMAKE_SOURCE_DIR}/engine/platform/${PLATFORM_${PLATFORM}_BASE}" PARENT_SCOPE)
+    endif()
+endfunction()

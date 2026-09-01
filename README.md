@@ -31,17 +31,20 @@ We provide a convenient script in the `tools/` directory to effortlessly wipe ol
 `tools/build.py` detects Windows and automatically re-invokes itself inside WSL, so the same command works everywhere:
 
 ```bash
-python3 ./tools/build.py [debug|release] [pal|ntsc]
+# Every platform the toolchain supports (PS2: both PAL and NTSC)
+python3 ./tools/build.py [debug|release]
+
+# One region only
+python3 ./tools/build.py debug pal
+python3 ./tools/build.py debug --platforms PS2NTSC
 ```
 
-Alternatively, you can execute the CMake generation sequence manually:
+Or drive CMake directly. `PLATFORMS_TO_SUPPORT` defaults to every known platform and is
+filtered against the toolchain, so it usually needs no flag:
 
 ```bash
-# 1. Generates the Makefile build cache targeting the custom toolchain
-cmake -DCMAKE_TOOLCHAIN_FILE=ps2dev.cmake -B build/debug-pal
-
-# 2. Compiles the static library and test application
-cmake --build build/debug-pal
+cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/ps2dev.cmake -B build/ps2
+cmake --build build/ps2 --target dist
 ```
 
 ## Running the Emulator
@@ -49,18 +52,42 @@ cmake --build build/debug-pal
 A script is provided to quickly launch the generated ISO in PCSX2.
 
 ```bash
-python3 ./tools/runEmulator.py dist/engine.iso
+python3 ./tools/runEmulator.py dist/ps2pal/engine.iso
 ```
 
 ## Build Artifacts
 
-All successfully linked targets are automatically routed away from the build sludge into the dedicated `dist/` directory located at the root of the project workspace.
+Each platform gets its own self-contained bundle under `dist/`, so builds never mix:
 
-- `dist/main.elf` - The raw, unpacked PS2 executable (Recommended for rapid testing over network using `ps2client`).
-- `dist/engine.iso` - A completely bundled, self-bootable disk image ready for PCSX2 or mounting on authentic hardware (relies on `SYSTEM.CNF`).
+```
+dist/ps2pal/    main.elf  engine.iso  main.sym     SYSTEM.CNF VMODE=PAL
+dist/ps2ntsc/   main.elf  engine.iso  main.sym     SYSTEM.CNF VMODE=NTSC
+dist/win32/     game.exe  RASSETS.PS2R  LEVELS/
+```
+
+- `main.elf` - the raw PS2 executable (handy for rapid testing over the network with `ps2client`).
+- `engine.iso` - a self-bootable disc image for PCSX2 or real hardware.
 
 ### Custom ISO Assets
 
 Any custom assets (textures, scripts, data files) that you want to include in the generated `.iso` should be placed in `game/cd_files/`. These files will be automatically bundled at the **root** of the ISO filesystem during the build process.
 
 For example, a file at `game/cd_files/levels/map.bin` will be accessible on the PS2 as `cdrom0:\\LEVELS\\MAP.BIN;1`.
+
+## Documentation
+
+[docs/PLATFORMS.md](docs/PLATFORMS.md) indexes everything. Start there, or jump to:
+
+| | |
+|---|---|
+| [Architecture](docs/ENGINE.md) | Layers, startup order, subsystems, the constants rule |
+| [Guidelines](docs/guidelines/) | How to add a system or a platform — read before starting |
+| [Game API](docs/APP_API.md) | The surface game code uses |
+| [Build pipeline](docs/PIPELINE.md) | Compile, cook, package, distribute |
+| [Authoring assets](docs/ASSET_AUTHORING.md) | Adding content |
+| [PlayStation 2](docs/ps2/PLATFORM.md) | Platform spec, budgets, renderers |
+| [Win32](docs/win32/PLATFORM.md) | Platform spec, budgets, renderers |
+
+Specs carry the reasoning that is deliberately not in the source — hardware
+quirks, race conditions, renderer limits, budget ceilings. Read the relevant one
+before changing what it describes.

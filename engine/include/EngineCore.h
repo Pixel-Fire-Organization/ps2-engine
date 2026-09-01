@@ -2,23 +2,37 @@
 
 #include <cstddef>
 #include <cstdint>
+
+#include "EngineSubsystems.h"
 #include "graphics/Renderer.h"
 
-// Renderer backend selection. Chosen at build time via a CMake compile define
-// (-DRENDERER_BACKEND_PS2GL or -DRENDERER_BACKEND_GIFTAG). Default to the PS2GL
-// backend if neither was supplied so a bare compile still links a renderer.
-#if !defined(RENDERER_BACKEND_PS2GL) && !defined(RENDERER_BACKEND_GIFTAG)
-    #define RENDERER_BACKEND_PS2GL 1
-#endif
-
-typedef struct
+// Named (not an anonymous typedef) so the platform layer can forward-declare it
+// without pulling this header, and with it the whole renderer include tree.
+struct EngineConfig
 {
     const char* windowTitle;
     const char* resourceLocationToken;
-    bool enablePerfLogger;
-} EngineConfig;
 
-bool Engine_Init(EngineConfig config);
+    // Which subsystems to bring up. The game sets this in GameConfigure(),
+    // before the engine starts. Leave null for the default set (everything).
+    // See EngineSubsystems.h and docs/ENGINE.md.
+    const EngineSubsystem* subsystems;
+    uint32_t subsystemCount;
+};
+
+// Bring the engine up on an already-initialised platform and renderer, both
+// selected by Engine_Main. The engine does not construct either: which
+// backends exist is the platform's business.
+class Platform;
+
+// Reserve the engine memory map from the platform and bring the arenas and
+// main pool up. MUST run before any renderer is constructed: every backend
+// takes its geometry staging buffer from ARENA_RENDERER slot 0 in its
+// constructor. Engine_Main calls this, then builds the renderer, then
+// Engine_Init.
+bool Engine_InitMemory(Platform* platform);
+
+bool Engine_Init(EngineConfig config, Platform* platform, Renderer* renderer);
 bool Engine_Is_GFX_Initialized();
 Renderer* Engine_GetRenderer();
 
@@ -43,14 +57,13 @@ float Engine_GetWaitTime();
 // heartbeat log and perf snapshot to report frame number / detect hangs.
 uint32_t Engine_GetFrameCount();
 
-// Constructs a full filesystem path by combining the active resource location
-// token with a relative path, inserting the correct separator and version
-// suffix for the device type (e.g. cdrom0:\\FOLDER\\FILE;1, host:FILE).
+// Combine the active resource location token with a relative path. The active
+// platform owns the grammar - separators, and any device or version suffix.
 // Returns false if any argument is NULL or bufSize is 0.
 bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf, size_t bufSize);
 
 // Canonicalise an asset path into the stable key used for resource dedup and
-// archive lookup: strips the device token (cdrom0:/mass0:/hdd0:/host:) and any
+// archive lookup: strips any device token (everything up to the first ':') and
 // ";N" version suffix, converts '\\' to '/', upper-cases, and drops leading
 // slashes. e.g. "cdrom0:/RASSETS/BOX.PS2A;1" and the baked dependency string
 // "RASSETS/BOX.PS2A" both canonicalise to "RASSETS/BOX.PS2A". out must hold at

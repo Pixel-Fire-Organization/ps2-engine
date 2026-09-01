@@ -154,6 +154,12 @@ static void Internal_SpawnEntities(Level* level)
 
 bool Engine_Level_Load(Level* level)
 {
+    if (!Engine_Subsystem_IsEnabled(EngineSubsystem::Level))
+    {
+        Engine_LogError("Level: the level subsystem was not requested; nothing can be loaded");
+        return false;
+    }
+
     if (!level)
         return false;
 
