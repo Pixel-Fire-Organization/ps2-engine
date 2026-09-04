@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DesktopGeometry.h"
+#include "graphics/StagedGeometry.h"
 #include "EngineCore.h"
 #include "graphics/Renderer.h"
 
@@ -115,7 +115,7 @@ private:
 
     // Geometry staging is shared with the OpenGL backend: the transform and
     // texture batching are identical, only the upload differs.
-    DesktopGeometry m_geometry;
+    StagedGeometry m_geometry;
 
     Color3 m_clearColor;
     uint32_t m_width;

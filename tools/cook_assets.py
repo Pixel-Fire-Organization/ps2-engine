@@ -58,6 +58,8 @@ def cooklist_for_platform(project_root, platform):
     name = (platform or "").lower()
     if name.startswith("ps2"):
         return os.path.join(project_root, "engine", "platform", "ps2", "cooklist.json")
+    if name.startswith("vita"):
+        return os.path.join(project_root, "engine", "platform", "vita", "cooklist.json")
     if name:
         return os.path.join(project_root, "engine", "platform", name, "cooklist.json")
     return None

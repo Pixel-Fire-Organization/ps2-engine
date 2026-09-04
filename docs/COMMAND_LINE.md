@@ -32,7 +32,7 @@ Overflow (`CMD_MAX_OPTIONS`, `CMD_MAX_POSITIONALS`) is an actionable error, neve
 
 | Option | Argument | Notes |
 | :--- | :--- | :--- |
-| `--renderer` | `giftag`, `ps2gl`, `opengl`, `webgpu`, `null` | The genuinely runtime-selectable axis. Unsupported names log the compiled-in list and fall back to the platform default. |
+| `--renderer` | `giftag`, `ps2gl`, `opengl`, `webgpu`, `gxm`, `vitagl`, `null` | The genuinely runtime-selectable axis. Unsupported names log the compiled-in list and fall back to the platform default. |
 | `--platform` | a platform name | Validation / self-identification. A bundle ships exactly one platform, so a mismatch logs what the build actually contains and continues. |
 | `--help` | — | Prints options plus the compiled-in platform and renderer lists, then exits. |
 | `--gl-version` | `<2.1\|3.3\|4.3\|4.6>` | Win32/OpenGL: pin the context version. Default: the highest the driver grants. |

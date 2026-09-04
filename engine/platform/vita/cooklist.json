@@ -1,0 +1,22 @@
+{
+  "platform": "vita",
+  "description": "A programmable graphics processor with 112 MB of video memory. It has no reason to carry the PS2 storage modes, and expanding them at load time is wasted work, so textures are cooked directly uploadable. The hardware also supports compressed formats that would cost far less video memory, but the cook list has no vocabulary for them yet - see docs/vita/PLATFORM.md. The ceiling is a policy budget, not a hardware one.",
+  "assets": {
+    "TEXTURE": {
+      "enabled": true,
+      "format": "rgba32",
+      "max_width": 1024,
+      "max_height": 1024,
+      "budget_bytes": 67108864
+    },
+    "MODEL": {
+      "enabled": true
+    },
+    "SOUND": {
+      "enabled": false
+    },
+    "FONT": {
+      "enabled": false
+    }
+  }
+}

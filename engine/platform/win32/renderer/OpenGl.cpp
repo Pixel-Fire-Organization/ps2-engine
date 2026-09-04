@@ -7,6 +7,7 @@
 #include "EngineDebug.h"
 #include "EngineMemory.h"
 #include "Macros.h"
+#include "graphics/TextureExpand.h"
 #include "platform/Platform.h"
 
 namespace
@@ -78,9 +79,6 @@ void main() {
     gl_FragColor = vec4(t.rgb * vColor.rgb, t.a * vColor.a);
 }
 )GLSL";
-
-    // TIM2 stores alpha with 0x80 meaning fully opaque, not 0xFF.
-    inline uint8_t ExpandPs2Alpha(uint8_t a) { return (a >= 0x80u) ? 0xFFu : static_cast<uint8_t>(a * 2u); }
 
     GLuint CompileShader(GLenum type, const char* source)
     {
@@ -356,7 +354,7 @@ bool OpenGlRenderer::CreateWhiteTexture()
 
 void OpenGlRenderer::SetupVertexAttributes()
 {
-    const GLsizei stride = sizeof(DesktopGeometry::Vertex);
+    const GLsizei stride = sizeof(StagedGeometry::Vertex);
     gl_EnableVertexAttribArray(0);
     gl_VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const void*>(0));
     gl_EnableVertexAttribArray(1);
@@ -405,47 +403,11 @@ uint32_t OpenGlRenderer::UploadTexture(const TextureUpload& upload)
         return 0;
     }
 
-    if (upload.format == PixelFormat::RGBA32)
+    if (!Gfx_ExpandToRgba8(upload, rgba, texels * 4u))
     {
-        const uint8_t* src = static_cast<const uint8_t*>(upload.levelPtr[0]);
-        for (size_t i = 0; i < texels; ++i)
-        {
-            rgba[i * 4 + 0] = src[i * 4 + 0];
-            rgba[i * 4 + 1] = src[i * 4 + 1];
-            rgba[i * 4 + 2] = src[i * 4 + 2];
-            rgba[i * 4 + 3] = ExpandPs2Alpha(src[i * 4 + 3]);
-        }
-    }
-    else if (upload.format == PixelFormat::RGBA16)
-    {
-        // A1B5G5R5 packed little-endian: 5 bits each, alpha in the top bit.
-        const uint16_t* src = static_cast<const uint16_t*>(upload.levelPtr[0]);
-        for (size_t i = 0; i < texels; ++i)
-        {
-            const uint16_t p = src[i];
-            rgba[i * 4 + 0] = static_cast<uint8_t>(((p >> 0) & 0x1Fu) * 255u / 31u);
-            rgba[i * 4 + 1] = static_cast<uint8_t>(((p >> 5) & 0x1Fu) * 255u / 31u);
-            rgba[i * 4 + 2] = static_cast<uint8_t>(((p >> 10) & 0x1Fu) * 255u / 31u);
-            rgba[i * 4 + 3] = (p & 0x8000u) ? 0xFFu : 0x00u;
-        }
-    }
-    else // PAL8
-    {
-        const uint8_t* idx = static_cast<const uint8_t*>(upload.levelPtr[0]);
-        const uint8_t* clut = static_cast<const uint8_t*>(upload.clut);
-        for (size_t i = 0; i < texels; ++i)
-        {
-            if (!clut)
-            {
-                rgba[i * 4 + 0] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = rgba[i * 4 + 3] = 0xFFu;
-                continue;
-            }
-            const uint8_t* e = clut + static_cast<size_t>(idx[i]) * 4u;
-            rgba[i * 4 + 0] = e[0];
-            rgba[i * 4 + 1] = e[1];
-            rgba[i * 4 + 2] = e[2];
-            rgba[i * 4 + 3] = ExpandPs2Alpha(e[3]);
-        }
+        free(rgba);
+        Engine_LogError("OpenGlRenderer: could not expand a %ux%u texture", width, height);
+        return 0;
     }
 
     GLuint tex = 0;
@@ -577,7 +539,7 @@ void OpenGlRenderer::UploadAndDraw()
     if (total == 0)
         return;
 
-    const GLsizei stride = sizeof(DesktopGeometry::Vertex);
+    const GLsizei stride = sizeof(StagedGeometry::Vertex);
     const GLsizei bytes = static_cast<GLsizei>(total) * stride;
 
     gl_BindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
@@ -605,10 +567,10 @@ void OpenGlRenderer::UploadAndDraw()
     if (count3D > 0)
     {
         glEnable(GL_DEPTH_TEST);
-        DesktopGeometry::BuildViewProjection(m_drawLists.GetCamera3D(), m_width, m_height, false, matrix);
+        StagedGeometry::BuildViewProjection(m_drawLists.GetCamera3D(), m_width, m_height, false, matrix);
         gl_UniformMatrix4fv(m_uniformViewProj, 1, GL_FALSE, matrix);
 
-        const DesktopGeometry::DrawRun* runs = m_geometry.Runs();
+        const StagedGeometry::DrawRun* runs = m_geometry.Runs();
         for (uint32_t i = 0; i < m_geometry.RunCount(); ++i)
         {
             glBindTexture(GL_TEXTURE_2D, runs[i].texture ? runs[i].texture : m_whiteTexture);
@@ -620,7 +582,7 @@ void OpenGlRenderer::UploadAndDraw()
     if (count2D > 0)
     {
         glDisable(GL_DEPTH_TEST);
-        DesktopGeometry::BuildOrtho2D(m_width, m_height, false, matrix);
+        StagedGeometry::BuildOrtho2D(m_width, m_height, false, matrix);
         gl_UniformMatrix4fv(m_uniformViewProj, 1, GL_FALSE, matrix);
         glBindTexture(GL_TEXTURE_2D, m_whiteTexture);
         glDrawArrays(GL_TRIANGLES, static_cast<GLint>(count3D), static_cast<GLsizei>(count2D));

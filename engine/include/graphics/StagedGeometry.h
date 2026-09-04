@@ -4,14 +4,13 @@
 
 #include "graphics/DrawList.h"
 
-// Draw runs per frame - a run is a span of vertices sharing one texture.
-#define DESKTOP_MAX_DRAW_RUNS 1024
+#define GFX_MAX_DRAW_RUNS 1024
 
-class DesktopGeometry final
+/// Processor-side geometry staging for backends that rebuild their vertex data
+/// each frame and upload it once. Not used by the PS2 backends.
+class StagedGeometry final
 {
 public:
-    // Interleaved, because everything is rebuilt per frame anyway - the
-    // separated stride-0 layout the PS2 needs buys nothing here.
     struct Vertex
     {
         float x, y, z;
@@ -28,13 +27,13 @@ public:
         uint32_t texture; // backend texture handle; 0 = untextured
     };
 
-    DesktopGeometry();
-    ~DesktopGeometry();
+    StagedGeometry();
+    ~StagedGeometry();
 
-    DesktopGeometry(const DesktopGeometry&) = delete;
-    DesktopGeometry(DesktopGeometry&&) = delete;
-    DesktopGeometry& operator=(const DesktopGeometry&) = delete;
-    DesktopGeometry& operator=(DesktopGeometry&&) = delete;
+    StagedGeometry(const StagedGeometry&) = delete;
+    StagedGeometry(StagedGeometry&&) = delete;
+    StagedGeometry& operator=(const StagedGeometry&) = delete;
+    StagedGeometry& operator=(StagedGeometry&&) = delete;
 
     // Clear the 3D staging for a new frame. 2D is NOT cleared here: DrawRect2D
     // runs during GameUpdate, before the renderer's BeginFrame, so wiping it at
@@ -84,7 +83,7 @@ private:
     uint32_t m_count2D;
     uint32_t m_capacity2D;
 
-    DrawRun m_runs[DESKTOP_MAX_DRAW_RUNS];
+    DrawRun m_runs[GFX_MAX_DRAW_RUNS];
     uint32_t m_runCount;
 
     DrawStats* m_stats; // borrowed for the duration of BuildFrame

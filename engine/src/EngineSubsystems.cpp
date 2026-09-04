@@ -27,7 +27,8 @@ namespace
     const uint32_t kDependencyCount = sizeof(kDependencies) / sizeof(kDependencies[0]);
 
     const EngineSubsystem kAll[] = {
-        EngineSubsystem::Io, EngineSubsystem::Archive, EngineSubsystem::Resource, EngineSubsystem::Level, EngineSubsystem::Sector, EngineSubsystem::Input, EngineSubsystem::PerfLogger,
+        EngineSubsystem::Io,    EngineSubsystem::Archive, EngineSubsystem::Resource,    EngineSubsystem::Level,
+        EngineSubsystem::Sector, EngineSubsystem::Input,   EngineSubsystem::Achievement, EngineSubsystem::PerfLogger,
     };
 }
 
@@ -69,6 +70,8 @@ const char* Engine_Subsystem_Name(EngineSubsystem subsystem)
         return "sector";
     case EngineSubsystem::Input:
         return "input";
+    case EngineSubsystem::Achievement:
+        return "achievement";
     case EngineSubsystem::PerfLogger:
         return "perflogger";
     case EngineSubsystem::Count:

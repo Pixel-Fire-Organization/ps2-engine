@@ -18,12 +18,17 @@ The engine targets multiple platforms through one abstract interface — the sam
 - **PS2 is a base, not a target**: `engine/platform/ps2/` holds everything shared by the console (`Ps2Platform`,
   abstract); `ps2/pal/` and `ps2/ntsc/` supply identity and register themselves. There is deliberately no bare `PS2` —
   a build always resolves to one region, and each region ships as its own binary.
+- **Vita is the same pattern**: `engine/platform/vita/` holds `VitaPlatform` (abstract); `vita/handheld/` and
+  `vita/tv/` supply identity. They differ in pad count (1 vs 4) and in whether touch surfaces exist — both
+  compile-time, which is why they are separate binaries rather than one that probes at startup.
 - **Keyed accessors**: every generic getter takes an `enum class` key from `engine/include/platform/PlatformKeys.h` —
   `PlatformConstant`, `PlatformCapability`, `GamepadButton`/`GamepadStick`/`GamepadTrigger`, `KeyboardKey`,
   `MouseButton`. Never a string or a bare index.
-- **Input is three separate device groups**: `Gamepad_*`, `Keyboard_*`, `Mouse_*`. A platform that lacks a device
-  returns honest stubs (false/zero) and reports it through `HasCapability` — it never emulates one device as another.
-  `PollInput()` fills a snapshot once per frame; all queries read that snapshot.
+- **Input is four separate device groups**: `Gamepad_*`, `Keyboard_*`, `Mouse_*`, `Touch_*`. A platform that lacks a
+  device returns honest stubs (false/zero) and reports it through `HasCapability` — it never emulates one device as
+  another, and in particular **a mouse is not a touchscreen** in either direction. `PollInput()` fills a snapshot once
+  per frame; all queries read that snapshot. Touch positions are normalised to [0,1] over their own surface, never
+  pixels — a rear touch surface has no pixel correspondence to anything on screen.
 - **Registration**: each concrete platform calls `PLATFORM_DEFINE_BUILTIN(id, "name", Type)` at file scope in its
   `Platform.cpp`, which defines `Platform_CreateBuiltin()`. `Engine_Main` calls that **directly** — do not replace it
   with static-initialiser self-registration: the platform lives in a static library, and a linker only extracts an
@@ -36,10 +41,11 @@ The engine targets multiple platforms through one abstract interface — the sam
 - **Startup flags**: `engine/include/CommandLine.h` parses argv into a fixed static table (no heap, no STL) and is the
   reusable place for engine and game launch flags alike.
 
-**Current state**: PS2 and Win32 are both live. The engine runs entirely through `Platform` - memory map, clock,
+**Current state**: PS2, Win32 and Vita are all live. The engine runs entirely through `Platform` - memory map, clock,
 threads/semaphores, file access, input, console/panic and renderer construction - and `engine/src/` contains no OS
 calls. `dist/win32/game.exe` opens a real window and renders the scene-select menu through WebGPU at vsync, from the
-same unmodified `game/**` sources the PS2 build uses.
+same unmodified `game/**` sources the PS2 build uses. `dist/vita/` and `dist/vitatv/` produce installable `.vpk`
+packages carrying the executable, assets, worlds and store-front metadata.
 
 Remaining: the skybox and far-field paths in both desktop backends, and `TagRenderer::RenderLevel()` before the
 PS2 default can move to giftag.
@@ -81,14 +87,31 @@ one, `GetDefaultRenderer()` returns it, and `GetFallbackRenderer()` defines the 
 backends under different `RendererId`s. The classes were renamed from `GLRenderer`/`TagRenderer` and moved to
 `engine/platform/ps2/renderer/` precisely so that distinction is visible at the call site.
 
+The Vita has two backends on the same pattern: `GxmRenderer` drives the console graphics API directly and is the
+default, `VitaGlRenderer` is a fixed-function subset over the same API kept as a known-good reference. `vitaGL` is
+**unrelated** to the desktop OpenGL backend despite the name, exactly as `ps2gl` is.
+
+`StagedGeometry` (`engine/include/graphics/StagedGeometry.h`) is the shared processor-side geometry stager used by
+every backend that rebuilds its vertex data each frame and uploads it once — both desktop backends and both Vita
+ones. Because they stage identically, a frame difference between two of them is a bug in one, not a difference in
+what was submitted. The PS2 backends do NOT use it: they build a stride-0 layout straight into a transfer packet.
+`Gfx_ExpandToRgba8` (`engine/include/graphics/TextureExpand.h`) is likewise shared — every non-PS2 backend expands
+cooked console pixel formats to RGBA8 on upload, and it was duplicated per backend before.
+
 `NullRenderer` (`engine/src/graphics/NullRenderer.cpp`) is platform-neutral and last in every fallback chain: it
 accepts every call, records draw-list counts so the perf snapshot still works, and draws nothing. It is what lets a
 new platform boot and be validated before any graphics code exists.
 
 ## Toolchain & Environment
 
-- **Environment Variable**: `PS2DEV` must be set to the root of the PS2 toolchain (e.g., `/usr/local/ps2dev`).
-- **Cross-Compilation**: Uses `toolchains/ps2dev.cmake` for builds targeting `mips64r5900el-ps2-elf`.
+- **Environment Variables**: `PS2DEV` must be set to the root of the PS2 toolchain (e.g. `/usr/local/ps2dev`), and
+  `VITASDK` to the root of the Vita toolchain (e.g. `/usr/local/vitasdk`), with `$VITASDK/bin` on `PATH`.
+- **Cross-Compilation**: `toolchains/ps2dev.cmake` targets `mips64r5900el-ps2-elf`; `toolchains/vitasdk.cmake` targets
+  `arm-vita-eabi` and **appends** its flags rather than forcing them, because the SDK adds the linker flag that keeps
+  the relocation table and the executable conversion fails without it.
+- **Toolchain identity**: every toolchain file sets `ENGINE_TOOLCHAIN_ID`, and `cmake/Platforms.cmake` filters
+  platforms on that rather than on `CMAKE_SYSTEM_NAME` — both console toolchains report `Generic`, so the system name
+  alone cannot tell them apart and a Vita configure would try to build PS2 with an ARM compiler.
 - **Compiler/Linker**:
     - The engine is C++ throughout.
     - CMake property: `set_target_properties(<target> PROPERTIES LINKER_LANGUAGE CXX)`.
@@ -105,6 +128,9 @@ new platform boot and be validated before any graphics code exists.
   CMake compiles, never by conditionals in shared code.
 - Do not write a comment that duplicates a spec. Behaviour, rationale, hardware quirks and renderer limits belong in
   `docs/`; the source carries no copy of them, and no pointer to them either. See "Documentation" below.
+- Do not write inline comments at all. **The only comment a source file carries is a doc comment on a declaration**,
+  giving the summary, parameters and return value so an editor can show them to a caller. See the Comments section of
+  `.github/instructions/cpp-expert.instructions.md`.
 - Do not let a platform answer a query it has no value for. A required constant that is undefined fails the build
   in `engine/src/PlatformContract.cpp`; a missing `case` fails it via `-Wswitch`; reaching the fallback panics
   naming the key. Never return a placeholder — `0` is a legitimate value for several constants, so a guessed zero is
@@ -113,6 +139,11 @@ new platform boot and be validated before any graphics code exists.
   (`Engine_PlatformAlloc` / `Engine_PlatformFree`, or `PlatformArray<T>`); `malloc`/`calloc` memory through `free`.
   On Win32 the two are different heaps and crossing them is undefined behaviour.
 - Do not write code after a panic. `Engine_Panic` and `Platform::Panic` are `[[noreturn]]`.
+- Do not commit `external/psp2cgc/`. It is Sony's shader compiler, redistributed by third parties rather than
+  licensed for redistribution; each developer fetches their own and the build requires it.
+- Do not use the VitaSDK's `vita_create_self()` / `vita_create_vpk()` macros. They accumulate their arguments into
+  CACHE variables and append on every call, so in a two-variant configure the second variant inherits the first
+  variant's title id and file list. The platform fragment calls the underlying tools directly instead.
 
 ## Build System
 
@@ -124,12 +155,18 @@ new platform boot and be validated before any graphics code exists.
   executable (`app_<platform>`), and its own self-contained `dist/<platform>/` — `dist/ps2pal`, `dist/ps2ntsc`,
   `dist/win32`. Nothing is shared between bundles, so a PAL ISO can never be handed to another target.
   `cmake --build <dir> --target dist` builds them all.
-- **Toolchains**: `toolchains/ps2dev.cmake` (PS2, `mips64r5900el-ps2-elf`) and `toolchains/mingw-w64.cmake`
-  (Win32, cross-compiled from WSL — needs `sudo apt install mingw-w64`).
+- **Toolchains**: `toolchains/ps2dev.cmake` (PS2, `mips64r5900el-ps2-elf`), `toolchains/mingw-w64.cmake`
+  (Win32, cross-compiled from WSL — needs `sudo apt install mingw-w64`), and `toolchains/vitasdk.cmake`
+  (Vita, `arm-vita-eabi`).
+- **Title metadata is game-owned**: a platform that ships an installable package rather than a plain directory reads
+  its identity, store-front presentation and achievements from `game/platform/<name>/package.json`, validated against
+  `game/platform/package.schema.json` by `tools/vita_package.py`. The cook list answers a *hardware* question and
+  stays in `engine/platform/<name>/`; a title id and an icon answer a question about the *game* and do not.
 - **Adding a platform**: one `engine/platform/<name>/` directory containing a `platform.cmake`, a `cooklist.json`,
   plus one entry in `ENGINE_KNOWN_PLATFORMS` and its metadata block. **No shared build file names a platform** — the
   root drives, each fragment declares. The fragment defines `platform_configure()` and optionally
   `platform_dependencies()` (third-party deps, before any engine target), `platform_package()` and
+  `platform_run()` (a `run-<dist>` target, available in release as well as debug) and
   `platform_debug_symbols()`; it may set `PLATFORM_<P>_LINK_DEPS`, `PLATFORM_<P>_PACKAGE_TARGET` and
   `PLATFORM_<P>_CLEAN_PATHS`. Anything platform-specific — a disc serial, an image name, a packaging tool — lives in
   the fragment. See `docs/guidelines/NEW_PLATFORM.md`.
@@ -145,6 +182,10 @@ new platform boot and be validated before any graphics code exists.
 - **Packaging is gated on validation**: `tools/validate_cooked.py` checks a cooked tree against the cook list that
   produced it, so a bad cook cannot reach a container. `tools/inspect_asset.py` and `tools/inspect_archive.py` dump
   cooked assets and containers without running the engine.
+- **Vita prerequisites beyond the SDK**: `vdpm install vitaShaRK taihen libmathneon` for the fallback renderer, and
+  an offline shader compiler (`psp2cgc`) for the default one. The compiler is **required, not optional** — a silent
+  fallback would swap a self-contained title for one needing a player-installed component — and is **gitignored**
+  rather than committed. See `docs/vita/BUILD.md`.
 - **Entry Point**: Use `python3 ./tools/build.py` for a clean rebuild.
     - **Requirement**: Must be run through **WSL (preferred)** or **Git Bash** in Windows environments; on native Windows, the script re-invokes itself inside WSL automatically.
 - **Output Directory**: Binaries and discs are routed to `dist/<platform>/`, one bundle per platform.
@@ -163,6 +204,10 @@ new platform boot and be validated before any graphics code exists.
 - `external/ps2gl`: Graphics abstraction layer. Depends on ps2stuff headers (`ps2s/`) at compile time.
 - `external/ps2stuff`: Low-level PS2 hardware utility library. Must be built and installed (`make install`) **before** ps2gl. Its install step copies `include/ps2s/` headers to `$(PS2SDK)/ports/include/ps2s/`. Never modify ps2stuff directly or commit the changes there.
 - **Link Order Matters**: Ensure `ps2stuff` is linked when using `ps2gl`.
+- `external/vitaGL`: the Vita fallback renderer, pinned to the revision the SDK's own package set is built from —
+  its master calls into a newer vitaShaRK than the SDK packages and does not compile. It compiles its shaders at run
+  time, so it needs `libshacccg.suprx` on the player's console; the default Vita renderer does not, which is why it
+  is the fallback. It also exposes no teardown entry point.
 - **No scripting layer**: Lua was removed from the engine (was `external/lua`). Gameplay and UI are
   authored entirely in C++ against `engine/include/GameAPI.h` (`GameInit()` / `GameUpdate(dt)`). Do
   not reintroduce a scripting VM into the per-frame gameplay path — the PS2 EE is a poor interpreter
@@ -318,6 +363,9 @@ thing it describes, decided by one test:
   variant's directory.
 - **Runtime platform values** that shared code must query rather than bake in are served by
   `Platform::GetConstant(PlatformConstant)` with an `enum class` key — never a string or a raw index.
+- `ACHV_MAX_ENTRIES` (`EngineAchievement.h`) is a **format** constant by this test, not a platform budget: the
+  on-disc trophy container and `tools/vita_package.py` both depend on it, so it is identical everywhere and its two
+  copies are checked against each other by `tools/tests/test_vita_package.py`.
 - **Naming Rule**: unchanged — `<ENGINE_CATEGORY>_<SUBMODULE>_<ID>` (e.g., `IO_FILE_MAX_PATH`).
 - **No Magic Numbers**: any numeric or string literal used for configuration or logic limits must be extracted to one
   of the locations above.

@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Platform package config",
+  "description": "Title metadata for one platform that distributes an installable package: identity, store-front presentation and achievements. Describes the GAME, not the hardware - the cook list under engine/platform/<name>/ is the hardware half. See docs/vita/PACKAGING.md.",
+  "type": "object",
+  "required": ["platform", "title"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "platform": {
+      "type": "string",
+      "description": "Platform family this config applies to, lower case."
+    },
+    "description": { "type": "string" },
+
+    "title": {
+      "type": "object",
+      "required": ["id", "name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z]{4}[0-9]{5}$",
+          "description": "Nine characters: four author characters then five digits. Also names the writable data directory."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "Display name under the bubble."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9][0-9]\\.[0-9][0-9]$",
+          "description": "##.## - the console rejects anything else."
+        }
+      }
+    },
+
+    "self": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "safe": {
+          "type": "boolean",
+          "description": "Restrict the executable to the ordinary user API. Clear only if the title genuinely needs more."
+        },
+        "compress": { "type": "boolean" },
+        "extended_memory": {
+          "type": "boolean",
+          "description": "Request the larger main-memory allowance. Off by default; the engine budget fits comfortably without it."
+        },
+        "memsize": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "sfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": { "type": "string", "description": "'gd' for an application." },
+        "parental_level": { "type": "integer", "minimum": 0, "maximum": 11 },
+        "extra": {
+          "type": "object",
+          "description": "Raw metadata key-values passed through unchanged. Integers become DWORDs, strings become strings.",
+          "additionalProperties": { "type": ["string", "integer"] }
+        }
+      }
+    },
+
+    "livearea": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Store-front presentation. Image sizes are exact and are checked before packaging; see docs/vita/PACKAGING.md.",
+      "properties": {
+        "icon": { "type": "string", "description": "128x128 indexed, no alpha." },
+        "background": { "type": "string", "description": "840x500 indexed." },
+        "startup": { "type": "string", "description": "280x158 indexed; the only layer that may be transparent." },
+        "picture": { "type": "string", "description": "960x544 indexed. Optional." },
+        "style": {
+          "type": "string",
+          "enum": ["a1", "psmobile"],
+          "description": "Layout used when generating a template: a1 centres the startup image, psmobile right-aligns it."
+        },
+        "template": {
+          "type": "string",
+          "description": "A hand-written layout, used verbatim. Generated from 'style' when absent."
+        }
+      }
+    },
+
+    "trophies": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Achievements. Requires software the player installs, and never reaches the online service - see docs/subsystems/ACHIEVEMENT.md.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "np_communication_id": {
+          "type": "string",
+          "pattern": "^NPWR[0-9]{5}_00$",
+          "description": "Declared, not allocated. Must match the identifier baked into the pack."
+        },
+        "trp": {
+          "type": "string",
+          "description": "A pre-built pack, staged as-is. Mutually exclusive with 'list'."
+        },
+        "list": {
+          "type": "array",
+          "description": "Trophy definitions, from which the pack is generated. Mutually exclusive with 'trp'.",
+          "items": {
+            "type": "object",
+            "required": ["id", "grade", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "integer", "minimum": 0, "maximum": 127 },
+              "grade": { "type": "string", "enum": ["platinum", "gold", "silver", "bronze"] },
+              "name": { "type": "string", "minLength": 1 },
+              "detail": { "type": "string" },
+              "hidden": { "type": "boolean" },
+              "icon": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "files": {
+      "type": "array",
+      "description": "Extra content staged into the package. Adding content here rather than in the build fragment keeps what ships described in one place.",
+      "items": {
+        "type": "object",
+        "required": ["src", "dst"],
+        "additionalProperties": false,
+        "properties": {
+          "src": { "type": "string" },
+          "dst": { "type": "string" }
+        }
+      }
+    },
+
+    "variants": {
+      "type": "object",
+      "description": "Per-variant overrides, deep-merged over the base. Keyed by the lower-case platform name.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  }
+}

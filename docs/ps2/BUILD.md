@@ -39,7 +39,13 @@ build. See [PLATFORM.md](PLATFORM.md).
 ## Running
 
 ```bash
-python3 tools/runEmulator.py dist/ps2pal/engine.iso
+cmake --build build/ps2dev-debug --target run-ps2pal
+```
+
+Or invoke the launcher directly, which is what that target does:
+
+```bash
+python3 tools/run_target.py dist/ps2pal/engine.iso
 ```
 
 Launch arguments select a renderer, which is the primary debugging lever:

@@ -1,0 +1,117 @@
+# Renderer — gxm (Vita)
+
+The default Vita backend, driving the console graphics API directly.
+
+Contract and shared behaviour: [RENDERER.md](../../subsystems/RENDERER.md).
+
+## What it targets
+
+The console native graphics API: an explicit, low-level interface with
+programmable shading, manual memory management and an application-driven display
+queue. It is the same relationship the direct console backend on the PlayStation 2
+has to that machine — closest to the hardware, most work to write, and the one
+worth optimising.
+
+## Model
+
+**Shaders are compiled at build time, not at run time.** The console ships a
+runtime shader compiler, but it is a system component the player must extract
+themselves, so depending on it would make the default renderer fail on an
+ordinary machine. The shader set is fixed, small, and linked into the executable
+as finished binaries. This is the single property that justifies this backend
+being the default — the fallback does not have it.
+
+Compiling them needs an offline shader compiler that the open toolchain does not
+ship, so the build **requires** one and refuses to configure without it. It is
+not committed to this repository. See [BUILD.md](../BUILD.md).
+
+**Graphics memory is allocated by the backend and mapped explicitly.** Render
+targets and textures come from the video pool; vertex and index data and the
+shader scratch region come from their own allocations. All of it is mapped for the
+graphics processor before use and unmapped on shutdown. None of it passes through
+the engine arenas, which describe processor-side memory only.
+
+**Display is a queue, not a swap.** Frames are handed to a display thread that
+presents them on the vertical blank. The backend must not assume a frame is
+finished being read when it returns.
+
+Geometry follows the model the other backends use: staged on the processor,
+uploaded once per frame, drawn as runs sharing a texture. Three-dimensional and
+screen-space geometry stage independently.
+
+## Quirks and limits
+
+- **Pixels are not square.** The framebuffer is 960 x 544 but the panel is 16:9,
+  so projection must use the display aspect. Using the framebuffer ratio produces
+  a frame that is subtly stretched and looks correct until compared against
+  another platform.
+- **Memory must be mapped before the graphics processor sees it.** An unmapped
+  pointer is not a fault at the point of use — it is a fault later, in the
+  display thread, with a stack that points nowhere useful.
+- **The video pool has its own allocation granularity**, larger than a page. A
+  small texture still consumes a whole unit, so the budget is spent faster than
+  the sum of texture sizes suggests. The platform texture footprint accounting
+  reports the real cost, not the nominal one.
+- **The shader set is unlit, and binds no normal attribute.** Geometry is staged
+  with normals because other backends want them, but nothing here consumes one.
+  Binding an attribute the shader does not use does not work: the compiler
+  removes it, the name cannot then be found, and renderer setup fails - which
+  reads on hardware as the engine silently falling back to the other backend.
+  The build now refuses a shader that has dropped a parameter the backend binds,
+  so this fails at compile time instead.
+- **Shaders are fixed at build time.** A material needing something the shader
+  set does not express cannot be expressed at all without adding a shader and
+  rebuilding. That is the deliberate cost of not depending on the runtime
+  compiler, and it is the right trade for a default backend.
+- **There is no non-indexed draw.** Every draw call takes an index buffer, so one
+  is filled once at construction with an identity sequence and each run is a span
+  into it. This is not a design choice; the hardware has no other draw path.
+- **The vertex ceiling is fixed and enforced.** Vertex and index buffers are
+  graphics memory reserved once, because growing them mid-frame would stall the
+  display. The shared stager will happily build far more than this machine can
+  hold, so geometry past the ceiling is dropped with a log rather than overrunning
+  the buffer.
+- **Beginning a scene restores depth but not colour.** Depth comes back from the
+  surface background; colour does not, so the frame is cleared by drawing a
+  full-screen quad before anything else. Omitting it leaves the previous frame
+  visible wherever nothing is drawn this frame, which reads as flickering rather
+  than as a missing clear.
+- **The depth buffer is sized to tile-aligned dimensions**, not to the visible
+  framebuffer. The hardware renders whole tiles, and a depth buffer sized to the
+  visible area is overrun on the last row.
+- **Textures are expanded straight into graphics memory.** They must be mapped
+  before the graphics processor sees them, so there is no processor-side copy to
+  expand into first. Releasing one drains the pipeline first, because the frame in
+  flight may still be reading it.
+- **The sky is not implemented.** World sectors, models, primitives and interface
+  elements draw. The console backends on the PlayStation 2 do draw the sky, so
+  this is a gap here rather than an engine-wide one.
+- **Far-field geometry is drawn by no backend on any platform.**
+- **Console pixel formats are expanded on upload**, as on the desktop backends.
+  Textures cooked palettised or at sixteen bits are expanded to plain 32-bit
+  colour, and the budget is charged the expanded size. Alpha is rescaled from the
+  console convention where half-scale means fully opaque.
+
+## The shader compiler
+
+The compiler is Sony's, redistributed by third parties rather than licensed for
+redistribution, so this project does not carry a copy: it is fetched by each
+developer and is excluded from version control. The build **requires** it and
+fails to configure with a message naming where it looked — deliberately, because
+a silent fallback to the other backend would swap a self-contained title for one
+needing a player-supplied component, which is exactly the surprise this design
+exists to avoid.
+
+It is a Windows executable, and this project builds under WSL. It runs there
+through interop, but it is a Windows process and understands only Windows path
+strings; handed a Linux path it fails with "the target path is invalid", which
+says nothing about the real cause. That translation is handled in one place by
+the build's shader step rather than being spread through the build rules.
+
+## When to prefer it
+
+It is the default, and for a title that ships to other people it is the only
+sensible choice: it is the direct path to the hardware, its memory is accounted
+for, it can be shut down cleanly, and it needs nothing installed on the player's
+console. Prefer [vitagl](VITAGL.md) only when comparing two independent
+implementations to decide which one is wrong.

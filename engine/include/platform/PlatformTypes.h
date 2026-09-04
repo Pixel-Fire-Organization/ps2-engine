@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "CommandLine.h"
+#include "graphics/Types.h" // Vector2, for TouchContact
 
 // ---------------------------------------------------------------------------
 // Plain data types exchanged across the Platform interface.
@@ -65,6 +66,15 @@ struct HeapStats
     size_t totalBytes; // the platform's ceiling, not the OS total
     size_t usedBytes;
     size_t freeBytes;
+};
+
+/// One finger on one touch surface. Position is normalised to [0,1] over the
+/// surface with origin top-left; id is stable while the finger stays down.
+struct TouchContact
+{
+    Vector2 position;
+    float force;
+    uint8_t id;
 };
 
 // --- Window -----------------------------------------------------------------

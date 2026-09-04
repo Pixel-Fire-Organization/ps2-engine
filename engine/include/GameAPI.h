@@ -98,9 +98,32 @@ namespace game
     void GetMouseDelta(float* outX, float* outY);
     float GetMouseWheel();
 
-    // device: "gamepad", "keyboard", "mouse". Branch on this, never on which
-    // platform is running.
+    /// @param surface "front" or "rear".
+    /// @return Live contacts; zero on a platform without touch.
+    int GetTouchCount(const char* surface);
+
+    /// @param surface "front" or "rear".
+    /// @param index Contact index below GetTouchCount.
+    /// @param outX Receives the x position, normalised to [0,1].
+    /// @param outY Receives the y position, normalised to [0,1].
+    /// @return False when index is past the count.
+    bool GetTouch(const char* surface, int index, float* outX, float* outY);
+
+    /// @param device "gamepad", "keyboard", "mouse" or "touch".
+    /// @return Whether the running platform provides it.
     bool HasInputDevice(const char* device);
+
+    /// Record an achievement as earned. Idempotent, and safe on every platform.
+    /// @param id Identifier from the generated trophy header.
+    /// @return Whether the platform accepted it.
+    bool UnlockAchievement(int id);
+
+    /// @param id Identifier from the generated trophy header.
+    /// @return False when not unlocked, or unavailable.
+    bool IsAchievementUnlocked(int id);
+
+    /// @return Whether achievements can actually be recorded here.
+    bool HasAchievements();
 
     // --- Resources (async streaming; poll IsResourceReady) ----------------------
     // type: "TEXTURE","MODEL","SOUND","FONT". Returns a handle >= 0, or -1.

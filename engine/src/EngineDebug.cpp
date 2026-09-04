@@ -37,11 +37,61 @@ static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
 static bool s_DebugOverlayVisible = false;
 static bool s_ToggleWasHeld = false;
 
+/// Rewrite %z length modifiers to plain int conversions where the two are
+/// equivalent, for C libraries built without C99 format support.
+/// @param text The caller's format string.
+/// @param scratch Receives the rewritten format.
+/// @param scratchSize Capacity of scratch.
+/// @return `text` unchanged when no rewrite applies, otherwise `scratch`.
+static const char* NormalizeLengthModifiers(const char* text, char* scratch, size_t scratchSize)
+{
+    if (sizeof(size_t) != sizeof(unsigned int))
+        return text;
+
+    size_t out = 0;
+    bool inConversion = false;
+
+    for (size_t in = 0; text[in] && out + 1 < scratchSize; ++in)
+    {
+        const char c = text[in];
+
+        if (!inConversion)
+        {
+            if (c == '%' && text[in + 1] == '%')
+            {
+                if (out + 2 >= scratchSize)
+                    break;
+                scratch[out++] = c;
+                scratch[out++] = text[++in];
+                continue;
+            }
+            if (c == '%')
+                inConversion = true;
+            scratch[out++] = c;
+            continue;
+        }
+
+        if (c == 'z')
+            continue;
+
+        if (strchr("diouxXeEfFgGaAcspn", c))
+            inConversion = false;
+
+        scratch[out++] = c;
+    }
+
+    scratch[out] = '\0';
+    return scratch;
+}
+
 static void CustomLog(int logLevel, const char* text, va_list args)
 {
     // High-frequency debug logs are completely muted to preserve bus bandwidth
     if (logLevel == LOG_DEBUG)
         return;
+
+    char format[512];
+    text = NormalizeLengthModifiers(text, format, sizeof(format));
 
     char buffer[1024];
     vsnprintf(buffer, sizeof(buffer), text, args);

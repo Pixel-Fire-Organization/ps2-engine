@@ -178,9 +178,13 @@ function(platform_debug_symbols PLATFORM EXE_TARGET DIST_DIR)
         VERBATIM
     )
 
+endfunction()
+
+# Launch the built disc image in an emulator.
+function(platform_run PLATFORM EXE_TARGET DIST_DIR)
     add_custom_target(run-${PLATFORM_${PLATFORM}_DIST}
-        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/runEmulator.py" "${DIST_DIR}/${APP_ISO_NAME}"
-        COMMENT "Launching PCSX2 with dist/${PLATFORM_${PLATFORM}_DIST}/${APP_ISO_NAME}"
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/run_target.py" "${DIST_DIR}/${APP_ISO_NAME}"
+        COMMENT "Launching dist/${PLATFORM_${PLATFORM}_DIST}/${APP_ISO_NAME}"
         VERBATIM
     )
 endfunction()

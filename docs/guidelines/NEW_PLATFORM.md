@@ -78,6 +78,7 @@ itself goes through them — the root names no platform:
 | `platform_configure(P)` | Sources, includes, libraries for the engine library |
 | `platform_dependencies()` | Build third-party deps, before any engine target exists |
 | `platform_package(P, EXE, DIST)` | Produce the distributable (ISO, staged bundle, ...) |
+| `platform_run(P, EXE, DIST)` | A `run-<dist>` target launching the artifact |
 | `platform_debug_symbols(P, EXE, DIST)` | Symbol extraction, if any |
 | `PLATFORM_<P>_LINK_DEPS` | Targets the executable must wait on |
 | `PLATFORM_<P>_PACKAGE_TARGET` | The packaging target `dist` should depend on |

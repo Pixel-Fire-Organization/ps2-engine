@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "EngineAchievement.h"
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineInput.h"
@@ -321,6 +322,48 @@ namespace game
 
     float GetMouseWheel() { return ::GetMouseWheelDelta(); }
 
+    namespace
+    {
+        TouchSurface ParseTouchSurface(const char* surface)
+        {
+            if (!surface)
+                return TouchSurface::Count;
+            if (strcmp(surface, "front") == 0)
+                return TouchSurface::Front;
+            if (strcmp(surface, "rear") == 0)
+                return TouchSurface::Rear;
+            Engine_LogError("game: unknown touch surface '%s'", surface);
+            return TouchSurface::Count;
+        }
+    } // namespace
+
+    int GetTouchCount(const char* surface)
+    {
+        Platform* platform = Engine_GetPlatform();
+        const TouchSurface s = ParseTouchSurface(surface);
+        if (!platform || s == TouchSurface::Count)
+            return 0;
+        return static_cast<int>(platform->Touch_GetContactCount(s));
+    }
+
+    bool GetTouch(const char* surface, int index, float* outX, float* outY)
+    {
+        Platform* platform = Engine_GetPlatform();
+        const TouchSurface s = ParseTouchSurface(surface);
+        if (!platform || s == TouchSurface::Count || index < 0 || index > 255)
+            return false;
+
+        TouchContact contact;
+        if (!platform->Touch_GetContact(s, static_cast<uint8_t>(index), &contact))
+            return false;
+
+        if (outX)
+            *outX = contact.position.x;
+        if (outY)
+            *outY = contact.position.y;
+        return true;
+    }
+
     bool HasInputDevice(const char* device)
     {
         Platform* platform = Engine_GetPlatform();
@@ -333,10 +376,27 @@ namespace game
             return platform->HasCapability(PlatformCapability::Keyboard);
         if (strcmp(device, "mouse") == 0)
             return platform->HasCapability(PlatformCapability::Mouse);
+        if (strcmp(device, "touch") == 0)
+            return platform->HasCapability(PlatformCapability::Touch);
 
         Engine_LogError("game::HasInputDevice: unknown device '%s'", device);
         return false;
     }
+
+    // --- Achievements -----------------------------------------------------------
+    bool UnlockAchievement(int id)
+    {
+        if (id < 0)
+        {
+            Engine_LogError("game::UnlockAchievement: negative id %d", id);
+            return false;
+        }
+        return Engine_Achievement_Unlock(static_cast<uint32_t>(id));
+    }
+
+    bool IsAchievementUnlocked(int id) { return (id >= 0) && Engine_Achievement_IsUnlocked(static_cast<uint32_t>(id)); }
+
+    bool HasAchievements() { return Engine_Achievement_IsAvailable(); }
 
     // --- Resources --------------------------------------------------------------
     int LoadResource(const char* type, const char* path)

@@ -8,6 +8,7 @@
 #include "EngineDebug.h"
 #include "EngineMemory.h"
 #include "Macros.h"
+#include "graphics/TextureExpand.h"
 #include "platform/Platform.h"
 
 #include <windows.h>
@@ -107,11 +108,6 @@ fn fs_main(in : VsOut) -> @location(0) vec4<f32> {
         UNUSED_VAR(user2);
         Engine_LogError("WebGpu: uncaptured error (type %d): %.*s", static_cast<int>(type), static_cast<int>(message.length), message.data ? message.data : "");
     }
-
-    // TIM2 stores alpha with 0x80 meaning fully opaque, not 0xFF. Expanding it
-    // here keeps textures from looking half-transparent the moment blending is
-    // switched on.
-    inline uint8_t ExpandPs2Alpha(uint8_t a) { return (a >= 0x80u) ? 0xFFu : static_cast<uint8_t>(a * 2u); }
 
 } // namespace
 
@@ -373,7 +369,7 @@ bool WebGpuRenderer::CreatePipelines()
 
     WGPUVertexBufferLayout vertexLayout;
     memset(&vertexLayout, 0, sizeof(vertexLayout));
-    vertexLayout.arrayStride = sizeof(DesktopGeometry::Vertex);
+    vertexLayout.arrayStride = sizeof(StagedGeometry::Vertex);
     vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
     vertexLayout.attributeCount = 4;
     vertexLayout.attributes = attributes;
@@ -527,50 +523,11 @@ uint32_t WebGpuRenderer::UploadTexture(const TextureUpload& upload)
         return 0;
     }
 
-    if (upload.format == PixelFormat::RGBA32)
+    if (!Gfx_ExpandToRgba8(upload, reinterpret_cast<uint8_t*>(rgba), texels * 4u))
     {
-        const uint8_t* src = static_cast<const uint8_t*>(upload.levelPtr[0]);
-        uint8_t* dst = reinterpret_cast<uint8_t*>(rgba);
-        for (size_t i = 0; i < texels; ++i)
-        {
-            dst[i * 4 + 0] = src[i * 4 + 0];
-            dst[i * 4 + 1] = src[i * 4 + 1];
-            dst[i * 4 + 2] = src[i * 4 + 2];
-            dst[i * 4 + 3] = ExpandPs2Alpha(src[i * 4 + 3]);
-        }
-    }
-    else if (upload.format == PixelFormat::RGBA16)
-    {
-        // A1B5G5R5 packed little-endian: 5 bits each, alpha in the top bit.
-        const uint16_t* src = static_cast<const uint16_t*>(upload.levelPtr[0]);
-        uint8_t* dst = reinterpret_cast<uint8_t*>(rgba);
-        for (size_t i = 0; i < texels; ++i)
-        {
-            const uint16_t p = src[i];
-            dst[i * 4 + 0] = static_cast<uint8_t>(((p >> 0) & 0x1Fu) * 255u / 31u);
-            dst[i * 4 + 1] = static_cast<uint8_t>(((p >> 5) & 0x1Fu) * 255u / 31u);
-            dst[i * 4 + 2] = static_cast<uint8_t>(((p >> 10) & 0x1Fu) * 255u / 31u);
-            dst[i * 4 + 3] = (p & 0x8000u) ? 0xFFu : 0x00u;
-        }
-    }
-    else // PAL8
-    {
-        const uint8_t* idx = static_cast<const uint8_t*>(upload.levelPtr[0]);
-        const uint8_t* clut = static_cast<const uint8_t*>(upload.clut);
-        uint8_t* dst = reinterpret_cast<uint8_t*>(rgba);
-        for (size_t i = 0; i < texels; ++i)
-        {
-            if (!clut)
-            {
-                rgba[i] = 0xFFFFFFFFu;
-                continue;
-            }
-            const uint8_t* e = clut + static_cast<size_t>(idx[i]) * 4u;
-            dst[i * 4 + 0] = e[0];
-            dst[i * 4 + 1] = e[1];
-            dst[i * 4 + 2] = e[2];
-            dst[i * 4 + 3] = ExpandPs2Alpha(e[3]);
-        }
+        free(rgba);
+        Engine_LogError("WebGpuRenderer: could not expand a %ux%u texture", width, height);
+        return 0;
     }
 
     WGPUTextureDescriptor desc;
@@ -840,7 +797,7 @@ void WebGpuRenderer::EndFrame()
     const uint32_t totalVerts = count3D + count2D;
     if (totalVerts > 0)
     {
-        const uint64_t needed = static_cast<uint64_t>(totalVerts) * sizeof(DesktopGeometry::Vertex);
+        const uint64_t needed = static_cast<uint64_t>(totalVerts) * sizeof(StagedGeometry::Vertex);
         if (needed > m_vertexBufferCapacity)
         {
             if (m_vertexBuffer)
@@ -858,17 +815,17 @@ void WebGpuRenderer::EndFrame()
         }
 
         if (count3D > 0)
-            wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, 0, m_geometry.Vertices3D(), static_cast<size_t>(count3D) * sizeof(DesktopGeometry::Vertex));
+            wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, 0, m_geometry.Vertices3D(), static_cast<size_t>(count3D) * sizeof(StagedGeometry::Vertex));
         if (count2D > 0)
-            wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, static_cast<uint64_t>(count3D) * sizeof(DesktopGeometry::Vertex), m_geometry.Vertices2D(),
-                                 static_cast<size_t>(count2D) * sizeof(DesktopGeometry::Vertex));
+            wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, static_cast<uint64_t>(count3D) * sizeof(StagedGeometry::Vertex), m_geometry.Vertices2D(),
+                                 static_cast<size_t>(count2D) * sizeof(StagedGeometry::Vertex));
     }
 
     Uniforms uniforms;
     // WebGPU clips Z to [0,1]; the shared builder takes that as a flag.
-    DesktopGeometry::BuildViewProjection(m_drawLists.GetCamera3D(), m_width, m_height, true, uniforms.viewProj);
+    StagedGeometry::BuildViewProjection(m_drawLists.GetCamera3D(), m_width, m_height, true, uniforms.viewProj);
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer3D, 0, &uniforms, sizeof(uniforms));
-    DesktopGeometry::BuildOrtho2D(m_width, m_height, true, uniforms.viewProj);
+    StagedGeometry::BuildOrtho2D(m_width, m_height, true, uniforms.viewProj);
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer2D, 0, &uniforms, sizeof(uniforms));
 
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(m_device, nullptr);
@@ -898,14 +855,14 @@ void WebGpuRenderer::EndFrame()
 
     if (totalVerts > 0)
     {
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, m_vertexBuffer, 0, static_cast<uint64_t>(totalVerts) * sizeof(DesktopGeometry::Vertex));
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, m_vertexBuffer, 0, static_cast<uint64_t>(totalVerts) * sizeof(StagedGeometry::Vertex));
 
         // 3D: one draw per texture run.
         if (count3D > 0)
         {
             wgpuRenderPassEncoderSetPipeline(pass, m_pipeline3D);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, m_bindGroup3D, 0, nullptr);
-            const DesktopGeometry::DrawRun* runs = m_geometry.Runs();
+            const StagedGeometry::DrawRun* runs = m_geometry.Runs();
             for (uint32_t i = 0; i < m_geometry.RunCount(); ++i)
             {
                 wgpuRenderPassEncoderSetBindGroup(pass, 1, BindGroupFor(runs[i].texture), 0, nullptr);

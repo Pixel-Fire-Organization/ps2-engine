@@ -11,7 +11,13 @@ To reliably build this engine from source, you must have the PS2 toolchain prope
    - **Environment:** Ensure your shell exports the `PS2DEV` environment variable (e.g. `export PS2DEV=/usr/local/ps2dev`).
    - **IDE Setup (Automatic):** Simply running `python3 ./tools/build.py` (see below) will automatically generate a `.clangd` file that configures your editor's highlighting for both WSL and Windows.
 
-2. **Dependencies:**
+2. **PS Vita Toolchain (optional, for Vita builds):**
+   - Install [VitaSDK](https://vitasdk.org) via `vdpm`, then `vdpm install vitaShaRK taihen libmathneon`.
+   - **Environment:** export `VITASDK` (e.g. `export VITASDK=/usr/local/vitasdk`) and add `$VITASDK/bin` to `PATH`.
+   - The default Vita renderer also needs an offline shader compiler (`psp2cgc`) placed in `external/psp2cgc/`.
+     It is not committed. See [docs/vita/BUILD.md](docs/vita/BUILD.md).
+
+3. **Dependencies:**
    - **CMake (3.10+)**
    - **genisoimage** (Provides the `mkisofs` utility required for automatically bundling bootable `.iso` files):
      ```bash
@@ -20,8 +26,10 @@ To reliably build this engine from source, you must have the PS2 toolchain prope
      sudo apt-get install genisoimage
      ```
 
-3. **Submodules (Third-Party Dependencies):**
+4. **Submodules (Third-Party Dependencies):**
    - The engine links statically with custom local compilations of `ps2gl` and `ps2stuff` located within the `external/` directory to ensure perfect compatibility.
+   - Vita builds additionally use `external/vitaGL` for the fallback renderer. Fetch all of them with
+     `git submodule update --init --recursive`.
 
 ## Build Instructions
 
@@ -37,6 +45,10 @@ python3 ./tools/build.py [debug|release]
 # One region only
 python3 ./tools/build.py debug pal
 python3 ./tools/build.py debug --platforms PS2NTSC
+
+# Other platforms
+python3 ./tools/build.py debug --platforms WIN32          # -> dist/win32/
+python3 ./tools/build.py debug --platforms VITA,VITATV    # -> dist/vita/, dist/vitatv/
 ```
 
 Or drive CMake directly. `PLATFORMS_TO_SUPPORT` defaults to every known platform and is
@@ -49,11 +61,26 @@ cmake --build build/ps2 --target dist
 
 ## Running the Emulator
 
-A script is provided to quickly launch the generated ISO in PCSX2.
+Every platform has a `run-<platform>` target that launches its own artifact -
+PCSX2 for a PS2 disc image, Vita3K for a Vita package, the executable itself on
+Windows. The emulator is chosen from the artifact, so the command is the same
+shape everywhere:
 
 ```bash
-python3 ./tools/runEmulator.py dist/ps2pal/engine.iso
+cmake --build build/ps2dev-debug  --target run-ps2pal
+cmake --build build/vitasdk-debug --target run-vita
+cmake --build build/mingww64-debug --target run-win32
 ```
+
+The launcher can also be called directly, and takes an explicit emulator path as
+an optional second argument:
+
+```bash
+python3 ./tools/run_target.py dist/ps2pal/engine.iso
+```
+
+Set `PCSX2_PATH` or `VITA3K_PATH` if an emulator is installed somewhere the
+search paths do not cover.
 
 ## Build Artifacts
 

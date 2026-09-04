@@ -1,5 +1,7 @@
 set(CMAKE_SYSTEM_NAME Generic)
 
+set(ENGINE_TOOLCHAIN_ID "ps2dev" CACHE INTERNAL "Active toolchain")
+
 if("$ENV{PS2DEV}" STREQUAL "")
     message(FATAL_ERROR "PS2DEV environment variable is not set!")
 endif()

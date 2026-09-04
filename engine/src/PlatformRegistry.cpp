@@ -174,6 +174,8 @@ const char* Platform_CapabilityName(PlatformCapability key)
         return "AsyncIo";
     case PlatformCapability::FileWrite:
         return "FileWrite";
+    case PlatformCapability::Touch:
+        return "Touch";
     case PlatformCapability::Count:
         break;
     }

@@ -174,8 +174,28 @@ The repo `.clang-format` is authoritative. **ALWAYS** follow it.
 
 ## Comments
 
-- Comment the **why**, not the what. Do that if the problem cannot be understood at a glance.
-- Keep comments at a minimum.
-- Never comment when removing a block **why** you removed it.
-- Single-line comments only for inline annotation.
-- Multi-line block comments for section headers.
+**Comment the function signature, and nothing else.**
+
+A declaration carries a doc comment so an editor can show a caller the summary,
+the parameters and the return value without opening the file. That is the only
+comment a source file should contain.
+
+```cpp
+/// Reserve the arenas and the main pool.
+/// @param outMap Filled with the resulting memory map on success.
+/// @return False when the map exceeds the platform budget, or reservation failed.
+bool Reserve(EngineMemoryMap* outMap) override;
+```
+
+- **Doc comments go on declarations**, in the header. A definition in a `.cpp`
+  repeats nothing.
+- **No inline commentary.** No "why" essays, no rationale, no hardware quirks, no
+  notes on what a line avoids. All of that belongs in `docs/` — see the
+  Documentation section of `.github/copilot-instructions.md`. A reader who needs
+  the reasoning reads the spec; a reader who needs the call signature hovers it.
+- **No section-header blocks** and no file-banner essays. A short file-level doc
+  comment naming what the file contains is fine; a paragraph is not.
+- **Never comment why a block was removed.**
+
+If a line is confusing enough to want a comment, the fix is a better name or a
+smaller function. If the reasoning genuinely matters, it goes in the spec.

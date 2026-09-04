@@ -186,3 +186,17 @@ Vector2 Ps2Platform::Mouse_GetPosition() const { return Vector2{0.0f, 0.0f}; }
 Vector2 Ps2Platform::Mouse_GetDelta() const { return Vector2{0.0f, 0.0f}; }
 
 float Ps2Platform::Mouse_GetWheelDelta() const { return 0.0f; }
+
+uint8_t Ps2Platform::Touch_GetContactCount(TouchSurface surface) const
+{
+    UNUSED_VAR(surface);
+    return 0;
+}
+
+bool Ps2Platform::Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const
+{
+    UNUSED_VAR(surface);
+    UNUSED_VAR(index);
+    UNUSED_VAR(outContact);
+    return false;
+}

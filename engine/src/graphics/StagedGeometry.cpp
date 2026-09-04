@@ -1,4 +1,4 @@
-#include "DesktopGeometry.h"
+#include "graphics/StagedGeometry.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -49,26 +49,26 @@ namespace
 
 } // namespace
 
-DesktopGeometry::DesktopGeometry() : m_verts3D(nullptr), m_count3D(0), m_capacity3D(0), m_verts2D(nullptr), m_count2D(0), m_capacity2D(0), m_runCount(0), m_stats(nullptr)
+StagedGeometry::StagedGeometry() : m_verts3D(nullptr), m_count3D(0), m_capacity3D(0), m_verts2D(nullptr), m_count2D(0), m_capacity2D(0), m_runCount(0), m_stats(nullptr)
 {
     memset(m_runs, 0, sizeof(m_runs));
 }
 
-DesktopGeometry::~DesktopGeometry()
+StagedGeometry::~StagedGeometry()
 {
     free(m_verts3D);
     free(m_verts2D);
 }
 
-void DesktopGeometry::BeginFrame()
+void StagedGeometry::BeginFrame()
 {
     m_count3D = 0;
     m_runCount = 0;
 }
 
-void DesktopGeometry::EndFrame() { m_count2D = 0; }
+void StagedGeometry::EndFrame() { m_count2D = 0; }
 
-bool DesktopGeometry::Reserve(Vertex*& array, uint32_t& capacity, uint32_t used, uint32_t extra)
+bool StagedGeometry::Reserve(Vertex*& array, uint32_t& capacity, uint32_t used, uint32_t extra)
 {
     if (used + extra <= capacity)
         return true;
@@ -81,14 +81,14 @@ bool DesktopGeometry::Reserve(Vertex*& array, uint32_t& capacity, uint32_t used,
     const uint32_t kMaxVertices = 1u << 21;
     if (needed > kMaxVertices)
     {
-        Engine_LogError("DesktopGeometry: vertex budget exceeded (%u > %u); dropping geometry", needed, kMaxVertices);
+        Engine_LogError("StagedGeometry: vertex budget exceeded (%u > %u); dropping geometry", needed, kMaxVertices);
         return false;
     }
 
     Vertex* grown = static_cast<Vertex*>(realloc(array, needed * sizeof(Vertex)));
     if (!grown)
     {
-        Engine_LogError("DesktopGeometry: out of memory growing the vertex staging buffer");
+        Engine_LogError("StagedGeometry: out of memory growing the vertex staging buffer");
         return false;
     }
     array = grown;
@@ -96,7 +96,7 @@ bool DesktopGeometry::Reserve(Vertex*& array, uint32_t& capacity, uint32_t used,
     return true;
 }
 
-uint32_t DesktopGeometry::ResolveTexture(int32_t resourceId)
+uint32_t StagedGeometry::ResolveTexture(int32_t resourceId)
 {
     if (resourceId < 0 || !Engine_Resource_IsReady(resourceId))
         return 0;
@@ -104,7 +104,7 @@ uint32_t DesktopGeometry::ResolveTexture(int32_t resourceId)
     return tex ? tex->id : 0u;
 }
 
-void DesktopGeometry::PushRun(uint32_t firstVertex, uint32_t count, uint32_t texture)
+void StagedGeometry::PushRun(uint32_t firstVertex, uint32_t count, uint32_t texture)
 {
     if (count == 0)
         return;
@@ -121,9 +121,9 @@ void DesktopGeometry::PushRun(uint32_t firstVertex, uint32_t count, uint32_t tex
         }
     }
 
-    if (m_runCount >= DESKTOP_MAX_DRAW_RUNS)
+    if (m_runCount >= GFX_MAX_DRAW_RUNS)
     {
-        Engine_LogError("DesktopGeometry: draw-run budget exceeded (%d); dropping geometry", DESKTOP_MAX_DRAW_RUNS);
+        Engine_LogError("StagedGeometry: draw-run budget exceeded (%d); dropping geometry", GFX_MAX_DRAW_RUNS);
         return;
     }
 
@@ -135,7 +135,7 @@ void DesktopGeometry::PushRun(uint32_t firstVertex, uint32_t count, uint32_t tex
         ++m_stats->texBinds;
 }
 
-void DesktopGeometry::AppendMesh(const float model[16], const float* verts, uint8_t components, const float* norms, const float* uvs, uint32_t vertexCount, uint8_t topology, Color3 color,
+void StagedGeometry::AppendMesh(const float model[16], const float* verts, uint8_t components, const float* norms, const float* uvs, uint32_t vertexCount, uint8_t topology, Color3 color,
                                  uint32_t texture)
 {
     if (!verts || vertexCount == 0)
@@ -219,7 +219,7 @@ void DesktopGeometry::AppendMesh(const float model[16], const float* verts, uint
     }
 }
 
-void DesktopGeometry::BuildModelMatrix(const Vector3& pos, const Vector3& rot, const Vector3& scale, float out[16])
+void StagedGeometry::BuildModelMatrix(const Vector3& pos, const Vector3& rot, const Vector3& scale, float out[16])
 {
     const float cx = cosf(rot.x), sx = sinf(rot.x);
     const float cy = cosf(rot.y), sy = sinf(rot.y);
@@ -244,7 +244,7 @@ void DesktopGeometry::BuildModelMatrix(const Vector3& pos, const Vector3& rot, c
     out[14] = pos.z;
 }
 
-void DesktopGeometry::AppendPrimitive(const DrawLists& lists, const PrimitiveDrawEntry& entry)
+void StagedGeometry::AppendPrimitive(const DrawLists& lists, const PrimitiveDrawEntry& entry)
 {
     const PrimitiveArrays geo = lists.GetPrimitiveArrays(entry.type);
     if (!geo.verts || geo.vertexCount == 0)
@@ -255,7 +255,7 @@ void DesktopGeometry::AppendPrimitive(const DrawLists& lists, const PrimitiveDra
     AppendMesh(model, geo.verts, 3, geo.norms, geo.uvs, geo.vertexCount, MESH_TOPOLOGY_LIST, entry.color, ResolveTexture(entry.textureId));
 }
 
-void DesktopGeometry::AppendModel(const ModelDrawEntry& entry)
+void StagedGeometry::AppendModel(const ModelDrawEntry& entry)
 {
     if (entry.resourceId < 0 || !Engine_Resource_IsReady(entry.resourceId))
         return;
@@ -284,7 +284,7 @@ void DesktopGeometry::AppendModel(const ModelDrawEntry& entry)
     }
 }
 
-void DesktopGeometry::AppendLevelSectors()
+void StagedGeometry::AppendLevelSectors()
 {
     uint32_t count = 0;
     const SectorResident* residents = Engine_Sector_GetResidents(&count);
@@ -313,7 +313,7 @@ void DesktopGeometry::AppendLevelSectors()
     }
 }
 
-void DesktopGeometry::BuildFrame(DrawLists& lists, DrawStats* stats)
+void StagedGeometry::BuildFrame(DrawLists& lists, DrawStats* stats)
 {
     m_stats = stats;
 
@@ -341,7 +341,7 @@ void DesktopGeometry::BuildFrame(DrawLists& lists, DrawStats* stats)
     m_stats = nullptr;
 }
 
-void DesktopGeometry::AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, const Color3& color)
+void StagedGeometry::AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, const Color3& color)
 {
     if (!Reserve(m_verts2D, m_capacity2D, m_count2D, 6))
         return;
@@ -369,7 +369,7 @@ void DesktopGeometry::AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, cons
     }
 }
 
-void DesktopGeometry::BuildViewProjection(const Camera3D& camera, uint32_t width, uint32_t height, bool zeroToOneDepth, float out[16])
+void StagedGeometry::BuildViewProjection(const Camera3D& camera, uint32_t width, uint32_t height, bool zeroToOneDepth, float out[16])
 {
     const Vector3 forward = Normalize(Vector3{camera.target.x - camera.position.x, camera.target.y - camera.position.y, camera.target.z - camera.position.z});
     const Vector3 right = Normalize(Cross(forward, Vector3{0.0f, 1.0f, 0.0f}));
@@ -420,7 +420,7 @@ void DesktopGeometry::BuildViewProjection(const Camera3D& camera, uint32_t width
     MatMultiply(proj, view, out);
 }
 
-void DesktopGeometry::BuildOrtho2D(uint32_t width, uint32_t height, bool zeroToOneDepth, float out[16])
+void StagedGeometry::BuildOrtho2D(uint32_t width, uint32_t height, bool zeroToOneDepth, float out[16])
 {
     // Pixel coordinates, origin top-left, matching DrawRect2D on the PS2 side.
     const float w = static_cast<float>(width ? width : 1u);

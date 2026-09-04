@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include "EngineAchievement.h"
 #include "EngineInput.h"
 #include "graphics/Renderer.h"
 #include "platform/Platform.h"
@@ -92,6 +93,9 @@ bool Engine_Init(EngineConfig config, Platform* platform, Renderer* renderer)
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Input))
         Engine_Input_Init();
 
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
+        Engine_Achievement_Init(nullptr);
+
     return true;
 }
 
@@ -163,6 +167,9 @@ void Engine_Close()
 {
     // Reverse of bring-up. Each subsystem is torn down only if it was brought
     // up, so an absent one is not shut down twice or shut down never-started.
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
+        Engine_Achievement_Close();
+
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Input))
         Engine_Input_Shutdown();
 

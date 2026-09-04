@@ -119,6 +119,7 @@ bool Ps2Platform::HasCapability(PlatformCapability key) const
     // L2/R2 pressure, but the engine does not surface it), and the GS
     // framebuffer size is fixed at build time.
     case PlatformCapability::Keyboard:
+    case PlatformCapability::Touch:
     case PlatformCapability::Mouse:
     case PlatformCapability::AnalogTriggers:
     case PlatformCapability::ResizableWindow:

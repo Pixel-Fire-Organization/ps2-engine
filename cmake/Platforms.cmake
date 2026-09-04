@@ -7,38 +7,51 @@
 #
 #   cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/ps2dev.cmake    -B build/ps2
 #   cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/mingw-w64.cmake -B build/win32
+#   cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/vitasdk.cmake   -B build/vita
 #
 # Each surviving platform gets its own engine library, its own executable, and
 # its own self-contained dist/<name>/ bundle. Nothing is shared between bundles,
 # so a PAL disc image can never be handed to a Win32 build.
 # ---------------------------------------------------------------------------
 
-set(ENGINE_KNOWN_PLATFORMS PS2PAL PS2NTSC WIN32)
+set(ENGINE_KNOWN_PLATFORMS PS2PAL PS2NTSC WIN32 VITA VITATV)
 
 # Per-platform metadata. Keep these together: adding a platform should be one
 # block here plus one engine/platform/<dir>/ directory.
-#   _DIR     engine/platform subdirectory holding the concrete platform
-#   _BASE    shared base directory (empty when the platform has no base)
-#   _SYSTEM  CMAKE_SYSTEM_NAME this platform requires
-#   _EXE     executable file name
-#   _DIST    dist/<name>/ bundle directory
-set(PLATFORM_PS2PAL_DIR     "ps2/pal")
-set(PLATFORM_PS2PAL_BASE    "ps2")
-set(PLATFORM_PS2PAL_SYSTEM  "Generic")
-set(PLATFORM_PS2PAL_EXE     "main.elf")
-set(PLATFORM_PS2PAL_DIST    "ps2pal")
+#   _DIR        engine/platform subdirectory holding the concrete platform
+#   _BASE       shared base directory (empty when the platform has no base)
+#   _TOOLCHAIN  ENGINE_TOOLCHAIN_ID this platform requires, set by toolchains/*.cmake
+#   _EXE        executable file name
+#   _DIST       dist/<name>/ bundle directory
+set(PLATFORM_PS2PAL_DIR        "ps2/pal")
+set(PLATFORM_PS2PAL_BASE       "ps2")
+set(PLATFORM_PS2PAL_TOOLCHAIN  "ps2dev")
+set(PLATFORM_PS2PAL_EXE        "main.elf")
+set(PLATFORM_PS2PAL_DIST       "ps2pal")
 
-set(PLATFORM_PS2NTSC_DIR    "ps2/ntsc")
-set(PLATFORM_PS2NTSC_BASE   "ps2")
-set(PLATFORM_PS2NTSC_SYSTEM "Generic")
-set(PLATFORM_PS2NTSC_EXE    "main.elf")
-set(PLATFORM_PS2NTSC_DIST   "ps2ntsc")
+set(PLATFORM_PS2NTSC_DIR       "ps2/ntsc")
+set(PLATFORM_PS2NTSC_BASE      "ps2")
+set(PLATFORM_PS2NTSC_TOOLCHAIN "ps2dev")
+set(PLATFORM_PS2NTSC_EXE       "main.elf")
+set(PLATFORM_PS2NTSC_DIST      "ps2ntsc")
 
-set(PLATFORM_WIN32_DIR      "win32")
-set(PLATFORM_WIN32_BASE     "")
-set(PLATFORM_WIN32_SYSTEM   "Windows")
-set(PLATFORM_WIN32_EXE      "game.exe")
-set(PLATFORM_WIN32_DIST     "win32")
+set(PLATFORM_WIN32_DIR         "win32")
+set(PLATFORM_WIN32_BASE        "")
+set(PLATFORM_WIN32_TOOLCHAIN   "mingw-w64")
+set(PLATFORM_WIN32_EXE         "game.exe")
+set(PLATFORM_WIN32_DIST        "win32")
+
+set(PLATFORM_VITA_DIR          "vita/handheld")
+set(PLATFORM_VITA_BASE         "vita")
+set(PLATFORM_VITA_TOOLCHAIN    "vitasdk")
+set(PLATFORM_VITA_EXE          "main.elf")
+set(PLATFORM_VITA_DIST         "vita")
+
+set(PLATFORM_VITATV_DIR        "vita/tv")
+set(PLATFORM_VITATV_BASE       "vita")
+set(PLATFORM_VITATV_TOOLCHAIN  "vitasdk")
+set(PLATFORM_VITATV_EXE        "main.elf")
+set(PLATFORM_VITATV_DIST       "vitatv")
 
 set(PLATFORMS_TO_SUPPORT "${ENGINE_KNOWN_PLATFORMS}"
     CACHE STRING "Platforms to build. Defaults to every known platform, filtered by the active toolchain.")
@@ -76,14 +89,14 @@ foreach(_P ${PLATFORMS_TO_SUPPORT})
         continue()
     endif()
 
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL PLATFORM_${_P}_SYSTEM)
+    if(NOT ENGINE_TOOLCHAIN_ID STREQUAL PLATFORM_${_P}_TOOLCHAIN)
         if(_EXPLICIT_LIST)
             message(FATAL_ERROR
-                "Platform '${_P}' needs CMAKE_SYSTEM_NAME=${PLATFORM_${_P}_SYSTEM}, "
-                "but this toolchain gives '${CMAKE_SYSTEM_NAME}'.\n"
+                "Platform '${_P}' needs toolchains/${PLATFORM_${_P}_TOOLCHAIN}.cmake, "
+                "but this configure used '${ENGINE_TOOLCHAIN_ID}'.\n"
                 "Use the matching toolchain file in toolchains/, or drop '${_P}' from PLATFORMS_TO_SUPPORT.")
         endif()
-        list(APPEND _SKIPPED "${_P} (needs a ${PLATFORM_${_P}_SYSTEM} toolchain)")
+        list(APPEND _SKIPPED "${_P} (needs the ${PLATFORM_${_P}_TOOLCHAIN} toolchain)")
         continue()
     endif()
 
@@ -94,7 +107,7 @@ if(NOT ENGINE_ACTIVE_PLATFORMS)
     message(FATAL_ERROR
         "No platform survives this configuration.\n"
         "Requested: ${PLATFORMS_TO_SUPPORT}\n"
-        "Toolchain reports CMAKE_SYSTEM_NAME='${CMAKE_SYSTEM_NAME}'.\n"
+        "Toolchain reports ENGINE_TOOLCHAIN_ID='${ENGINE_TOOLCHAIN_ID}'.\n"
         "Pick a toolchain from toolchains/ that matches one of: ${ENGINE_KNOWN_PLATFORMS}")
 endif()
 
@@ -104,7 +117,7 @@ if(_SKIPPED)
 endif()
 
 # The first surviving platform is the default for anything that needs to pick
-# one (e.g. which ISO the run-emulator target launches).
+# one (e.g. which ISO the default run target launches).
 list(GET ENGINE_ACTIVE_PLATFORMS 0 ENGINE_DEFAULT_PLATFORM)
 
 # Absolute paths a platform's sources and constants live at.

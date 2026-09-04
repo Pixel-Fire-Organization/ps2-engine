@@ -132,6 +132,9 @@ bool Win32Platform::HasCapability(PlatformCapability key) const
     case PlatformCapability::ResizableWindow:
         return true;
 
+    case PlatformCapability::Touch:
+        return false;
+
     case PlatformCapability::Count:
         break;
     }

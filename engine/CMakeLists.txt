@@ -25,11 +25,14 @@ set(ENGINE_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineApp.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/GameAPI.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineInput.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineAchievement.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/NullRenderer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/tim2.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/ModelLoad.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/Transform3D.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/DrawList.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/StagedGeometry.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/TextureExpand.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/Frustum.cpp"
     CACHE INTERNAL "")
 
@@ -56,6 +59,8 @@ set(ENGINE_CORE_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineLevelFormat.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineSector.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineInput.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineAchievement.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/AchievementContract.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/EngineGraphics.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/NullRenderer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Renderer.h"
@@ -63,6 +68,8 @@ set(ENGINE_CORE_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Types.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/UI.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/DrawList.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/StagedGeometry.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/TextureExpand.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/Frustum.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/graphics/ModelFormat.h"
     CACHE INTERNAL "")

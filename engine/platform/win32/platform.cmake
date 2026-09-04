@@ -70,8 +70,6 @@ function(platform_configure PLATFORM)
         "${_variantDir}/Window.cpp"
         "${_variantDir}/Platform.h"
         "${_variantDir}/PlatformConstants.h"
-        "${_variantDir}/renderer/DesktopGeometry.cpp"
-        "${_variantDir}/renderer/DesktopGeometry.h"
         "${_variantDir}/renderer/GlApi.cpp"
         "${_variantDir}/renderer/GlApi.h"
         "${_variantDir}/renderer/OpenGl.cpp"
@@ -97,6 +95,15 @@ endfunction()
 # Stage a self-contained bundle: the exe plus the assets it needs, so the folder
 # can be copied anywhere and run. Deliberately not an installer - dist/win32/ is
 # the deliverable.
+# Launch the staged executable.
+function(platform_run PLATFORM EXE_TARGET DIST_DIR)
+    add_custom_target(run-${PLATFORM_${PLATFORM}_DIST}
+        COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/run_target.py" "${DIST_DIR}/${PLATFORM_${PLATFORM}_EXE}"
+        COMMENT "Launching dist/${PLATFORM_${PLATFORM}_DIST}/${PLATFORM_${PLATFORM}_EXE}"
+        VERBATIM
+    )
+endfunction()
+
 function(platform_package PLATFORM EXE_TARGET DIST_DIR)
     string(TOLOWER "${PLATFORM}" _lower)
 

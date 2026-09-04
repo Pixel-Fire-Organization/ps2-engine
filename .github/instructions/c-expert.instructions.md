@@ -7,7 +7,9 @@
 ## 1. General Principles
 
 - **Design**: Encapsulation (hide state in `.c`), Abstraction, DRY, and KISS.
-- **Comments**: Only when necessary. Comment the **"why"**, not the **"what"**.
+- **Comments**: Comment the **function signature only** — a doc comment on the declaration giving the summary,
+  parameters and return value, so an editor can show it to a caller. No inline commentary or rationale; that belongs
+  in `docs/`. See the Comments section of `cpp-expert.instructions.md` for the full rule and an example.
 - **Error Handling**: Use **enums** for descriptive error codes or `bool` for simple success/fail. Avoid raw integers.
   Use `Engine_Panic` only for unrecoverable hardware/memory states.
 

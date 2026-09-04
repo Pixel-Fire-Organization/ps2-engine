@@ -13,11 +13,19 @@ changing engine code should not re-encode every texture.
 | 2. Compile game | Game sources and generated code | Executable |
 | 3. **Cook assets** | Source art, models, maps + that platform cook list | Engine-native files, per platform |
 | 4. **Package resources** | Cooked files, per platform | Containers |
-| 5. Make distribution | Executable and containers | A runnable directory, per platform |
+| 5. Make distribution | Executable, containers + that platform title metadata | A runnable directory or installable package, per platform |
 
 Stages 1 and 2 are per platform because the code is. Stages 3 and 4 are **also**
 per platform for assets, because what a platform wants cooked differs — see
 below. Stage 5 assembles the two halves.
+
+**Stage 5 may need title metadata**, where the platform distributes an installable
+package rather than a directory. That metadata — display name, identifier, icon,
+store-front layout, achievements — describes the *game*, not the hardware, so it
+is declared under `game/platform/<name>/` and validated before it is used, in the
+same way stage 4 is gated on validating the cooked tree. A platform that ships a
+plain directory declares none of it. See [vita/PACKAGING.md](vita/PACKAGING.md)
+for the only current instance.
 
 **Worlds are the exception.** A compiled world has no platform-varying encoding,
 so it is compiled once, directly into its container form, and staged into every
@@ -30,13 +38,16 @@ happens, not because it is cooked per platform.
 dist/
   cooked/
     <platform>/        stage 3 output: engine-native files, not yet packed
-  <platform>/          stage 5 output: a self-contained runnable directory
+  <platform>/          stage 5 output: a self-contained runnable directory,
+                       or the installable package the platform distributes
 ```
 
 A distribution directory is self-contained: it can be copied elsewhere and run,
 with no reference back into the build tree or into another platform directory.
 This is what makes it impossible to launch one platform build with another
-platform assets.
+platform assets. Where the platform distributes a package rather than a
+directory, the same property holds of the package — it carries its own assets, so
+it cannot be installed against another platform content.
 
 ## Cooking is per platform
 

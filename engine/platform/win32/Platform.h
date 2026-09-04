@@ -58,6 +58,9 @@ public:
     bool HasCapability(PlatformCapability key) const override;
 
     // --- Memory.cpp ---------------------------------------------------------
+    /// @return Null; this platform has no achievements.
+    AchievementContract* GetAchievements() override { return nullptr; }
+
     MemoryContract& GetMemory() override { return m_memory; }
     const MemoryContract& GetMemory() const override { return m_memory; }
     uint32_t GetTextureFootprintBytes(uint32_t width, uint32_t height, PixelFormat format, uint8_t mipCount) const override;
@@ -105,6 +108,8 @@ public:
     Vector2 Mouse_GetPosition() const override;
     Vector2 Mouse_GetDelta() const override;
     float Mouse_GetWheelDelta() const override;
+    uint8_t Touch_GetContactCount(TouchSurface surface) const override;
+    bool Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const override;
 
     // --- Window.cpp ---------------------------------------------------------
     bool WindowOpen(const WindowDesc& desc) override;

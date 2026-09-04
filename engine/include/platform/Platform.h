@@ -5,6 +5,7 @@
 
 #include "PlatformKeys.h"
 #include "PlatformTypes.h"
+#include "platform/AchievementContract.h"
 #include "platform/MemoryContract.h"
 #include "graphics/Types.h"
 
@@ -44,6 +45,9 @@ public:
     // See docs/subsystems/MEMORY.md.
     virtual MemoryContract& GetMemory() = 0;
     virtual const MemoryContract& GetMemory() const = 0;
+
+    /// @return The achievement contract, or null when this platform has none.
+    virtual AchievementContract* GetAchievements() = 0;
 
     // Bytes this platform actually spends on a texture of these dimensions.
     // NOT simply width*height*bpp: the PS2 rounds every mip level up to whole
@@ -110,6 +114,16 @@ public:
     virtual Vector2 Mouse_GetPosition() const = 0;
     virtual Vector2 Mouse_GetDelta() const = 0;
     virtual float Mouse_GetWheelDelta() const = 0;
+
+    /// @param surface Which panel to query.
+    /// @return Live contacts; zero on a platform without touch.
+    virtual uint8_t Touch_GetContactCount(TouchSurface surface) const = 0;
+
+    /// @param surface Which panel to query.
+    /// @param index Contact index below the current count.
+    /// @param outContact Receives the contact, position normalised to [0,1].
+    /// @return False when index is past the count, leaving outContact untouched.
+    virtual bool Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const = 0;
 
     // --- Window / presentation ----------------------------------------------
     // A platform with a fixed framebuffer implements these as stubs that report

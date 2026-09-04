@@ -39,30 +39,36 @@ Read the guideline **before** starting, not while reviewing.
 | [Level](subsystems/LEVEL.md) | Yes |
 | [Sector](subsystems/SECTOR.md) | Yes |
 | [Input](subsystems/INPUT.md) | Yes |
+| [Achievement](subsystems/ACHIEVEMENT.md) | Yes |
 
 ## Formats
 
-On-disc layouts, identical on every platform.
+On-disc layouts. The first three are identical on every platform; the last is a
+console format one platform is obliged to produce.
 
 - [ASSET_FORMAT.md](formats/ASSET_FORMAT.md) — one cooked asset
 - [ARCHIVE_FORMAT.md](formats/ARCHIVE_FORMAT.md) — the container, and the canonical key rule
 - [LEVEL_FORMAT.md](formats/LEVEL_FORMAT.md) — compiled worlds
+- [TROPHY_PACK.md](formats/TROPHY_PACK.md) — Vita trophy container
 
 ## Platforms
 
-| | PlayStation 2 | Win32 |
-|---|---|---|
-| Spec | [ps2/PLATFORM.md](ps2/PLATFORM.md) | [win32/PLATFORM.md](win32/PLATFORM.md) |
-| Building | [ps2/BUILD.md](ps2/BUILD.md) | [win32/BUILD.md](win32/BUILD.md) |
-| Selectable as | `ps2pal`, `ps2ntsc` | `win32` |
-| Default renderer | [giftag](ps2/renderers/GIFTAG.md) | [webgpu](win32/renderers/WEBGPU.md) |
-| Fallback | [ps2gl](ps2/renderers/PS2GL.md), then null | [opengl](win32/renderers/OPENGL.md), then null |
+| | PlayStation 2 | Win32 | PlayStation Vita |
+|---|---|---|---|
+| Spec | [ps2/PLATFORM.md](ps2/PLATFORM.md) | [win32/PLATFORM.md](win32/PLATFORM.md) | [vita/PLATFORM.md](vita/PLATFORM.md) |
+| Building | [ps2/BUILD.md](ps2/BUILD.md) | [win32/BUILD.md](win32/BUILD.md) | [vita/BUILD.md](vita/BUILD.md) |
+| Selectable as | `ps2pal`, `ps2ntsc` | `win32` | `vita`, `vitatv` |
+| Default renderer | [giftag](ps2/renderers/GIFTAG.md) | [webgpu](win32/renderers/WEBGPU.md) | [gxm](vita/renderers/GXM.md) |
+| Fallback | [ps2gl](ps2/renderers/PS2GL.md), then null | [opengl](win32/renderers/OPENGL.md), then null | [vitagl](vita/renderers/VITAGL.md), then null |
 
 PS2 extras: [TEXTURE_BUDGET.md](ps2/TEXTURE_BUDGET.md),
 [PS2SDK_SETUP.md](ps2/PS2SDK_SETUP.md),
 [ISO_GENERATION.md](ps2/ISO_GENERATION.md),
 [PCSX2_DEBUGGING.md](ps2/PCSX2_DEBUGGING.md),
 [PS2GL_FUNCTIONS.md](ps2/renderers/PS2GL_FUNCTIONS.md).
+
+Vita extras: [PACKAGING.md](vita/PACKAGING.md) — title metadata, the store-front
+images and their exact sizes, and trophies.
 
 Editor setup: [CLION_SETUP.md](CLION_SETUP.md).
 

@@ -386,3 +386,17 @@ Vector2 Win32Platform::Mouse_GetPosition() const { return m_mouse.position; }
 Vector2 Win32Platform::Mouse_GetDelta() const { return Vector2{m_mouse.position.x - m_mousePrev.position.x, m_mouse.position.y - m_mousePrev.position.y}; }
 
 float Win32Platform::Mouse_GetWheelDelta() const { return m_mouse.wheel; }
+
+uint8_t Win32Platform::Touch_GetContactCount(TouchSurface surface) const
+{
+    UNUSED_VAR(surface);
+    return 0;
+}
+
+bool Win32Platform::Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const
+{
+    UNUSED_VAR(surface);
+    UNUSED_VAR(index);
+    UNUSED_VAR(outContact);
+    return false;
+}

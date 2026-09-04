@@ -12,6 +12,8 @@
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
 
+set(ENGINE_TOOLCHAIN_ID "mingw-w64" CACHE INTERNAL "Active toolchain")
+
 set(MINGW_TARGET x86_64-w64-mingw32)
 
 find_program(CMAKE_C_COMPILER   ${MINGW_TARGET}-gcc     REQUIRED)

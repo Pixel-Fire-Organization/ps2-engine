@@ -1,0 +1,69 @@
+{
+  "$schema": "../package.schema.json",
+  "platform": "vita",
+  "description": "Title identity, store-front presentation and achievements for the Vita family. Describes the game, not the hardware - the cook list in engine/platform/vita/ is the hardware half. See docs/vita/PACKAGING.md.",
+
+  "title": {
+    "id": "PSEN00001",
+    "name": "PS2 Engine",
+    "version": "01.00"
+  },
+
+  "self": {
+    "safe": true,
+    "compress": true,
+    "extended_memory": false
+  },
+
+  "sfo": {
+    "category": "gd",
+    "parental_level": 1
+  },
+
+  "livearea": {
+    "icon": "sce_sys/icon0.png",
+    "background": "sce_sys/livearea/contents/bg0.png",
+    "startup": "sce_sys/livearea/contents/startup.png",
+    "picture": "sce_sys/pic0.png",
+    "style": "a1"
+  },
+
+  "trophies": {
+    "enabled": false,
+    "np_communication_id": "NPWR00001_00",
+    "list": [
+      {
+        "id": 0,
+        "grade": "platinum",
+        "name": "Engine Complete",
+        "detail": "Unlock every other trophy.",
+        "hidden": false,
+        "icon": "trophy/icons/TROP000.PNG"
+      },
+      {
+        "id": 1,
+        "grade": "gold",
+        "name": "World Traveller",
+        "detail": "Load a streamed world and return to the menu.",
+        "hidden": false,
+        "icon": "trophy/icons/TROP001.PNG"
+      },
+      {
+        "id": 2,
+        "grade": "bronze",
+        "name": "First Frame",
+        "detail": "Render the scene menu.",
+        "hidden": false,
+        "icon": "trophy/icons/TROP002.PNG"
+      }
+    ]
+  },
+
+  "variants": {
+    "vitatv": {
+      "title": {
+        "name": "PS2 Engine (PS TV)"
+      }
+    }
+  }
+}

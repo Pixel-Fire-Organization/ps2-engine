@@ -19,6 +19,8 @@ TOOLCHAINS = {
     "PS2PAL": "toolchains/ps2dev.cmake",
     "PS2NTSC": "toolchains/ps2dev.cmake",
     "WIN32": "toolchains/mingw-w64.cmake",
+    "VITA": "toolchains/vitasdk.cmake",
+    "VITATV": "toolchains/vitasdk.cmake",
 }
 
 REGION_ALIAS = {"pal": "PS2PAL", "ntsc": "PS2NTSC"}

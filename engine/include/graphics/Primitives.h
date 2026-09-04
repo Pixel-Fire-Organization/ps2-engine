@@ -51,5 +51,7 @@ enum class RendererType : uint8_t
     Ps2Gl, // PS2: ps2gl (a GL 1.1 subset over the GS), NOT desktop OpenGL
     GifTag, // PS2: direct GS packets via packet2/draw
     OpenGl, // desktop OpenGL 2.1 / 3.3 / 4.x
-    WebGpu // desktop WebGPU (wgpu-native)
+    WebGpu, // desktop WebGPU (wgpu-native)
+    Gxm, // Vita: sceGxm packets
+    VitaGl // Vita: vitaGL (a fixed-function subset over sceGxm), NOT desktop OpenGL
 };

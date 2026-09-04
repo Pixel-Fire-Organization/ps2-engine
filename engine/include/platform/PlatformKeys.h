@@ -14,24 +14,24 @@
 // ---------------------------------------------------------------------------
 
 // --- Platform identity ------------------------------------------------------
-// Concrete, selectable platforms only. There is deliberately no bare `Ps2`:
-// Ps2Platform is abstract and cannot be instantiated, so a build always resolves
-// to one region.
+// Concrete, selectable platforms only. There is deliberately no bare `Ps2` and no
+// bare `Vita`: both family bases are abstract and cannot be instantiated, so a
+// build always resolves to one variant.
 enum class PlatformId : uint8_t
 {
     Unknown = 0,
     Ps2Pal,
     Ps2Ntsc,
     Win32,
+    Vita,
+    VitaTv,
 
     Count
 };
 
 // --- Renderer identity ------------------------------------------------------
-// Ps2Gl and OpenGl are UNRELATED backends that happen to share a lineage of
-// naming: ps2gl is a GL-1.1-subset library driving the GS through VU1 microcode,
-// OpenGl is the desktop API at 2.1-4.6. They share no code beyond the Renderer
-// interface, and no platform hosts both.
+// Ps2Gl, VitaGl and OpenGl are UNRELATED backends despite the shared naming
+// lineage. They share no code, and no platform hosts more than one of them.
 enum class RendererId : uint8_t
 {
     Unknown = 0,
@@ -40,6 +40,8 @@ enum class RendererId : uint8_t
     GifTag, // PS2 only - direct GS packets via packet2/draw
     OpenGl, // desktop only - GL 2.1 / 3.3 / 4.x
     WebGpu, // desktop only - wgpu-native
+    Gxm, // Vita only - sceGxm packets, shaders compiled at build time
+    VitaGl, // Vita only - vitaGL, a fixed-function subset over sceGxm
 
     Count
 };
@@ -96,6 +98,15 @@ enum class PlatformCapability : uint8_t
     ResizableWindow,
     AsyncIo,
     FileWrite,
+    Touch,
+
+    Count
+};
+
+enum class TouchSurface : uint8_t
+{
+    Front = 0,
+    Rear,
 
     Count
 };

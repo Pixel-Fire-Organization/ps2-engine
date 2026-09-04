@@ -15,11 +15,19 @@ earlier design re-read the device inside each query, so a button could report
 pressed and released within one frame, and any device requiring a pumped message
 queue could not be supported at all.
 
-**Three device groups, never blurred.** Gamepad, keyboard and mouse are separate
-query groups with separate names. A platform without a keyboard answers every
-keyboard query with a negative rather than pretending a pad is a keyboard.
+**Four device groups, never blurred.** Gamepad, keyboard, mouse and touch are
+separate query groups with separate names. A platform without a keyboard answers
+every keyboard query with a negative rather than pretending a pad is a keyboard.
 Callers that need to branch on what exists ask the platform for the capability
 instead of testing the platform identity.
+
+**Touch is not a mouse**, and the two are never mapped onto each other in either
+direction. A mouse has exactly one cursor, which exists whether or not a button
+is held; a touch surface has zero or more contacts, which exist only while
+touched. A platform with a mouse and no touchscreen reports touch as absent even
+though it has a pointer, and a platform with a touchscreen and no mouse reports
+mouse as absent even though the player can point at things. Collapsing the two
+would make "can the player point at this?" unanswerable.
 
 **Edge detection is free and correct.** The previous frame snapshot is retained
 alongside the current one, so rising and falling edges are derived rather than
@@ -38,16 +46,27 @@ content is playable on a desktop — that mapping is a named, disableable layer,
 not something baked into the device queries. With it disabled, the keyboard still
 reports as a keyboard; only the virtual pad disappears.
 
+**Touch positions are normalised, not pixels.** Contacts are reported in [0,1]
+over their own surface. This is not a convenience: a rear touch surface is behind
+the device and has no pixel correspondence to anything on screen, so reporting it
+in pixels would be inventing a mapping that does not exist. A caller wanting
+screen coordinates for a front surface multiplies by the framebuffer size it
+already knows.
+
+**Touch contacts carry a stable identity** for as long as the finger stays down,
+so a drag can be followed across frames without matching positions by proximity.
+
 ## Depends on
 
 - **Platform** — device reading, the per-frame poll, and the capability
   reporting that says which groups are real. Per-platform device details are in
-  the platform specs: [PS2](../ps2/PLATFORM.md), [Win32](../win32/PLATFORM.md).
+  the platform specs: [PS2](../ps2/PLATFORM.md), [Win32](../win32/PLATFORM.md),
+  [Vita](../vita/PLATFORM.md).
 
 ## Depended on by
 
 - [Debug](DEBUG.md) — the performance overlay trigger is an input combination.
-- Game code, through the public game API, which mirrors the same three-way split.
+- Game code, through the public game API, which mirrors the same four-way split.
 
 ## Lifecycle
 
@@ -77,6 +96,10 @@ that reads input sees an idle controller rather than requiring a device to exist
 ## Limits
 
 - Port count for gamepads is platform-defined.
+- Touch surfaces are platform-defined: a platform may have one, both, or neither,
+  and the maximum simultaneous contacts is a platform limit.
+- There is no gesture recognition — no taps, swipes, pinches or long-presses.
+  The engine reports contacts; anything built from them is the game's.
 - Analog triggers are a capability, not a guarantee: platforms without them
   report their triggers as fully released or fully pressed.
 - Mouse position is in window coordinates and is meaningless on platforms with no

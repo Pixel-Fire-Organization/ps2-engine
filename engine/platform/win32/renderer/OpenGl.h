@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DesktopGeometry.h"
+#include "graphics/StagedGeometry.h"
 #include "EngineCore.h"
 #include "GlApi.h"
 #include "graphics/Renderer.h"
@@ -88,7 +88,7 @@ private:
     GLuint m_whiteTexture;
     GLuint m_textures[GL_MAX_RESIDENT_TEXTURES];
 
-    DesktopGeometry m_geometry;
+    StagedGeometry m_geometry;
 
     Color3 m_clearColor;
     uint32_t m_width;

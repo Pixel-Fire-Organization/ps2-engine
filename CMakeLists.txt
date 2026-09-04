@@ -22,8 +22,8 @@ include(Platforms)
 # dependencies first. Variants share a base fragment, so include each once.
 #
 # Each fragment defines platform_configure(), plus optional platform_dependencies(),
-# platform_package() and platform_debug_symbols(). Fixed names, because a configure
-# only ever has one toolchain and therefore one base fragment.
+# platform_package(), platform_run() and platform_debug_symbols(). Fixed names,
+# because a configure only ever has one toolchain and therefore one base fragment.
 set(_loadedFragments "")
 foreach(PLATFORM ${ENGINE_ACTIVE_PLATFORMS})
     if(PLATFORM_${PLATFORM}_BASE STREQUAL "")
@@ -62,6 +62,9 @@ foreach(PLATFORM ${ENGINE_ACTIVE_PLATFORMS})
     if(COMMAND platform_package)
         platform_package(${PLATFORM} ${_appTarget} "${_distDir}")
     endif()
+    if(COMMAND platform_run)
+        platform_run(${PLATFORM} ${_appTarget} "${_distDir}")
+    endif()
     if(COMMAND platform_debug_symbols)
         platform_debug_symbols(${PLATFORM} ${_appTarget} "${_distDir}")
     endif()
@@ -89,6 +92,13 @@ foreach(PLATFORM ${ENGINE_ACTIVE_PLATFORMS})
     endif()
 endforeach()
 list(REMOVE_DUPLICATES _extraClean)
+
+add_custom_target(test-tools
+    COMMAND ${PYTHON3_BIN} -m pytest "${CMAKE_SOURCE_DIR}/tools/tests" -q
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Running the tool test suite"
+    VERBATIM
+)
 
 add_custom_target(clean-all
     COMMENT "Cleaning all build artefacts for a full from-scratch rebuild..."
