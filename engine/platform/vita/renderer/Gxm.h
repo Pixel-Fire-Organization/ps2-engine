@@ -83,6 +83,7 @@ private:
         bool used;
     };
 
+    bool InitPrimitives();
     bool InitGraphics();
     bool InitRenderTarget();
     bool InitShaders();
@@ -141,6 +142,9 @@ private:
     uint32_t m_width;
     uint32_t m_height;
     uint32_t m_frameVertices;
+    uint32_t m_frame3DVertices;
+    uint32_t m_frame2DVertices;
+    uint32_t m_reportedOverflow;
 
     DrawStats m_frameStats;
     bool m_sceneActive;

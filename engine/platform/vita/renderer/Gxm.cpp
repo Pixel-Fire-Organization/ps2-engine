@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "EngineDebug.h"
+#include "EngineMemory.h"
 #include "Macros.h"
 #include "PlatformConstants.h"
 #include "graphics/TextureExpand.h"
@@ -155,7 +156,7 @@ GxmRenderer::GxmRenderer(const EngineConfig& config)
       m_depthUid(-1), m_shaderPatcher(nullptr), m_patcherBuffer(nullptr), m_patcherVertexUsse(nullptr), m_patcherFragmentUsse(nullptr), m_patcherBufferUid(-1),
       m_patcherVertexUsseUid(-1), m_patcherFragmentUsseUid(-1), m_vertexProgram(nullptr), m_fragmentProgram(nullptr), m_viewProjParam(nullptr), m_vertexBuffer(nullptr),
       m_indexBuffer(nullptr), m_vertexBufferUid(-1), m_indexBufferUid(-1), m_whiteTexture(0), m_geometry(), m_clearColor(Color3{0.0f, 0.0f, 0.0f}), m_width(GFX_SCREEN_WIDTH),
-      m_height(GFX_SCREEN_HEIGHT), m_frameVertices(0), m_frameStats(), m_sceneActive(false), m_initialized(false)
+      m_height(GFX_SCREEN_HEIGHT), m_frameVertices(0), m_frame3DVertices(0), m_frame2DVertices(0), m_reportedOverflow(0), m_frameStats(), m_sceneActive(false), m_initialized(false)
 {
     UNUSED_VAR(config);
     memset(m_displayBuffers, 0, sizeof(m_displayBuffers));
@@ -163,7 +164,7 @@ GxmRenderer::GxmRenderer(const EngineConfig& config)
     for (uint32_t i = 0; i < GFX_GXM_DISPLAY_BUFFERS; ++i)
         m_displayBuffers[i].uid = -1;
 
-    if (!InitGraphics() || !InitRenderTarget() || !InitShaders() || !InitBuffers())
+    if (!InitPrimitives() || !InitGraphics() || !InitRenderTarget() || !InitShaders() || !InitBuffers())
     {
         Engine_LogError("GxmRenderer: initialisation failed");
         DestroyGraphics();
@@ -172,6 +173,18 @@ GxmRenderer::GxmRenderer(const EngineConfig& config)
 
     m_initialized = true;
     Engine_LogInfo("GxmRenderer: ready (%ux%u, %u vertex ceiling)", m_width, m_height, GFX_GXM_MAX_FRAME_VERTICES);
+}
+
+bool GxmRenderer::InitPrimitives()
+{
+    float* arena = static_cast<float*>(Engine_GetSlot(ARENA_RENDERER, 0));
+    if (!arena)
+    {
+        Engine_LogError("GxmRenderer: failed to retrieve ARENA_RENDERER slot 0");
+        return false;
+    }
+    m_drawLists.Init(arena);
+    return true;
 }
 
 bool GxmRenderer::InitGraphics()
@@ -584,11 +597,18 @@ void GxmRenderer::BeginFrame()
     Platform* platform = Engine_GetPlatform();
     platform->GetFramebufferSize(&m_width, &m_height);
 
+    m_geometry.SetFrameBudget(GFX_GXM_MAX_FRAME_VERTICES, m_width, m_height);
     m_geometry.BeginFrame();
     m_frameStats = DrawStats{};
 }
 
-void GxmRenderer::Render() { m_geometry.BuildFrame(m_drawLists, &m_frameStats); }
+void GxmRenderer::Render()
+{
+    Platform* platform = Engine_GetPlatform();
+    const double start = platform->GetTimeSeconds();
+    m_geometry.BuildFrame(m_drawLists, &m_frameStats);
+    m_frameStats.geometryBuildMs = static_cast<float>((platform->GetTimeSeconds() - start) * 1000.0);
+}
 
 void GxmRenderer::UploadVertices()
 {
@@ -596,21 +616,37 @@ void GxmRenderer::UploadVertices()
     const uint32_t count2D = m_geometry.Count2D();
     uint32_t total = count3D + count2D;
 
+    m_frameStats.submitBufferUsedBytes = total * sizeof(StagedGeometry::Vertex);
+    m_frameStats.submitBufferCapacityBytes = GFX_GXM_MAX_FRAME_VERTICES * sizeof(StagedGeometry::Vertex);
+
     if (total > GFX_GXM_MAX_FRAME_VERTICES)
     {
-        Engine_LogError("GxmRenderer: frame needs %u vertices, ceiling is %u; dropping the excess", total, GFX_GXM_MAX_FRAME_VERTICES);
+        if (total != m_reportedOverflow)
+        {
+            m_reportedOverflow = total;
+            Engine_LogError("GxmRenderer: frame needs %u vertices, ceiling is %u; dropping the excess", total, GFX_GXM_MAX_FRAME_VERTICES);
+        }
         total = GFX_GXM_MAX_FRAME_VERTICES;
     }
+    else
+    {
+        m_reportedOverflow = 0;
+    }
 
+    // The stager reserves the interface's share before it builds world geometry,
+    // so this is a backstop. Should it ever bind, world geometry yields — the
+    // interface is what a player needs in order to react to the problem.
     StagedGeometry::Vertex* dst = static_cast<StagedGeometry::Vertex*>(m_vertexBuffer);
-    const uint32_t take3D = (count3D < total) ? count3D : total;
-    const uint32_t take2D = (total - take3D < count2D) ? (total - take3D) : count2D;
+    const uint32_t take2D = (count2D < total) ? count2D : total;
+    const uint32_t take3D = (total - take2D < count3D) ? (total - take2D) : count3D;
 
     if (take3D)
         memcpy(dst, m_geometry.Vertices3D(), take3D * sizeof(StagedGeometry::Vertex));
     if (take2D)
         memcpy(dst + take3D, m_geometry.Vertices2D(), take2D * sizeof(StagedGeometry::Vertex));
 
+    m_frame3DVertices = take3D;
+    m_frame2DVertices = take2D;
     m_frameVertices = take3D + take2D;
 }
 
@@ -654,8 +690,6 @@ void GxmRenderer::DrawClearQuad()
 
 void GxmRenderer::DrawStagedGeometry()
 {
-    const uint32_t count3D = m_geometry.Count3D();
-    const uint32_t count2D = m_geometry.Count2D();
     if (m_frameVertices == 0)
         return;
 
@@ -667,7 +701,7 @@ void GxmRenderer::DrawStagedGeometry()
 
     float matrix[16];
 
-    if (count3D > 0)
+    if (m_frame3DVertices > 0)
     {
         sceGxmSetFrontDepthFunc(m_context, SCE_GXM_DEPTH_FUNC_LESS_EQUAL);
         sceGxmSetFrontDepthWriteEnable(m_context, SCE_GXM_DEPTH_WRITE_ENABLED);
@@ -682,11 +716,12 @@ void GxmRenderer::DrawStagedGeometry()
         for (uint32_t i = 0; i < m_geometry.RunCount(); ++i)
         {
             const uint32_t first = runs[i].first;
-            if (first >= m_frameVertices)
+            if (first >= m_frame3DVertices)
                 continue;
             uint32_t count = runs[i].count;
-            if (first + count > m_frameVertices)
-                count = m_frameVertices - first;
+            if (first + count > m_frame3DVertices)
+                count = m_frame3DVertices - first;
+            count -= count % 3u;
             if (!count)
                 continue;
 
@@ -698,7 +733,7 @@ void GxmRenderer::DrawStagedGeometry()
         }
     }
 
-    if (count2D > 0 && m_frameVertices > count3D)
+    if (m_frame2DVertices > 0)
     {
         sceGxmSetFrontDepthFunc(m_context, SCE_GXM_DEPTH_FUNC_ALWAYS);
         sceGxmSetFrontDepthWriteEnable(m_context, SCE_GXM_DEPTH_WRITE_DISABLED);
@@ -712,7 +747,7 @@ void GxmRenderer::DrawStagedGeometry()
         if (m_whiteTexture && m_textures[m_whiteTexture - 1u].used)
             sceGxmSetFragmentTexture(m_context, 0, &m_textures[m_whiteTexture - 1u].texture);
 
-        sceGxmDraw(m_context, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, indices + count3D, m_frameVertices - count3D);
+        sceGxmDraw(m_context, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, indices + m_frame3DVertices, m_frame2DVertices);
     }
 }
 
@@ -721,7 +756,10 @@ void GxmRenderer::EndFrame()
     if (!m_initialized)
         return;
 
+    Platform* platform = Engine_GetPlatform();
+    const double uploadStart = platform->GetTimeSeconds();
     UploadVertices();
+    m_frameStats.geometryUploadMs = static_cast<float>((platform->GetTimeSeconds() - uploadStart) * 1000.0);
 
     DisplayBuffer& back = m_displayBuffers[m_backBufferIndex];
 
@@ -740,7 +778,10 @@ void GxmRenderer::EndFrame()
 
     DisplayCallbackData callbackData;
     callbackData.address = back.address;
+
+    const double waitStart = platform->GetTimeSeconds();
     sceGxmDisplayQueueAddEntry(m_displayBuffers[m_frontBufferIndex].sync, back.sync, &callbackData);
+    m_frameStats.presentWaitMs = static_cast<float>((platform->GetTimeSeconds() - waitStart) * 1000.0);
 
     m_frontBufferIndex = m_backBufferIndex;
     m_backBufferIndex = (m_backBufferIndex + 1u) % GFX_GXM_DISPLAY_BUFFERS;

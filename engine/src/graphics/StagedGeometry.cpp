@@ -49,10 +49,21 @@ namespace
 
 } // namespace
 
-StagedGeometry::StagedGeometry() : m_verts3D(nullptr), m_count3D(0), m_capacity3D(0), m_verts2D(nullptr), m_count2D(0), m_capacity2D(0), m_runCount(0), m_stats(nullptr)
+StagedGeometry::StagedGeometry()
+    : m_verts3D(nullptr), m_count3D(0), m_capacity3D(0), m_verts2D(nullptr), m_count2D(0), m_capacity2D(0), m_runCount(0), m_stats(nullptr), m_vertexBudget(0), m_budget3D(0),
+      m_viewportWidth(0), m_viewportHeight(0), m_frustum(), m_frustumValid(false)
 {
     memset(m_runs, 0, sizeof(m_runs));
 }
+
+void StagedGeometry::SetFrameBudget(uint32_t maxVertices, uint32_t viewportWidth, uint32_t viewportHeight)
+{
+    m_vertexBudget = maxVertices;
+    m_viewportWidth = viewportWidth;
+    m_viewportHeight = viewportHeight;
+}
+
+bool StagedGeometry::Admits(uint32_t vertexCount) const { return !m_vertexBudget || (m_count3D + vertexCount <= m_budget3D); }
 
 StagedGeometry::~StagedGeometry()
 {
@@ -148,6 +159,12 @@ void StagedGeometry::AppendMesh(const float model[16], const float* verts, uint8
     const uint32_t maxEmitted = triangles * 3;
     if (maxEmitted == 0)
         return;
+    if (!Admits(maxEmitted))
+    {
+        if (m_stats)
+            ++m_stats->entriesCulled;
+        return;
+    }
     if (!Reserve(m_verts3D, m_capacity3D, m_count3D, maxEmitted))
         return;
 
@@ -250,6 +267,19 @@ void StagedGeometry::AppendPrimitive(const DrawLists& lists, const PrimitiveDraw
     if (!geo.verts || geo.vertexCount == 0)
         return;
 
+    if (m_frustumValid)
+    {
+        Vector3 worldCenter;
+        float worldRadius = 0.0f;
+        Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(), Vector3{0.0f, 0.0f, 0.0f}, lists.GetPrimitiveBaseRadius(entry.type), &worldCenter, &worldRadius);
+        if (!Frustum_SphereVisible(&m_frustum, worldCenter, worldRadius))
+        {
+            if (m_stats)
+                ++m_stats->entriesCulled;
+            return;
+        }
+    }
+
     float model[16];
     BuildModelMatrix(entry.transform.GetPosition(), entry.transform.GetRotation(), entry.transform.GetScale(), model);
     AppendMesh(model, geo.verts, 3, geo.norms, geo.uvs, geo.vertexCount, MESH_TOPOLOGY_LIST, entry.color, ResolveTexture(entry.textureId));
@@ -316,6 +346,25 @@ void StagedGeometry::AppendLevelSectors()
 void StagedGeometry::BuildFrame(DrawLists& lists, DrawStats* stats)
 {
     m_stats = stats;
+
+    // Screen-space work was submitted during the game update, so its cost is
+    // already known. Take it off the top: world geometry must never be able to
+    // crowd out the interface.
+    m_budget3D = 0;
+    if (m_vertexBudget)
+        m_budget3D = (m_vertexBudget > m_count2D) ? (m_vertexBudget - m_count2D) : 0u;
+
+    m_frustumValid = false;
+    if (m_viewportHeight > 0)
+    {
+        float proj[16], view[16], vp[16];
+        const float aspect = static_cast<float>(m_viewportWidth) / static_cast<float>(m_viewportHeight);
+        Frustum_BuildPerspective(proj, lists.GetCamera3D().fovy, aspect, GFX_NEAR_PLANE, GFX_FAR_PLANE);
+        Frustum_BuildLookAt(view, lists.GetCamera3D());
+        Frustum_Mult4x4(vp, proj, view);
+        Frustum_FromViewProj(&m_frustum, vp);
+        m_frustumValid = true;
+    }
 
     // Sorting by texture is what lets PushRun coalesce consecutive geometry into
     // a single draw call.

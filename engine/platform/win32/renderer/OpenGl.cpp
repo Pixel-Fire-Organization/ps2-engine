@@ -525,6 +525,7 @@ void OpenGlRenderer::BeginFrame()
     Platform* platform = Engine_GetPlatform();
     platform->GetFramebufferSize(&m_width, &m_height);
 
+    m_geometry.SetFrameBudget(0, m_width, m_height);
     m_geometry.BeginFrame();
     m_frameStats = DrawStats{};
 }

@@ -6,7 +6,8 @@ Turn the frame the game described into pixels. The engine defines one rendering
 contract; each platform supplies the backends that can satisfy it on that
 hardware. Backend-specific behaviour is documented per backend, not here — see
 the renderer specs under each platform:
-[PS2](../ps2/PLATFORM.md#renderers), [Win32](../win32/PLATFORM.md#renderers).
+[PS2](../ps2/PLATFORM.md#renderers), [Win32](../win32/PLATFORM.md#renderers),
+[Vita](../vita/PLATFORM.md#renderers).
 
 ## Contract
 
@@ -26,6 +27,30 @@ two-dimensional and three-dimensional work independently: resetting all staging
 at frame start discards work the game has already submitted. This is a real
 defect that has occurred, and it presents as screen-space content vanishing while
 world content is fine.
+
+**Built-in primitive shapes are staged, not built in.** The engine describes a
+cube, a sphere and a cylinder once, in a form no backend can consume directly.
+Converting them into drawable arrays is part of **constructing** a backend, and
+the storage for those arrays is the backend's share of the renderer arena. A
+backend that skips that step is fully functional in every other respect and
+still draws level and model geometry — but every primitive the game submits is
+discarded before it reaches the frame. This is a real defect that has occurred,
+on a new backend, and it presents as a world that renders while everything the
+game draws directly is missing.
+
+**What cannot be drawn is rejected before it is built, not after.** A backend
+declares what it can accept for the coming frame; staging then refuses whole
+entries that fall outside the view or will not fit, and reports them as culled.
+Building geometry and discarding it at upload time costs the full price of work
+that was never going to be shown, and it discards at an arbitrary point — mid
+object, and mid triangle. Rejection is by whole entry for that reason.
+
+**Screen-space work is reserved before world geometry is staged.** Its cost is
+already known by then, because it was submitted during the game update. Without
+that reservation a heavy world silently consumes the whole budget and the
+interface disappears exactly when a player most needs it — which is a real
+defect that has occurred. Where a backend still has to truncate as a last
+resort, world geometry yields and the interface is kept.
 
 **Textures are uploaded, then referenced by handle.** A backend accepts a decoded
 texture and returns a handle; the invalid handle is a fixed value every backend

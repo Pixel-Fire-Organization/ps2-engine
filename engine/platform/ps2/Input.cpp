@@ -100,6 +100,20 @@ void Ps2Platform::ShutdownInput()
     }
 }
 
+uint16_t Ps2Platform::GetDebugChord(DebugChord chord) const
+{
+    switch (chord)
+    {
+    case DebugChord::PerfSnapshot:
+        return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::L2) | static_cast<uint16_t>(GamepadButton::R1) | static_cast<uint16_t>(GamepadButton::R2);
+    case DebugChord::OverlayToggle:
+        return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::L2) | static_cast<uint16_t>(GamepadButton::L3) | static_cast<uint16_t>(GamepadButton::R3);
+    case DebugChord::Count:
+        break;
+    }
+    return 0;
+}
+
 bool Ps2Platform::Gamepad_IsConnected(uint8_t port) const { return (port < MAX_GAME_PAD_PORTS) && m_pads[port].connected; }
 
 bool Ps2Platform::Gamepad_IsButtonDown(uint8_t port, GamepadButton button) const

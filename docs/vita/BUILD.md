@@ -121,6 +121,11 @@ runs it. `tools/run_target.py` does that, translating the path for a Windows-sid
 emulator when the build ran under WSL. Set `VITA3K_PATH` if it is installed
 somewhere the search paths do not cover.
 
+Installing on every launch is also the step most likely to hang, and it hangs
+before the title starts, so it looks like a title that will not boot. A package
+already installed can be launched by its title identifier instead, which skips
+installation entirely and is the faster way to re-test the same build.
+
 The package is self-contained: it carries the executable, the asset container and
 the compiled worlds, and refers back to nothing in the build tree.
 
@@ -151,6 +156,13 @@ The file exists because a retail console shows neither. Copy it off and read it
 to find out what actually happened — in particular **which renderer started**,
 since a backend that fails to initialise falls back silently and the only visible
 symptom is a frame that looks wrong or never arrives.
+
+**Under an emulator the file is written through a virtual filesystem, and the
+tail of it can be lost if the emulator is killed rather than closed.** The title
+closes the log as part of shutting down, so a clean exit always produces a
+complete file; a forced kill may leave a short one, or an empty one when the
+title has only just started. Reading an empty log therefore means "not flushed
+yet", not "nothing was logged".
 
 Panics are written to the same file before the process ends, so an unrecoverable
 error leaves a record rather than just closing the title. There is no on-screen

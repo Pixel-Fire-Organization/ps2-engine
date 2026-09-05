@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "graphics/DrawList.h"
+#include "graphics/Frustum.h"
 
 #define GFX_MAX_DRAW_RUNS 1024
 
@@ -43,9 +44,16 @@ public:
     // Clear the 2D staging. Call after the frame has been submitted.
     void EndFrame();
 
+    /// Declare what the backend can accept this frame, before it is built.
+    /// @param maxVertices Total vertex ceiling for the frame; 0 means unlimited.
+    /// @param viewportWidth Framebuffer width, for the cull frustum's aspect.
+    /// @param viewportHeight Framebuffer height.
+    void SetFrameBudget(uint32_t maxVertices, uint32_t viewportWidth, uint32_t viewportHeight);
+
     // Build this frame's 3D geometry from the draw lists plus the resident level
     // sectors. `lists` is sorted by texture first, which is what lets runs
-    // coalesce.
+    // coalesce. Entries outside the frustum, and entries that would not fit the
+    // budget, are rejected here rather than being built and then discarded.
     void BuildFrame(DrawLists& lists, DrawStats* stats);
 
     void AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, const Color3& color);
@@ -64,6 +72,10 @@ public:
 
 private:
     static bool Reserve(Vertex*& array, uint32_t& capacity, uint32_t used, uint32_t extra);
+
+    // Whether an entry of this many vertices still fits what is left of the
+    // 3D budget. Whole entries only: a partial one would slice an object.
+    bool Admits(uint32_t vertexCount) const;
 
     void AppendMesh(const float model[16], const float* verts, uint8_t components, const float* norms, const float* uvs, uint32_t vertexCount, uint8_t topology, Color3 color, uint32_t texture);
     void AppendPrimitive(const DrawLists& lists, const PrimitiveDrawEntry& entry);
@@ -87,4 +99,11 @@ private:
     uint32_t m_runCount;
 
     DrawStats* m_stats; // borrowed for the duration of BuildFrame
+
+    uint32_t m_vertexBudget; // 0 = unlimited
+    uint32_t m_budget3D; // what is left for world geometry this frame
+    uint32_t m_viewportWidth;
+    uint32_t m_viewportHeight;
+    FrustumPlanes m_frustum;
+    bool m_frustumValid;
 };

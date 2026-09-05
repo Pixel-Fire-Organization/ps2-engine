@@ -19,11 +19,16 @@ The engine targets multiple platforms through one abstract interface — the sam
   abstract); `ps2/pal/` and `ps2/ntsc/` supply identity and register themselves. There is deliberately no bare `PS2` —
   a build always resolves to one region, and each region ships as its own binary.
 - **Vita is the same pattern**: `engine/platform/vita/` holds `VitaPlatform` (abstract); `vita/handheld/` and
-  `vita/tv/` supply identity. They differ in pad count (1 vs 4) and in whether touch surfaces exist — both
-  compile-time, which is why they are separate binaries rather than one that probes at startup.
+  `vita/tv/` supply identity. They differ in pad count (1 vs 4), in whether touch surfaces exist, and in the pad
+  itself — the handheld reports its two shoulders on the trigger bits and has no second row or stick clicks, so it
+  translates them and answers the debug chords differently. All compile-time, which is why they are separate
+  binaries rather than one that probes at startup.
 - **Keyed accessors**: every generic getter takes an `enum class` key from `engine/include/platform/PlatformKeys.h` —
-  `PlatformConstant`, `PlatformCapability`, `GamepadButton`/`GamepadStick`/`GamepadTrigger`, `KeyboardKey`,
-  `MouseButton`. Never a string or a bare index.
+  `PlatformConstant`, `PlatformCapability`, `GamepadButton`/`GamepadStick`/`GamepadTrigger`, `DebugChord`,
+  `KeyboardKey`, `MouseButton`. Never a string or a bare index.
+- **Debug chords come from the platform**: engine tooling asks `GetDebugChord()` for an intent and gets back a button
+  mask, because pads do not agree on which buttons exist. Never hard-code a button combination in shared code — it
+  is unpressable on the first platform missing one of them, and fails silently.
 - **Input is four separate device groups**: `Gamepad_*`, `Keyboard_*`, `Mouse_*`, `Touch_*`. A platform that lacks a
   device returns honest stubs (false/zero) and reports it through `HasCapability` — it never emulates one device as
   another, and in particular **a mouse is not a touchscreen** in either direction. `PollInput()` fills a snapshot once

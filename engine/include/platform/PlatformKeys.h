@@ -159,6 +159,18 @@ enum class GamepadTrigger : uint8_t
     Count
 };
 
+// --- Debug chords -----------------------------------------------------------
+// Held button combinations that reach the debug tooling. The engine names the
+// intent; the platform names the buttons, because not every pad has the same
+// ones. See docs/subsystems/DEBUG.md.
+enum class DebugChord : uint8_t
+{
+    PerfSnapshot,
+    OverlayToggle,
+
+    Count
+};
+
 // --- Keyboard ---------------------------------------------------------------
 // A desktop-sized set. PS2 reports PlatformCapability::Keyboard as false and its
 // Keyboard_* queries always return false, so game code compiles unchanged.
@@ -293,3 +305,7 @@ enum class FileMode : uint8_t
 // which is the difference between an actionable message and a number.
 const char* Platform_ConstantName(PlatformConstant key);
 const char* Platform_CapabilityName(PlatformCapability key);
+
+/// @param button A single-bit button value.
+/// @return Its short name, or "?" when the value is not one button.
+const char* Platform_GamepadButtonName(GamepadButton button);

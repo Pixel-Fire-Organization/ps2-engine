@@ -96,6 +96,11 @@ public:
     /// @return 1.0 when the matching shoulder button is held, 0.0 otherwise.
     float Gamepad_GetTrigger(uint8_t port, GamepadTrigger trigger) const override;
 
+    /// @param chord Which debug action to query.
+    /// @return The variant's button mask; the two variants do not have the
+    ///         same pad, so they do not answer the same.
+    uint16_t GetDebugChord(DebugChord chord) const override = 0;
+
     bool Keyboard_IsKeyDown(KeyboardKey key) const override;
     bool Keyboard_WasKeyPressed(KeyboardKey key) const override;
     bool Keyboard_WasKeyReleased(KeyboardKey key) const override;
@@ -135,6 +140,10 @@ public:
 protected:
     /// @return Whether this variant has front and rear touch panels.
     virtual bool HasTouchSurfaces() const = 0;
+
+    /// @param raw The sampler's button word for this variant's pad.
+    /// @return The same buttons in engine terms.
+    virtual uint16_t TranslatePadButtons(uint16_t raw) const = 0;
 
     /// @return The writable per-title directory, "ux0:data/<TITLE_ID>/".
     const char* GetWritableRoot() const { return m_writableRoot; }

@@ -87,6 +87,12 @@ disableable layer, not part of the keyboard queries: with it disabled the
 keyboard still reports as a keyboard and only the virtual pad disappears. See
 [INPUT.md](../subsystems/INPUT.md).
 
+**The bridge covers every pad button, including the ones a keyboard has no
+obvious analogue for.** A partial bridge is worse than none: it looks complete
+while quietly making anything bound to the missing buttons unreachable without a
+controller plugged in, which is how this platform's debug combination was
+unpressable from the keyboard. See [DEBUG.md](../subsystems/DEBUG.md).
+
 ## Window
 
 The window is created directly against the operating system, with no windowing

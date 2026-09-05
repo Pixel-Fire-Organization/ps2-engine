@@ -149,6 +149,7 @@ namespace
         {KeyboardKey::Q, GamepadButton::Triangle},
 
         {KeyboardKey::Num1, GamepadButton::L1},       {KeyboardKey::Num2, GamepadButton::R1},      {KeyboardKey::Num3, GamepadButton::L2},          {KeyboardKey::Num4, GamepadButton::R2},
+        {KeyboardKey::Num5, GamepadButton::L3},       {KeyboardKey::Num6, GamepadButton::R3},
         {KeyboardKey::Tab, GamepadButton::Select},    {KeyboardKey::Escape, GamepadButton::Start},
     };
 
@@ -300,6 +301,20 @@ void Win32Platform::PollInput()
 }
 
 // --- Gamepad ----------------------------------------------------------------
+
+uint16_t Win32Platform::GetDebugChord(DebugChord chord) const
+{
+    switch (chord)
+    {
+    case DebugChord::PerfSnapshot:
+        return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::L2) | static_cast<uint16_t>(GamepadButton::R1) | static_cast<uint16_t>(GamepadButton::R2);
+    case DebugChord::OverlayToggle:
+        return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::L2) | static_cast<uint16_t>(GamepadButton::L3) | static_cast<uint16_t>(GamepadButton::R3);
+    case DebugChord::Count:
+        break;
+    }
+    return 0;
+}
 
 bool Win32Platform::Gamepad_IsConnected(uint8_t port) const { return (port < MAX_GAME_PAD_PORTS) && m_pads[port].connected; }
 

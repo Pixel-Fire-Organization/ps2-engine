@@ -160,7 +160,61 @@ void Engine_DrawAsciiTable() {}
 // ---------------------------------------------------------------------------
 
 static bool s_PerfLoggerEnabled = false;
-static bool s_SnapshotWasHeld = false; // debounce for L1+L2+R1+R2
+static bool s_SnapshotWasHeld = false;
+
+/// Render this platform's chord as text, in pad-reading order.
+/// @param chord Which debug action to describe.
+/// @param buf Receives the description.
+/// @param bufSize Capacity of buf.
+/// @return buf; reads "unavailable" when this platform has no such chord.
+static const char* DescribeChord(DebugChord chord, char* buf, size_t bufSize)
+{
+    const Platform* platform = Engine_GetPlatform();
+    const uint16_t mask = platform ? platform->GetDebugChord(chord) : 0u;
+    if (!mask)
+    {
+        snprintf(buf, bufSize, "unavailable");
+        return buf;
+    }
+
+    static const GamepadButton kDisplayOrder[] = {GamepadButton::L1,       GamepadButton::L2,       GamepadButton::R1,       GamepadButton::R2,
+                                                  GamepadButton::L3,       GamepadButton::R3,       GamepadButton::Select,   GamepadButton::Start,
+                                                  GamepadButton::DPadUp,   GamepadButton::DPadDown, GamepadButton::DPadLeft, GamepadButton::DPadRight,
+                                                  GamepadButton::Triangle, GamepadButton::Circle,   GamepadButton::Cross,    GamepadButton::Square};
+
+    size_t used = 0;
+    buf[0] = '\0';
+    for (size_t i = 0; i < sizeof(kDisplayOrder) / sizeof(kDisplayOrder[0]); ++i)
+    {
+        if ((mask & static_cast<uint16_t>(kDisplayOrder[i])) == 0u)
+            continue;
+        const int written = snprintf(buf + used, bufSize - used, "%s%s", used ? "+" : "", Platform_GamepadButtonName(kDisplayOrder[i]));
+        if (written <= 0 || static_cast<size_t>(written) >= bufSize - used)
+            break;
+        used += static_cast<size_t>(written);
+    }
+    return buf;
+}
+
+/// @param chord Which debug action to test.
+/// @return True while every button in this platform's chord is held on port 0;
+///         always false when the platform offers no chord for it.
+static bool ChordHeld(DebugChord chord)
+{
+    const Platform* platform = Engine_GetPlatform();
+    const uint16_t mask = platform ? platform->GetDebugChord(chord) : 0u;
+    if (!mask)
+        return false;
+
+    for (uint32_t bit = 1u; bit <= 0x8000u; bit <<= 1)
+    {
+        if ((mask & bit) == 0u)
+            continue;
+        if (!IsGamePadButtonPressed(0, static_cast<GamepadButton>(bit)))
+            return false;
+    }
+    return true;
+}
 
 void Engine_PerfLogger_Init(bool enabled)
 {
@@ -168,7 +222,12 @@ void Engine_PerfLogger_Init(bool enabled)
     s_SnapshotWasHeld = false;
     s_ToggleWasHeld = false;
     if (enabled)
-        Engine_LogInfo("[PerfLogger] Initialized. Hold L1+L2+R1+R2 for console dump. L1+L2+L3+R3 toggles UI.");
+    {
+        char snapshot[64];
+        char toggle[64];
+        Engine_LogInfo("[PerfLogger] Initialized. Hold %s for console dump. %s toggles UI.", DescribeChord(DebugChord::PerfSnapshot, snapshot, sizeof(snapshot)),
+                       DescribeChord(DebugChord::OverlayToggle, toggle, sizeof(toggle)));
+    }
 }
 
 void Engine_PerfLogger_Tick()
@@ -186,13 +245,8 @@ void Engine_PerfLogger_Tick()
         Engine_LogInfo("[HB] frame=%u t=%.1fs heap=%zuKB fps=%.1f", frame, Engine_GetTotalTime(), heapUsed / 1024, Engine_GetFPS());
     }
 
-    // Combo 1: L1+L2+R1+R2 (Console Snapshot)
-    const bool snapshotNow =
-        IsGamePadButtonPressed(0, GamepadButton::L1) && IsGamePadButtonPressed(0, GamepadButton::L2) && IsGamePadButtonPressed(0, GamepadButton::R1) && IsGamePadButtonPressed(0, GamepadButton::R2);
-
-    // Combo 2: L1+L2+L3+R3 (UI Toggle)
-    const bool toggleNow =
-        IsGamePadButtonPressed(0, GamepadButton::L1) && IsGamePadButtonPressed(0, GamepadButton::L2) && IsGamePadButtonPressed(0, GamepadButton::L3) && IsGamePadButtonPressed(0, GamepadButton::R3);
+    const bool snapshotNow = ChordHeld(DebugChord::PerfSnapshot);
+    const bool toggleNow = ChordHeld(DebugChord::OverlayToggle);
 
     // Handle UI Toggle (Rising Edge)
     if (toggleNow)
@@ -256,6 +310,11 @@ void Engine_PerfLogger_Tick()
     Engine_LogInfo("[PERF] C++ Render        : %5.2f ms", renderMs);
     Engine_LogInfo("[PERF] GPU Wait (Vsync)  : %5.2f ms", waitMs);
     Engine_LogInfo("[PERF] Present Wait      : %5.2f ms", ds.presentWaitMs);
+    if (ds.geometryBuildMs > 0.0f || ds.geometryUploadMs > 0.0f)
+    {
+        Engine_LogInfo("[PERF]  +- Geometry build  : %5.2f ms", ds.geometryBuildMs);
+        Engine_LogInfo("[PERF]  +- Geometry upload : %5.2f ms", ds.geometryUploadMs);
+    }
     Engine_LogInfo("[PERF] Total Frame Time  : %5.2f ms", totalMs);
 
     Engine_LogInfo("[PERF] --- Renderer Throughput (measured) ---");

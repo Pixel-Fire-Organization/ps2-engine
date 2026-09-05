@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "EngineDebug.h"
+#include "EngineMemory.h"
 #include "Macros.h"
 #include "PlatformConstants.h"
 #include "graphics/TextureExpand.h"
@@ -18,6 +19,14 @@ VitaGlRenderer::VitaGlRenderer(const EngineConfig& config)
 {
     UNUSED_VAR(config);
     memset(m_textures, 0, sizeof(m_textures));
+
+    float* arena = static_cast<float*>(Engine_GetSlot(ARENA_RENDERER, 0));
+    if (!arena)
+    {
+        Engine_LogError("VitaGlRenderer: failed to retrieve ARENA_RENDERER slot 0");
+        return;
+    }
+    m_drawLists.Init(arena);
 
     if (!vglInit(VITAGL_LEGACY_POOL_BYTES))
     {
@@ -194,6 +203,7 @@ void VitaGlRenderer::BeginFrame()
     Platform* platform = Engine_GetPlatform();
     platform->GetFramebufferSize(&m_width, &m_height);
 
+    m_geometry.SetFrameBudget(0, m_width, m_height);
     m_geometry.BeginFrame();
     m_frameStats = DrawStats{};
 }
@@ -270,7 +280,10 @@ void VitaGlRenderer::EndFrame()
 
     DrawStagedGeometry();
 
+    Platform* platform = Engine_GetPlatform();
+    const double waitStart = platform->GetTimeSeconds();
     vglSwapBuffers(GL_FALSE);
+    m_frameStats.presentWaitMs = static_cast<float>((platform->GetTimeSeconds() - waitStart) * 1000.0);
 
     m_geometry.EndFrame();
 

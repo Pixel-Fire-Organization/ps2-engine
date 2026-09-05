@@ -53,7 +53,10 @@ screen-space geometry stage independently.
   the sum of texture sizes suggests. The platform texture footprint accounting
   reports the real cost, not the nominal one.
 - **The shader set is unlit, and binds no normal attribute.** Geometry is staged
-  with normals because other backends want them, but nothing here consumes one.
+  with normals because other backends want them, but nothing here consumes one —
+  so on this platform they are transformed and uploaded per vertex for nothing,
+  which is a quarter of the per-vertex work and a quarter of the bytes, on the
+  weakest processor in the family.
   Binding an attribute the shader does not use does not work: the compiler
   removes it, the name cannot then be found, and renderer setup fails - which
   reads on hardware as the engine silently falling back to the other backend.
@@ -69,8 +72,13 @@ screen-space geometry stage independently.
 - **The vertex ceiling is fixed and enforced.** Vertex and index buffers are
   graphics memory reserved once, because growing them mid-frame would stall the
   display. The shared stager will happily build far more than this machine can
-  hold, so geometry past the ceiling is dropped with a log rather than overrunning
-  the buffer.
+  hold, so the ceiling is declared to the stager, which refuses whole entries
+  that will not fit rather than letting the frame be truncated on upload. How full the buffer is — including by how much a frame overshot — is
+  reported every frame in the performance snapshot; the log line is emitted only
+  when the shortfall changes. Reporting it per frame instead is itself ruinous
+  here: writing to the memory card costs far more than the frame it describes, so
+  a per-frame diagnostic becomes the slowest thing in the frame. See
+  [DEBUG.md](../../subsystems/DEBUG.md).
 - **Beginning a scene restores depth but not colour.** Depth comes back from the
   surface background; colour does not, so the frame is cleared by drawing a
   full-screen quad before anything else. Omitting it leaves the previous frame

@@ -105,6 +105,11 @@ public:
     virtual Vector2 Gamepad_GetStick(uint8_t port, GamepadStick stick) const = 0;
     virtual float Gamepad_GetTrigger(uint8_t port, GamepadTrigger trigger) const = 0;
 
+    /// @param chord Which debug action to query.
+    /// @return Mask of GamepadButton bits that must all be held on port 0, or
+    ///         zero when this platform's pad cannot produce that chord.
+    virtual uint16_t GetDebugChord(DebugChord chord) const = 0;
+
     virtual bool Keyboard_IsKeyDown(KeyboardKey key) const = 0;
     virtual bool Keyboard_WasKeyPressed(KeyboardKey key) const = 0;
     virtual bool Keyboard_WasKeyReleased(KeyboardKey key) const = 0;

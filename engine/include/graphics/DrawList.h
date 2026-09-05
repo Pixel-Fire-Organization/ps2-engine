@@ -15,6 +15,8 @@ struct DrawStats
     uint32_t submitBufferUsedBytes; // backend submission buffer fill; 0 = not reported
     uint32_t submitBufferCapacityBytes; // what the above is measured against; 0 = N/A
     float presentWaitMs; // time blocked waiting on presentation inside EndFrame
+    float geometryBuildMs; // CPU time staging this frame's geometry; 0 = not reported
+    float geometryUploadMs; // CPU time copying it into GPU memory; 0 = not reported
 };
 
 struct PrimitiveDrawEntry

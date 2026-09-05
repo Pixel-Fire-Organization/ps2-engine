@@ -88,6 +88,10 @@ off-centre and would otherwise drift constantly.
 No keyboard and no mouse: those queries report neutral rather than being
 synthesised from the pad.
 
+The pad has both shoulder rows and both stick clicks, so this platform answers
+the debug combinations with the full-pad set. See
+[DEBUG.md](../subsystems/DEBUG.md).
+
 ## Threads and synchronisation
 
 Threads and semaphores come from the console kernel. Two of its behaviours are

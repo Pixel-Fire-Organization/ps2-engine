@@ -40,6 +40,12 @@ control that silently does the wrong thing. This matters more than it sounds: th
 retired hand-written masks had all four shoulder buttons transposed against the
 hardware, and the code compiled and ran.
 
+**Debug combinations are supplied by the platform.** Engine tooling asks for an
+intent, not for buttons; the platform returns the buttons. This is the same
+reasoning as the capabilities above — a handheld with one shoulder row cannot
+press a four-shoulder combination, and hard-coding one in shared code produces a
+feature that is silently unreachable rather than reported absent.
+
 **Device-bridging is an explicit, separate layer.** Where a platform maps one
 device onto another — a keyboard driving a virtual gamepad, so that pad-only
 content is playable on a desktop — that mapping is a named, disableable layer,

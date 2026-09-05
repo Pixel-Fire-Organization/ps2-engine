@@ -761,6 +761,7 @@ void WebGpuRenderer::BeginFrame()
     if ((w != m_width || h != m_height) && w > 0 && h > 0)
         ConfigureSurface(w, h);
 
+    m_geometry.SetFrameBudget(0, m_width, m_height);
     m_geometry.BeginFrame();
     m_frameStats = DrawStats{};
 }

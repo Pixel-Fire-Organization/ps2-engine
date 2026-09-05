@@ -23,6 +23,11 @@ public:
     uint32_t GetConstant(PlatformConstant key) const override;
     bool HasCapability(PlatformCapability key) const override;
 
+    /// @param chord Which debug action to query.
+    /// @return The full-pad mask; this pad has both shoulder rows and both
+    ///         stick clicks.
+    uint16_t GetDebugChord(DebugChord chord) const override;
+
     // --- Memory.cpp ---------------------------------------------------------
     /// @return Null; this platform has no achievements.
     AchievementContract* GetAchievements() override { return nullptr; }

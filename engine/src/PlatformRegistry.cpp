@@ -156,6 +156,48 @@ const char* Platform_ConstantName(PlatformConstant key)
     return "<unknown>";
 }
 
+const char* Platform_GamepadButtonName(GamepadButton button)
+{
+    switch (button)
+    {
+    case GamepadButton::Select:
+        return "SELECT";
+    case GamepadButton::L3:
+        return "L3";
+    case GamepadButton::R3:
+        return "R3";
+    case GamepadButton::Start:
+        return "START";
+    case GamepadButton::DPadUp:
+        return "UP";
+    case GamepadButton::DPadRight:
+        return "RIGHT";
+    case GamepadButton::DPadDown:
+        return "DOWN";
+    case GamepadButton::DPadLeft:
+        return "LEFT";
+    case GamepadButton::L2:
+        return "L2";
+    case GamepadButton::R2:
+        return "R2";
+    case GamepadButton::L1:
+        return "L1";
+    case GamepadButton::R1:
+        return "R1";
+    case GamepadButton::Triangle:
+        return "TRIANGLE";
+    case GamepadButton::Circle:
+        return "CIRCLE";
+    case GamepadButton::Cross:
+        return "CROSS";
+    case GamepadButton::Square:
+        return "SQUARE";
+    case GamepadButton::Unknown:
+        break;
+    }
+    return "?";
+}
+
 const char* Platform_CapabilityName(PlatformCapability key)
 {
     switch (key)

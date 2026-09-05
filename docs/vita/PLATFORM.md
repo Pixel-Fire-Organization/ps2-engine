@@ -127,6 +127,21 @@ mode so both sticks report. Stick axes already arrive as bytes centred at 128,
 which is the convention the engine uses throughout, so no conversion is needed —
 the deadzone and range constants mean literally what they say here.
 
+**The handheld has one shoulder row, and reports it on the trigger bits.** The
+sampler puts the two physical shoulders where a fuller pad would report its
+second row, so taken literally the handheld would answer that it has triggers
+and no shoulders — the exact opposite of the hardware. The handheld variant
+therefore reports them as the primary shoulders, and reports the second row and
+the stick clicks as absent, because it has neither. The set-top variant is
+driven by a wireless controller that really does have all of them and passes
+its buttons through unchanged.
+
+This is also why the two variants answer the debug combinations differently.
+The handheld uses combinations built from the buttons it has; the set-top
+variant uses the same ones as every other full pad. Neither is a preference:
+a combination needing a second shoulder row cannot be pressed on a handheld
+that does not have one. See [DEBUG.md](../subsystems/DEBUG.md).
+
 **Touch is a device group of its own**, not a mouse. Two surfaces are reported
 separately: the front screen, which is the one a player points at, and the rear
 pad, which is behind the device and has no visible cursor. Neither is mapped onto

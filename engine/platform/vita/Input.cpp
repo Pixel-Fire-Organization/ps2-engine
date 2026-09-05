@@ -101,7 +101,7 @@ void VitaPlatform::PollInput()
         }
 
         m_pads[port].connected = true;
-        m_pads[port].buttons = static_cast<uint16_t>(data.buttons & 0xFFFFu);
+        m_pads[port].buttons = TranslatePadButtons(static_cast<uint16_t>(data.buttons & 0xFFFFu));
 
         if (m_logInput && m_pads[port].buttons != m_padsPrev[port].buttons)
             Engine_LogInfo("%s: pad %u buttons 0x%04X -> 0x%04X", GetName(), port, m_padsPrev[port].buttons, m_pads[port].buttons);

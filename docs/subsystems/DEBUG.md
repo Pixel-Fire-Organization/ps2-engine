@@ -30,6 +30,30 @@ no debugger attached. It reports frame timing against the platform frame budget,
 draw counts, arena and pool occupancy, texture budget usage, and the active
 platform and renderer.
 
+**The platform chooses the buttons, the engine chooses the meaning.** Debug
+actions are named as intents, and each platform answers with a combination its
+own pad can actually produce — pads do not agree on what buttons exist, and a
+combination fixed in shared code is unpressable on the first platform that
+lacks one of them. A platform with no way to express an intent reports none,
+and that action is simply unavailable there rather than dead. Because the
+combination varies, the startup line names the one in force on this platform
+rather than a fixed set of buttons.
+
+**The render phase is reported in parts, because one number cannot be acted on.**
+Time spent staging geometry, time spent handing it to the hardware, and time
+spent blocked waiting for the display are separate costs with entirely different
+remedies, and a backend reporting only their sum cannot tell a slow frame apart
+from a frame that is merely waiting for the panel. A backend reports the parts it
+can measure; a part it does not measure must read as absent rather than as zero,
+because a zero meaning "not measured" reads as "not a problem".
+
+**Logging is not free, and on some platforms it is nowhere near free.** Writing
+one line to a memory card can cost more than an entire frame of rendering. A
+diagnostic that fires every frame therefore stops measuring the problem and
+becomes it — invisibly, because the cost lands in whichever phase contains the
+log call. Per-frame logging is for a condition that has just changed, never for
+one that persists.
+
 This is the engine best smoke test: timing, memory, input and rendering in one
 screen. If it prints sane numbers, the engine is working.
 

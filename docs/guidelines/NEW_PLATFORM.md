@@ -53,6 +53,7 @@ do not discover it as you go.
 - [ ] Console write and panic
 - [ ] Input: poll, and the gamepad, keyboard and mouse groups
 - [ ] Window: open, close, should-close, framebuffer size, native handle
+- [ ] Debug combinations: the buttons **this** pad can actually produce
 - [ ] Renderers: supported set, default, fallback chain, create, destroy
 
 **Directory contents** (`engine/platform/<name>/`):
@@ -160,6 +161,14 @@ shared code that look like engine bugs.
 - **Panic must not return**, and should say something a person can act on.
 - **Memory is reserved before any renderer is constructed** — backends take
   their staging storage as they are built.
+- **Debug combinations are yours to name.** Answer with buttons your pad has;
+  a combination copied from a fuller pad is unpressable, and looks like broken
+  tooling rather than a missing button. If a device bridge is involved, the
+  bridge must cover every button too.
+- **A new backend must stage the built-in primitives when it is constructed**,
+  from that same storage. Skip it and the backend still draws level and model
+  geometry, so it looks alive — while every primitive the game submits is
+  silently discarded. See [RENDERER.md](../subsystems/RENDERER.md).
 
 ## 5. Verify
 
