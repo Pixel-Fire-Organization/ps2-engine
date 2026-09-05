@@ -108,6 +108,8 @@ uint16_t Ps2Platform::GetDebugChord(DebugChord chord) const
         return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::L2) | static_cast<uint16_t>(GamepadButton::R1) | static_cast<uint16_t>(GamepadButton::R2);
     case DebugChord::OverlayToggle:
         return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::L2) | static_cast<uint16_t>(GamepadButton::L3) | static_cast<uint16_t>(GamepadButton::R3);
+    case DebugChord::DebugMenu:
+        return static_cast<uint16_t>(GamepadButton::Select) | static_cast<uint16_t>(GamepadButton::Start);
     case DebugChord::Count:
         break;
     }

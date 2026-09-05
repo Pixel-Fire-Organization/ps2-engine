@@ -93,6 +93,16 @@ while quietly making anything bound to the missing buttons unreachable without a
 controller plugged in, which is how this platform's debug combination was
 unpressable from the keyboard. See [DEBUG.md](../subsystems/DEBUG.md).
 
+| Intent | Combination | From the keyboard |
+| :--- | :--- | :--- |
+| Performance snapshot | L1 + L2 + R1 + R2 | 1 + 3 + 2 + 4 |
+| Overlay toggle | L1 + L2 + L3 + R3 | 1 + 3 + 5 + 6 |
+| Debug menu | Select + Start | Tab + Escape |
+
+The keyboard column is the bridge, not a second binding: it disappears with the
+bridge, so with the bridge disabled every combination above is reachable only
+from a controller.
+
 ## Window
 
 The window is created directly against the operating system, with no windowing

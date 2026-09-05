@@ -19,6 +19,8 @@ public:
             return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::R1) | static_cast<uint16_t>(GamepadButton::Select);
         case DebugChord::OverlayToggle:
             return static_cast<uint16_t>(GamepadButton::L1) | static_cast<uint16_t>(GamepadButton::R1) | static_cast<uint16_t>(GamepadButton::Start);
+        case DebugChord::DebugMenu:
+            return static_cast<uint16_t>(GamepadButton::Select) | static_cast<uint16_t>(GamepadButton::Start);
         case DebugChord::Count:
             break;
         }

@@ -92,6 +92,12 @@ The pad has both shoulder rows and both stick clicks, so this platform answers
 the debug combinations with the full-pad set. See
 [DEBUG.md](../subsystems/DEBUG.md).
 
+| Intent | Combination |
+| :--- | :--- |
+| Performance snapshot | L1 + L2 + R1 + R2 |
+| Overlay toggle | L1 + L2 + L3 + R3 |
+| Debug menu | Select + Start |
+
 ## Threads and synchronisation
 
 Threads and semaphores come from the console kernel. Two of its behaviours are

@@ -23,12 +23,7 @@ is needed.
 **Messages are scrubbed.** Non-printable bytes are replaced before output;
 a corrupt string should produce a legible log line, not an unreadable console.
 
-### Performance snapshot
-
-**On demand, from a held input combination**, so it can be taken on hardware with
-no debugger attached. It reports frame timing against the platform frame budget,
-draw counts, arena and pool occupancy, texture budget usage, and the active
-platform and renderer.
+### Debug chords
 
 **The platform chooses the buttons, the engine chooses the meaning.** Debug
 actions are named as intents, and each platform answers with a combination its
@@ -36,8 +31,33 @@ own pad can actually produce — pads do not agree on what buttons exist, and a
 combination fixed in shared code is unpressable on the first platform that
 lacks one of them. A platform with no way to express an intent reports none,
 and that action is simply unavailable there rather than dead. Because the
-combination varies, the startup line names the one in force on this platform
-rather than a fixed set of buttons.
+combination varies, anything that announces a chord names the one in force on
+this platform rather than a fixed set of buttons.
+
+Three intents exist:
+
+| Intent | Meaning |
+| :--- | :--- |
+| Performance snapshot | Take the on-demand snapshot described below. |
+| Overlay toggle | Show or hide the on-screen debug overlay. |
+| Debug menu | Open or close the debug testbed. |
+
+**A chord is not the performance logger's private property.** The intents are
+part of this subsystem's surface and any engine tooling may consume one. Two
+consequences follow. Edge detection is derived from the per-frame input snapshot
+rather than remembered between frames, so every consumer in a frame gets the same
+answer whatever order they ask in, and one that runs late is never handed a stale
+one. And a chord stays usable when the performance snapshot is switched off,
+because the two are separable — binding chord handling to the snapshot's lifetime
+would make anything else that uses a chord unreachable in a build that merely
+disabled logging.
+
+### Performance snapshot
+
+**On demand, from a held input combination**, so it can be taken on hardware with
+no debugger attached. It reports frame timing against the platform frame budget,
+draw counts, arena and pool occupancy, texture budget usage, and the active
+platform and renderer.
 
 **The render phase is reported in parts, because one number cannot be acted on.**
 Time spent staging geometry, time spent handing it to the hardware, and time

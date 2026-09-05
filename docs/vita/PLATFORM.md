@@ -142,6 +142,17 @@ variant uses the same ones as every other full pad. Neither is a preference:
 a combination needing a second shoulder row cannot be pressed on a handheld
 that does not have one. See [DEBUG.md](../subsystems/DEBUG.md).
 
+| Intent | Handheld | Set-top |
+| :--- | :--- | :--- |
+| Performance snapshot | L1 + R1 + Select | L1 + L2 + R1 + R2 |
+| Overlay toggle | L1 + R1 + Start | L1 + L2 + L3 + R3 |
+| Debug menu | Select + Start | Select + Start |
+
+The two variants agree on the last one only because both pads have those two
+buttons. They still answer it separately rather than inheriting a family default,
+which is what keeps the handheld free to differ the moment an intent needs a
+button it does not have.
+
 **Touch is a device group of its own**, not a mouse. Two surfaces are reported
 separately: the front screen, which is the one a player points at, and the rear
 pad, which is behind the device and has no visible cursor. Neither is mapped onto

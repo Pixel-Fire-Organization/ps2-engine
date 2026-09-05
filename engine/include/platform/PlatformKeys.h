@@ -167,6 +167,7 @@ enum class DebugChord : uint8_t
 {
     PerfSnapshot,
     OverlayToggle,
+    DebugMenu,
 
     Count
 };

@@ -35,7 +35,6 @@ static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
                                           "{|}~\x7f"; /* 123-127 */
 
 static bool s_DebugOverlayVisible = false;
-static bool s_ToggleWasHeld = false;
 
 /// Rewrite %z length modifiers to plain int conversions where the two are
 /// equivalent, for C libraries built without C99 format support.
@@ -160,14 +159,8 @@ void Engine_DrawAsciiTable() {}
 // ---------------------------------------------------------------------------
 
 static bool s_PerfLoggerEnabled = false;
-static bool s_SnapshotWasHeld = false;
 
-/// Render this platform's chord as text, in pad-reading order.
-/// @param chord Which debug action to describe.
-/// @param buf Receives the description.
-/// @param bufSize Capacity of buf.
-/// @return buf; reads "unavailable" when this platform has no such chord.
-static const char* DescribeChord(DebugChord chord, char* buf, size_t bufSize)
+const char* Engine_Debug_DescribeChord(DebugChord chord, char* buf, size_t bufSize)
 {
     const Platform* platform = Engine_GetPlatform();
     const uint16_t mask = platform ? platform->GetDebugChord(chord) : 0u;
@@ -196,10 +189,7 @@ static const char* DescribeChord(DebugChord chord, char* buf, size_t bufSize)
     return buf;
 }
 
-/// @param chord Which debug action to test.
-/// @return True while every button in this platform's chord is held on port 0;
-///         always false when the platform offers no chord for it.
-static bool ChordHeld(DebugChord chord)
+bool Engine_Debug_IsChordHeld(DebugChord chord)
 {
     const Platform* platform = Engine_GetPlatform();
     const uint16_t mask = platform ? platform->GetDebugChord(chord) : 0u;
@@ -216,17 +206,32 @@ static bool ChordHeld(DebugChord chord)
     return true;
 }
 
+bool Engine_Debug_WasChordPressed(DebugChord chord)
+{
+    if (!Engine_Debug_IsChordHeld(chord))
+        return false;
+
+    const Platform* platform = Engine_GetPlatform();
+    const uint16_t mask = platform ? platform->GetDebugChord(chord) : 0u;
+    for (uint32_t bit = 1u; bit <= 0x8000u; bit <<= 1)
+    {
+        if ((mask & bit) == 0u)
+            continue;
+        if (WasGamePadButtonPressed(0, static_cast<GamepadButton>(bit)))
+            return true;
+    }
+    return false;
+}
+
 void Engine_PerfLogger_Init(bool enabled)
 {
     s_PerfLoggerEnabled = enabled;
-    s_SnapshotWasHeld = false;
-    s_ToggleWasHeld = false;
     if (enabled)
     {
         char snapshot[64];
         char toggle[64];
-        Engine_LogInfo("[PerfLogger] Initialized. Hold %s for console dump. %s toggles UI.", DescribeChord(DebugChord::PerfSnapshot, snapshot, sizeof(snapshot)),
-                       DescribeChord(DebugChord::OverlayToggle, toggle, sizeof(toggle)));
+        Engine_LogInfo("[PerfLogger] Initialized. Hold %s for console dump. %s toggles UI.", Engine_Debug_DescribeChord(DebugChord::PerfSnapshot, snapshot, sizeof(snapshot)),
+                       Engine_Debug_DescribeChord(DebugChord::OverlayToggle, toggle, sizeof(toggle)));
     }
 }
 
@@ -245,34 +250,14 @@ void Engine_PerfLogger_Tick()
         Engine_LogInfo("[HB] frame=%u t=%.1fs heap=%zuKB fps=%.1f", frame, Engine_GetTotalTime(), heapUsed / 1024, Engine_GetFPS());
     }
 
-    const bool snapshotNow = ChordHeld(DebugChord::PerfSnapshot);
-    const bool toggleNow = ChordHeld(DebugChord::OverlayToggle);
-
-    // Handle UI Toggle (Rising Edge)
-    if (toggleNow)
+    if (Engine_Debug_WasChordPressed(DebugChord::OverlayToggle))
     {
-        if (!s_ToggleWasHeld)
-        {
-            s_DebugOverlayVisible = !s_DebugOverlayVisible;
-            Engine_LogInfo("[PerfLogger] Debug overlay visibility: %s", s_DebugOverlayVisible ? "ON" : "OFF");
-            s_ToggleWasHeld = true;
-        }
-    }
-    else
-    {
-        s_ToggleWasHeld = false;
+        s_DebugOverlayVisible = !s_DebugOverlayVisible;
+        Engine_LogInfo("[PerfLogger] Debug overlay visibility: %s", s_DebugOverlayVisible ? "ON" : "OFF");
     }
 
-    // Handle Snapshot (Rising Edge)
-    if (!snapshotNow)
-    {
-        s_SnapshotWasHeld = false;
+    if (!Engine_Debug_WasChordPressed(DebugChord::PerfSnapshot))
         return;
-    }
-
-    if (s_SnapshotWasHeld)
-        return;
-    s_SnapshotWasHeld = true;
 
     // --- Gather stats ---
     DrawStats ds{};
