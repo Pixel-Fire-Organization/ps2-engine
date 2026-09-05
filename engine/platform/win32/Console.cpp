@@ -105,6 +105,7 @@ namespace
         return ok != FALSE;
     }
 
+#ifdef DEBUG
     // Symbolised where symbols are available, addresses otherwise. Either is
     // enough to identify the call path; neither is worth failing a panic over.
     void CaptureStackText(char* out, size_t size)
@@ -164,6 +165,7 @@ namespace
         if (dbghelp)
             FreeLibrary(dbghelp);
     }
+#endif
 
 } // namespace
 
