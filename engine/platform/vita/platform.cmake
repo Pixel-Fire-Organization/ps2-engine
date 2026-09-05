@@ -149,7 +149,12 @@ function(platform_configure PLATFORM)
         "VITA_NP_COMM_ID_STR=\"${VITA_NP_COMM_ID}\""
         PARENT_SCOPE)
 
+    # Not optional: see docs/vita/BUILD.md. The executable conversion appends
+    # module metadata after the code segment and can only use the padding the
+    # linker left before the next one; without this the two segments are packed
+    # tight enough that the conversion fails rather than the link.
     set(ENGINE_PLATFORM_${PLATFORM}_LIBS
+        "-Wl,-z,separate-code"
         "${VITAGL_LIB}"
         vitashark SceShaccCgExt taihen_stub SceShaccCg_stub mathneon
         SceDisplay_stub SceGxm_stub

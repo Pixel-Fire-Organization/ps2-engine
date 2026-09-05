@@ -80,7 +80,7 @@ python3 tools/build.py debug --platforms VITA,VITATV # both
 Both variants share one toolchain and therefore one configure, exactly as the two
 console regions do.
 
-Three toolchain settings are not optional and produce confusing symptoms if
+Four toolchain settings are not optional and produce confusing symptoms if
 changed:
 
 - **The relocation table must be kept.** The supplied toolchain adds the linker
@@ -95,6 +95,14 @@ changed:
 - The language standard, and the absence of exceptions and runtime type
   information, are forced to match every other target, so one body of engine code
   compiles everywhere.
+- **Code and read-only data must link as separate segments.** The executable
+  conversion appends module metadata after the code segment, into whatever
+  padding the linker left before the next one. Packed tightly, that padding
+  shrinks as the image grows until the metadata no longer fits, and the
+  conversion fails — with the link having succeeded, on a build that worked
+  yesterday. Separating the segments keeps the gap a page rather than a
+  remainder. The symptom is `vita-elf-create: Cannot allocate N bytes for SCE
+  data at end of segment 0`.
 
 ## Packaging
 
