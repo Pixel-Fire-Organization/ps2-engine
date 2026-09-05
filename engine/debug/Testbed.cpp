@@ -4,6 +4,7 @@
 
 #include "EngineCore.h"
 #include "EngineDebug.h"
+#include "EngineInput.h"
 #include "EngineSubsystems.h"
 #include "EngineUi.h"
 #include "GameAPI.h"
@@ -27,6 +28,7 @@ namespace
     bool s_Enabled = false;
     Mode s_Mode = Mode::Closed;
     int s_ActiveScene = -1;
+    int s_Page = 0;
     char s_ChordText[64] = "unavailable";
 
     void LeaveActiveScene()
@@ -50,6 +52,7 @@ namespace
 
         Engine_ResetRuntimeState();
         s_ActiveScene = index;
+        s_Page = 0;
         s_Mode = Mode::Scene;
         Engine_LogInfo("[Testbed] entering '%s'", scenes[index].name);
         if (scenes[index].init)
@@ -160,6 +163,20 @@ namespace
             OpenMenu();
     }
 } // namespace
+
+int Testbed_Page(int pageCount)
+{
+    if (pageCount <= 1)
+        return 0;
+
+    if (WasGamePadButtonPressed(0, GamepadButton::R1))
+        s_Page = (s_Page + 1) % pageCount;
+    if (WasGamePadButtonPressed(0, GamepadButton::L1))
+        s_Page = (s_Page + pageCount - 1) % pageCount;
+    if (s_Page >= pageCount)
+        s_Page = 0;
+    return s_Page;
+}
 
 void Engine_Testbed_RequestSubsystems()
 {

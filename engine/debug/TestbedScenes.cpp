@@ -6,6 +6,11 @@
 namespace
 {
     const TestbedScene s_Scenes[] = {
+        {"GAMEPAD", TestbedCategory::InputDevices, Scene_Gamepad_Init, Scene_Gamepad_Update, nullptr},
+        {"KEYBOARD MOUSE", TestbedCategory::InputDevices, Scene_KeyboardMouse_Init, Scene_KeyboardMouse_Update, nullptr},
+        {"TOUCH", TestbedCategory::InputDevices, Scene_Touch_Init, Scene_Touch_Update, nullptr},
+        {"POINTER", TestbedCategory::InputDevices, Scene_Pointer_Init, Scene_Pointer_Update, nullptr},
+        {"DEBUG CHORDS", TestbedCategory::InputDevices, Scene_Chords_Init, Scene_Chords_Update, nullptr},
         {"PLATFORM INFO", TestbedCategory::SystemsBudgets, Scene_PlatformInfo_Init, Scene_PlatformInfo_Update, nullptr},
     };
 

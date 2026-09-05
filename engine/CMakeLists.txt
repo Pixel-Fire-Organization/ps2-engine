@@ -89,6 +89,11 @@ if(DEBUG)
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/Testbed.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/TestbedScenes.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePlatformInfo.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneGamepad.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneKeyboardMouse.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneTouch.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePointer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneChords.cpp"
         CACHE INTERNAL "")
     set(ENGINE_DEBUG_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/debug" CACHE INTERNAL "")
 else()
