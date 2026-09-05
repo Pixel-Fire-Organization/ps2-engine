@@ -48,7 +48,7 @@ The engine targets multiple platforms through one abstract interface — the sam
 
 **Current state**: PS2, Win32 and Vita are all live. The engine runs entirely through `Platform` - memory map, clock,
 threads/semaphores, file access, input, console/panic and renderer construction - and `engine/src/` contains no OS
-calls. `dist/win32/game.exe` opens a real window and renders the scene-select menu through WebGPU at vsync, from the
+calls. `dist/win32/game.exe` opens a real window and boots into the game through WebGPU at vsync, from the
 same unmodified `game/**` sources the PS2 build uses. `dist/vita/` and `dist/vitatv/` produce installable `.vpk`
 packages carrying the executable, assets, worlds and store-front metadata.
 
@@ -58,6 +58,23 @@ PS2 default can move to giftag.
 **Known bug, pre-existing**: `EngineInput.h`'s `GamePadButton` has all four shoulder masks transposed relative to
 ps2sdk's `libpad.h` (`R1=0x0800 L1=0x0400 R2=0x0200 L2=0x0100`). `PlatformKeys.h` carries the correct values; the
 legacy enum dies with `EngineInput.cpp`.
+
+## Debug Testbed and UI
+
+Two engine subsystems arrived together and are easiest to understand as a pair.
+
+- **UI** (`engine/src/ui/**`, `engine/include/EngineUi.h`) is an immediate-mode interface in the Dear ImGui style:
+  widgets are calls made fresh every frame, identity comes from the label, nothing is retained and nothing is
+  allocated. It fills in `class UI` and `Renderer::AddUIToDrawList`, which had been reserved and empty. Text is drawn
+  from a built-in 5x7 bitmap font as **several quads per glyph**, so a screen is budgeted in quads (`UI_MAX_QUADS`, a
+  platform constant) and a dense screen is paged rather than allowed to overflow. `AddUIToDrawList` is implemented
+  once in the base class so every backend draws an identical interface.
+- **Testbed** (`engine/debug/**`) is the scene catalogue reached by the `DebugChord::DebugMenu` chord. It is
+  engine-owned: `game/**` does not know it exists, and the engine turns both subsystems on itself regardless of the
+  game's list. Every transition through it calls `Engine_ResetRuntimeState()`, so a scene starts from a known state.
+  A scene gates on capability, never on platform identity.
+
+See `docs/subsystems/UI.md`, `docs/subsystems/TESTBED.md` and `docs/TESTBED.md`.
 
 ## Engine / Game Boundary
 
@@ -130,7 +147,9 @@ new platform boot and be validated before any graphics code exists.
 - Do not call OS or hardware APIs from shared engine code. Anything touching the EE kernel, the GS, pads, threads,
   files, or wall-clock time goes behind the `Platform` interface, implemented in `engine/platform/<name>/**`.
 - Do not write `#ifdef PLATFORM_*` outside a platform's own directory. Platform choice is expressed by which sources
-  CMake compiles, never by conditionals in shared code.
+  CMake compiles, never by conditionals in shared code. **The same goes for the debug configuration**: the testbed in
+  `engine/debug/` is compiled only when `DEBUG` is on, with `engine/debug/Stub.cpp` supplying the same entry points
+  as empty bodies otherwise. Shared code calls those entry points unconditionally.
 - Do not write a comment that duplicates a spec. Behaviour, rationale, hardware quirks and renderer limits belong in
   `docs/`; the source carries no copy of them, and no pointer to them either. See "Documentation" below.
 - Do not write inline comments at all. **The only comment a source file carries is a doc comment on a declaration**,
@@ -233,6 +252,7 @@ new platform boot and be validated before any graphics code exists.
 | Renderer | `docs/<platform>/renderers/<NAME>.md` |
 | On-disc format | `docs/formats/<NAME>.md` |
 | Build pipeline | `docs/PIPELINE.md` |
+| Debug testbed scenes | `docs/TESTBED.md` |
 
 ### Building something new
 

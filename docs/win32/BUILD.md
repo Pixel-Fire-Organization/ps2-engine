@@ -75,9 +75,23 @@ The build must be clean with warnings treated as errors. A different compiler
 target surfaces warnings the console build does not, and they are fixed rather
 than suppressed.
 
-Beyond that: the scene menu should render and be navigable **by keyboard, with no
-game-code change** — that is the plug-and-play test, since the content was
-written for a gamepad — and also by a connected controller. Both renderers should
-produce the same frame; a difference between them means one of the two is wrong.
-Load a level and return from it, which exercises the container and model release
-paths.
+Beyond that, the build boots into the game. Open the debug testbed with its
+chord — Tab and Escape together on the keyboard, Back and Start on a controller —
+and work [TESTBED.md](../TESTBED.md), which lists every scene and what correct
+looks like. This platform's own checks are:
+
+- The testbed should be navigable **by keyboard, with no game-code change** —
+  that is the plug-and-play test, since the content was written for a gamepad —
+  and also by a connected controller. Repeat with `--no-keyboard-pad`, where the
+  chord and the menu should be reachable only from a controller.
+- The cursor should follow the mouse, and the left stick should drive it as well.
+  This is the only platform with a mouse, so it is the only one where that source
+  is exercised.
+- Resize the window while the screen-and-aspect scene is showing. The reported
+  framebuffer must follow it, and the square must stay square.
+- Both renderers should produce the same frame, interface included; a difference
+  between them means one of the two is wrong.
+- Load a level and return from it in the level-streaming scene, which exercises
+  the container and model release paths.
+- Build release as well. The testbed must be absent from that binary, not merely
+  switched off.

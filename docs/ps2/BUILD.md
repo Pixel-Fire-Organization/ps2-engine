@@ -85,3 +85,21 @@ Confirm the two distributions are genuinely independent: each holds a complete
 disc image, their boot configurations differ only in video mode, and each boots
 into its own mode with the snapshot reporting the matching screen height and
 frame budget.
+
+The build boots into the game. Open the debug testbed with its chord — Select
+and Start together — and work [TESTBED.md](../TESTBED.md). This is the platform
+the testbed was budgeted against, so two of its checks matter more here than
+anywhere else:
+
+- **No interface overflow in the log.** A single dropped-quad or dropped-rect
+  line means the scene showing at the time does not fit this framebuffer and
+  must be paged. Neither desktop nor handheld can catch this: only this platform
+  has a fixed screen-space ceiling.
+- **The frame-pacing scene should differ between the two regions in exactly one
+  way.** The target reads 20.00 ms against 16.67 ms, and the moving bar and the
+  one-second pulse should still run at the same real speed in both. If they do
+  not, something is counting frames where it should be counting time.
+
+Also compare the two backends on the same scene. The default one draws no level
+geometry, so the level-streaming scene is expected to show residency figures
+with nothing drawn until `--renderer ps2gl` is selected.

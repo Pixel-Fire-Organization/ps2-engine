@@ -193,7 +193,14 @@ The build must be clean with warnings treated as errors, alongside every other
 platform. A third compiler surfaces warnings the other two do not, and they are
 fixed rather than suppressed.
 
-Beyond that: the scene menu should render and be navigable with the pad and with
+Beyond that, the build boots into the game. Open the debug testbed with its
+chord — Select and Start together, on either variant — and work
+[TESTBED.md](../TESTBED.md). The touch scene is the reason this family ships as
+two binaries: the handheld must report both surfaces and the set-top must report
+none, and neither may synthesise the other. The pointer scene should follow the
+front touchscreen on the handheld and the left stick on both.
+
+The old check still applies: the interface should render and be navigable with the pad and with
 no game-code change; both renderers should produce the same frame, and a
 difference between them means one of the two is wrong; the performance snapshot
 should name the active platform and renderer and print sane memory and budget

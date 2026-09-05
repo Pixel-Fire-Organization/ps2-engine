@@ -117,7 +117,7 @@ void GameInit() { /* load resources, set initial state */ }
 void GameUpdate(float dt) { /* input, animation, game::Draw*, game::SetCamera3D, ... */ }
 ```
 
-See `game/src/Game.cpp` and `game/src/SwarmSystem.cpp` for a complete example.
+See `game/src/Game.cpp` for a complete example.
 
 ---
 

@@ -25,6 +25,7 @@ Read the guideline **before** starting, not while reviewing.
 | [COMMAND_LINE.md](COMMAND_LINE.md) | Launch options and the argument grammar |
 | [PIPELINE.md](PIPELINE.md) | The five build stages, cook lists, validation |
 | [ASSET_AUTHORING.md](ASSET_AUTHORING.md) | Adding content |
+| [TESTBED.md](TESTBED.md) | The debug scenes, and how to reach them |
 
 ## Subsystems
 
