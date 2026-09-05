@@ -22,13 +22,15 @@ namespace
         {EngineSubsystem::Level, EngineSubsystem::Resource},
         {EngineSubsystem::Level, EngineSubsystem::Archive},
         {EngineSubsystem::Sector, EngineSubsystem::Level},
+        {EngineSubsystem::Ui, EngineSubsystem::Input},
     };
 
     const uint32_t kDependencyCount = sizeof(kDependencies) / sizeof(kDependencies[0]);
 
     const EngineSubsystem kAll[] = {
         EngineSubsystem::Io,    EngineSubsystem::Archive, EngineSubsystem::Resource,    EngineSubsystem::Level,
-        EngineSubsystem::Sector, EngineSubsystem::Input,   EngineSubsystem::Achievement, EngineSubsystem::PerfLogger,
+        EngineSubsystem::Sector, EngineSubsystem::Input,   EngineSubsystem::Ui,          EngineSubsystem::Achievement,
+        EngineSubsystem::PerfLogger,
     };
 }
 
@@ -70,6 +72,8 @@ const char* Engine_Subsystem_Name(EngineSubsystem subsystem)
         return "sector";
     case EngineSubsystem::Input:
         return "input";
+    case EngineSubsystem::Ui:
+        return "ui";
     case EngineSubsystem::Achievement:
         return "achievement";
     case EngineSubsystem::PerfLogger:

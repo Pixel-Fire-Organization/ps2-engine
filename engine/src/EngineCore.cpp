@@ -8,6 +8,7 @@
 #include <ctime>
 #include "EngineAchievement.h"
 #include "EngineInput.h"
+#include "EngineUi.h"
 #include "graphics/Renderer.h"
 #include "platform/Platform.h"
 
@@ -93,6 +94,11 @@ bool Engine_Init(EngineConfig config, Platform* platform, Renderer* renderer)
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Input))
         Engine_Input_Init();
 
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Ui) && !Engine_Ui_Init())
+    {
+        Engine_Panic("UI subsystem failed to initialize");
+    }
+
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
         Engine_Achievement_Init(nullptr);
 
@@ -169,6 +175,9 @@ void Engine_Close()
     // up, so an absent one is not shut down twice or shut down never-started.
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
         Engine_Achievement_Close();
+
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Ui))
+        Engine_Ui_Shutdown();
 
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Input))
         Engine_Input_Shutdown();

@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "EngineCore.h"
 #include "EngineInput.h"
+#include "EngineUi.h"
 #include "GameAPI.h"
 
 #include <cstdio>
@@ -48,7 +49,9 @@ void EngineUpdate()
     float dt = Engine_GetDeltaTime();
 
     // 1. Gameplay Phase (C++) — the game module's per-frame update + draw submission.
+    Ui_BeginFrame();
     GameUpdate(dt);
+    Ui_EndFrame();
     gameLogicEndTime = platform->GetTimeSeconds();
 
     // 2. Renderer Phase (CPU-side transforms)

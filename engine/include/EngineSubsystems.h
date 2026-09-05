@@ -10,6 +10,7 @@ enum class EngineSubsystem : uint8_t
     Level, // world core, materials, entities     (needs Resource, Archive)
     Sector, // streamed world geometry             (needs Level)
     Input, // gamepad, keyboard, mouse
+    Ui, // immediate-mode interface        (needs Input)
     Achievement, // player-visible achievements, where the platform has them
     PerfLogger, // on-demand performance snapshot
     Count
