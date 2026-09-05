@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "EngineCore.h"
 #include "EngineInput.h"
+#include "EngineTestbed.h"
 #include "EngineUi.h"
 #include "GameAPI.h"
 
@@ -50,7 +51,9 @@ void EngineUpdate()
 
     // 1. Gameplay Phase (C++) — the game module's per-frame update + draw submission.
     Ui_BeginFrame();
-    GameUpdate(dt);
+    Engine_Testbed_Update(dt);
+    if (!Engine_Testbed_IsOpen())
+        GameUpdate(dt);
     Ui_EndFrame();
     gameLogicEndTime = platform->GetTimeSeconds();
 

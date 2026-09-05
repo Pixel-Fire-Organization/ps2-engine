@@ -13,6 +13,7 @@ enum class EngineSubsystem : uint8_t
     Ui, // immediate-mode interface        (needs Input)
     Achievement, // player-visible achievements, where the platform has them
     PerfLogger, // on-demand performance snapshot
+    Testbed, // debug scene catalogue          (needs Ui; debug builds only)
     Count
 };
 
@@ -21,6 +22,11 @@ void Engine_Subsystems_Set(const EngineSubsystem* list, uint32_t count);
 
 // True when the subsystem was requested AND its dependencies were satisfied.
 bool Engine_Subsystem_IsEnabled(EngineSubsystem subsystem);
+
+// Turn one subsystem on regardless of what the game asked for. Only the
+// testbed uses this, because it must not need the game's cooperation to
+// exist. Call between Engine_Subsystems_Set and Engine_Subsystems_Validate.
+void Engine_Subsystem_Enable(EngineSubsystem subsystem);
 
 const char* Engine_Subsystem_Name(EngineSubsystem subsystem);
 

@@ -8,6 +8,7 @@
 #include <ctime>
 #include "EngineAchievement.h"
 #include "EngineInput.h"
+#include "EngineTestbed.h"
 #include "EngineUi.h"
 #include "GameAPI.h"
 #include "graphics/Renderer.h"
@@ -103,6 +104,9 @@ bool Engine_Init(EngineConfig config, Platform* platform, Renderer* renderer)
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
         Engine_Achievement_Init(nullptr);
 
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Testbed))
+        Engine_Testbed_Init();
+
     return true;
 }
 
@@ -176,6 +180,9 @@ void Engine_Close()
     // up, so an absent one is not shut down twice or shut down never-started.
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
         Engine_Achievement_Close();
+
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Testbed))
+        Engine_Testbed_Shutdown();
 
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Ui))
         Engine_Ui_Shutdown();

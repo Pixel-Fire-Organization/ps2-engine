@@ -81,6 +81,24 @@ set(ENGINE_CORE_HEADERS
 
 set(ENGINE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" CACHE INTERNAL "")
 
+# The debug testbed is present only in a debug configuration: not switched off
+# at run time, absent. Which sources are compiled expresses that, the same way
+# it expresses platform choice. See docs/subsystems/TESTBED.md.
+if(DEBUG)
+    set(ENGINE_DEBUG_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/Testbed.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/TestbedScenes.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePlatformInfo.cpp"
+        CACHE INTERNAL "")
+    set(ENGINE_DEBUG_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/debug" CACHE INTERNAL "")
+else()
+    set(ENGINE_DEBUG_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/Stub.cpp"
+        CACHE INTERNAL "")
+    set(ENGINE_DEBUG_INCLUDE_DIR "" CACHE INTERNAL "")
+endif()
+
+
 # Build the engine library for one platform. That platform.cmake fragment has
 # already run and set ENGINE_PLATFORM_<P>_SOURCES / _LIBS / _DEFINES / _INCLUDES.
 function(engine_add_library PLATFORM OUT_TARGET)
@@ -92,6 +110,7 @@ function(engine_add_library PLATFORM OUT_TARGET)
     add_library(${_target} STATIC
         ${ENGINE_CORE_SOURCES}
         ${ENGINE_CORE_HEADERS}
+        ${ENGINE_DEBUG_SOURCES}
         ${ENGINE_PLATFORM_${PLATFORM}_SOURCES}
     )
 
@@ -100,6 +119,7 @@ function(engine_add_library PLATFORM OUT_TARGET)
     # any shared engine file naming a platform.
     target_include_directories(${_target} PUBLIC
         "${ENGINE_INCLUDE_DIR}"
+        "${ENGINE_DEBUG_INCLUDE_DIR}"
         "${_variantDir}"
     )
     if(_baseDir)

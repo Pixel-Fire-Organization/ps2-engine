@@ -23,6 +23,7 @@ namespace
         {EngineSubsystem::Level, EngineSubsystem::Archive},
         {EngineSubsystem::Sector, EngineSubsystem::Level},
         {EngineSubsystem::Ui, EngineSubsystem::Input},
+        {EngineSubsystem::Testbed, EngineSubsystem::Ui},
     };
 
     const uint32_t kDependencyCount = sizeof(kDependencies) / sizeof(kDependencies[0]);
@@ -48,6 +49,13 @@ void Engine_Subsystems_Set(const EngineSubsystem* list, uint32_t count)
         if (index < static_cast<uint32_t>(EngineSubsystem::Count))
             s_Enabled[index] = true;
     }
+}
+
+void Engine_Subsystem_Enable(EngineSubsystem subsystem)
+{
+    const uint32_t index = static_cast<uint32_t>(subsystem);
+    if (index < static_cast<uint32_t>(EngineSubsystem::Count))
+        s_Enabled[index] = true;
 }
 
 bool Engine_Subsystem_IsEnabled(EngineSubsystem subsystem)
@@ -78,6 +86,8 @@ const char* Engine_Subsystem_Name(EngineSubsystem subsystem)
         return "achievement";
     case EngineSubsystem::PerfLogger:
         return "perflogger";
+    case EngineSubsystem::Testbed:
+        return "testbed";
     case EngineSubsystem::Count:
     default:
         return "<unknown>";
