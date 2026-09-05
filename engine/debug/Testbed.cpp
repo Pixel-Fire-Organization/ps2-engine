@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "EngineApp.h"
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineInput.h"
@@ -24,6 +25,7 @@ namespace
     const int MENU_TITLE_HEIGHT = 34;
     const int MENU_FOOTER_HEIGHT = 26;
     const int MENU_COLUMN_GAP = 8;
+    const int EXIT_CHOSEN = -2;
 
     bool s_Enabled = false;
     Mode s_Mode = Mode::Closed;
@@ -107,6 +109,12 @@ namespace
                     chosen = i;
             }
         }
+        if (first == 0)
+        {
+            Ui_Spacing(8);
+            if (Ui_Button("EXIT GAME"))
+                chosen = EXIT_CHOSEN;
+        }
         Ui_EndPanel();
         return chosen;
     }
@@ -137,6 +145,12 @@ namespace
         snprintf(footer, sizeof(footer), "X SELECT   O CLOSE   %s TOGGLES", s_ChordText);
         Ui_Text((screenW - Ui_TextWidth(style.textScale, footer)) / 2, screenH - MENU_FOOTER_HEIGHT, style.textScale, footer, UiColor::TextDim);
 
+        if (chosen == EXIT_CHOSEN)
+        {
+            Engine_LogInfo("[Testbed] exit requested");
+            EngineApp_OnExitRequested();
+            return;
+        }
         if (chosen >= 0)
         {
             EnterScene(chosen);

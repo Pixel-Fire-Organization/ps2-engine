@@ -8,12 +8,6 @@
 
 set(GAME_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Game.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/SwarmSystem.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/DebugFont.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/SceneManager.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/scene_select.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/scene_swarm.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/scene_level.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EcsHooks.cpp"
     CACHE INTERNAL "")
 

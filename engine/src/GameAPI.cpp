@@ -13,6 +13,7 @@
 #include <cstring>
 
 #include "EngineAchievement.h"
+#include "EngineApp.h"
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineInput.h"
@@ -25,7 +26,6 @@
 #include "platform/Platform.h"
 
 // Defined in EngineApp.cpp — sets the internal exit flag polled by EngineExited().
-void EngineApp_OnExitRequested();
 
 namespace
 {

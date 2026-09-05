@@ -23,6 +23,11 @@ void EngineUpdate(void);
 // Returns true when the engine should stop (window close or game::Exit()).
 bool EngineExited(void);
 
+// Ask the frame loop to stop after this frame. Declared here rather than
+// forward-declared at each call site, which is how the two copies of this
+// prototype drifted apart before.
+void EngineApp_OnExitRequested();
+
 // Shut down all engine subsystems and release resources. Call after the main loop.
 void EngineStop(void);
 
