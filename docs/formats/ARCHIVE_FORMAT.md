@@ -58,10 +58,27 @@ succeeds regardless of how the path was written:
 | `cdrom0:/RASSETS/BOX.PS2A;1` | `RASSETS/BOX.PS2A` |
 | `RASSETS\BOX.PS2A` (baked dependency) | `RASSETS/BOX.PS2A` |
 | `mass0:/LEVELS/CITY.PS2R` | `LEVELS/CITY.PS2R` |
+| `D:/games/build/RASSETS/BOX.PS2A` (desktop root) | `RASSETS/BOX.PS2A` |
 
-The rule: strip the device token up to the first colon, strip any `;N` version
-suffix, convert backslashes to forward slashes, upper-case, and drop a leading
-slash.
+**A key is the path relative to the resource root.** The root is whatever the
+platform prepends when it turns a relative asset path into a real one — a device
+token on a console, the directory the executable lives in on a desktop — so
+canonicalisation is exactly that step run backwards, and removes the root it
+knows rather than guessing where the root ended.
+
+That distinction is the whole point. A rule that cut the path at its first colon
+worked on a console, where the root is a short device token, and silently failed
+on a desktop, where the first colon belongs to a drive letter and the rest of an
+absolute path survived into the key. Every archived asset then missed, and fell
+back to a loose file that a packaged build does not have.
+
+A path that carries some *other* device token — one asset reached through a root
+that is not the active one — still has that token removed, but only when the name
+before the colon is longer than a single character. A drive letter is one
+character, which is what keeps the two cases apart.
+
+After the root is removed: strip any `;N` version suffix, convert backslashes to
+forward slashes, upper-case, and drop leading slashes.
 
 This must be implemented identically in the engine and in the packaging tool.
 Canonicalisation is also what prevents the same asset occupying two resource

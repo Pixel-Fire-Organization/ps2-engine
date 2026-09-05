@@ -276,6 +276,45 @@ bool Engine_BuildPath(const char* token, const char* relativePath, char* outBuf,
     return platform->BuildPath(relativePath, outBuf, bufSize);
 }
 
+namespace
+{
+    /// @param c A path character.
+    /// @return It with separators unified and case folded, as a key stores it.
+    char Internal_CanonicalChar(char c) { return (c == '\\') ? '/' : static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+
+    /// Remove the active resource root, which is exactly what BuildPath prepended.
+    /// @param path The path to shorten.
+    /// @return The remainder, or null when the path does not start with the root.
+    const char* Internal_SkipResourceRoot(const char* path)
+    {
+        const char* root = Engine_GetResourceLocationToken();
+        if (!root || !*root)
+            return nullptr;
+
+        const char* p = path;
+        for (const char* q = root; *q; ++p, ++q)
+        {
+            if (Internal_CanonicalChar(*p) != Internal_CanonicalChar(*q))
+                return nullptr;
+        }
+        return p;
+    }
+
+    /// Remove a device token from a path that came from somewhere other than the
+    /// active root. A token is a name of more than one character followed by ':'
+    /// before any separator; requiring more than one is what stops a desktop
+    /// drive letter from being eaten as though it were a device.
+    /// @param path The path to shorten.
+    /// @return The remainder, or the path unchanged when it carries no token.
+    const char* Internal_SkipDeviceToken(const char* path)
+    {
+        size_t i = 0;
+        while (path[i] && path[i] != ':' && path[i] != '/' && path[i] != '\\')
+            ++i;
+        return (path[i] == ':' && i > 1) ? (path + i + 1) : path;
+    }
+} // namespace
+
 void Engine_Path_Canonical(const char* in, char* out)
 {
     if (!out)
@@ -284,10 +323,9 @@ void Engine_Path_Canonical(const char* in, char* out)
     if (!in)
         return;
 
-    // Skip a leading device token ("cdrom0:", "mass0:", "host:", ...): everything
-    // up to and including the first ':'. PS2 asset keys have no other colon.
-    const char* p = strchr(in, ':');
-    p = p ? p + 1 : in;
+    const char* p = Internal_SkipResourceRoot(in);
+    if (!p)
+        p = Internal_SkipDeviceToken(in);
 
     // Copy, converting '\\' -> '/' and upper-casing.
     char tmp[IO_FILE_MAX_PATH];
