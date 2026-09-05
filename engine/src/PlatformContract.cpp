@@ -43,6 +43,14 @@
 #error "platform must define PLATFORM_TARGET_FRAME_MICROS in its PlatformConstants.h"
 #endif
 
+// --- Interface -----------------------------------------------------------
+#ifndef UI_MAX_QUADS
+#error "platform must define UI_MAX_QUADS in its PlatformConstants.h"
+#endif
+#ifndef UI_MAX_FOCUSABLES
+#error "platform must define UI_MAX_FOCUSABLES in its PlatformConstants.h"
+#endif
+
 // --- Memory map ----------------------------------------------------------
 #ifndef MEM_LIMIT_TOTAL_BUDGET
 #error "platform must define MEM_LIMIT_TOTAL_BUDGET in its PlatformConstants.h"

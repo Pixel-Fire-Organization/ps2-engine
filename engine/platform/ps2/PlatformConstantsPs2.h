@@ -130,6 +130,9 @@
 
 #define GFX_MAX_DRAW_LIST_LENGTH 1024
 
+#define UI_MAX_QUADS 4096
+#define UI_MAX_FOCUSABLES 96
+
 // Shared clip-plane distances - both backends must build the same frustum so
 // CPU-side culling matches what the GS rasterizes.
 #define GFX_NEAR_PLANE 0.1f
