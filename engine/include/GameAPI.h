@@ -175,3 +175,8 @@ namespace game
 // Returns false if no handler is registered or the handler rejected the record.
 // Called by the level loader (EngineLevel.cpp) when instantiating map entities.
 bool Engine_Game_DispatchSpawn(const game::EntitySpawn& spawn);
+
+// Drop the level and spawn handler the game registered, so the engine can be
+// returned to a clean state without the game being involved. Called by
+// Engine_ResetRuntimeState; the game re-registers both in GameInit().
+void Engine_Game_ResetState();

@@ -63,6 +63,21 @@ construction of a renderer already depends on it. Released last, after every
 subsystem that borrowed from it has shut down. It has no partial state: either
 the whole map is reserved or startup fails.
 
+**The map is reserved once; its contents can be emptied many times.** Returning
+the engine to a just-started state does not re-reserve anything. Each arena
+segment goes back to a zero bump offset with every slot emptied and unlocked,
+and the main pool is rebuilt over the block it already owns. Slot addresses and
+capacities survive, so anything holding one still holds a valid one.
+
+**The renderer segment is excluded from that, and the exclusion is load-bearing.**
+A backend takes its geometry staging out of the renderer segment while it is
+being constructed, and it is constructed once for the life of the process —
+one backend in the engine offers no teardown entry point at all, so it could not
+be rebuilt even if the engine wanted to. Emptying that segment would leave a
+live renderer staging into memory the map has handed back. Emptying the other
+segments is safe precisely because nothing survives across the reset holding
+pointers into them.
+
 ## When not loaded
 
 Not applicable — memory cannot be disabled. It is not part of the game's

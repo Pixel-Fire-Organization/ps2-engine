@@ -73,6 +73,16 @@ Two orderings are load-bearing and have both been got wrong before:
 
 Shutdown reverses the order.
 
+There is also a **runtime reset**, which is neither startup nor shutdown: it
+returns the engine to the state it had just after startup — no level, no loaded
+resources, only the boot archive mounted, the config and level-data arenas and
+the main pool empty — without stopping it. The platform, the memory reservation,
+the renderer and the renderer's arena are untouched, because a renderer is built
+once for the life of the process and cannot be rebuilt on every platform. It
+exists so a diagnostic can exercise one subsystem from a known-clean state
+rather than from whatever the previous one left behind. See
+[MEMORY.md](subsystems/MEMORY.md).
+
 ## Selection
 
 The platform compiled into a binary is fixed at build time, and each platform

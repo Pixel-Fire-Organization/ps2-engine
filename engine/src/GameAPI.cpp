@@ -464,6 +464,12 @@ namespace game
 
 } // namespace game
 
+void Engine_Game_ResetState()
+{
+    game::UnloadLevel();
+    game::SetSpawnHandler(nullptr);
+}
+
 bool Engine_Game_DispatchSpawn(const game::EntitySpawn& spawn)
 {
     if (!game::s_SpawnHandler)

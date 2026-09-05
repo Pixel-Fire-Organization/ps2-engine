@@ -205,6 +205,32 @@ void* Engine_ArenaAlloc(MemoryArena* arena, size_t size, size_t alignment)
 
 void Engine_ArenaReset(MemoryArena* arena) { arena->offset = 0; }
 
+void Engine_ResetArena(ArenaType type)
+{
+    MemoryArena* arena = nullptr;
+    switch (type)
+    {
+    case ARENA_CONFIG:
+        arena = &g_ConfigArena;
+        break;
+    case ARENA_LEVEL_DATA:
+        arena = &g_LevelDataArena;
+        break;
+    case ARENA_RENDERER:
+        arena = &g_RendererArena;
+        break;
+    default:
+        return;
+    }
+
+    Engine_ArenaReset(arena);
+    for (uint32_t i = 0; i < s_SlotCounts[type]; ++i)
+    {
+        s_Slots[type][i].usedSize = 0;
+        s_Slots[type][i].locked = false;
+    }
+}
+
 void Engine_ArenaClear(MemoryArena* arena)
 {
     if (arena->buffer)

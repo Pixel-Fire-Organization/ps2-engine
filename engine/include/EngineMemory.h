@@ -53,6 +53,12 @@ void Engine_ClearSlot(ArenaType type, uint32_t slotIndex);
 
 void Engine_ArenaReset(MemoryArena* arena);
 
+// Return one arena segment to its post-startup state: the bump offset goes
+// back to zero and every slot is emptied and unlocked. Slot pointers and
+// capacities are unchanged, so anything holding a slot address keeps a valid
+// one. See docs/subsystems/MEMORY.md.
+void Engine_ResetArena(ArenaType type);
+
 void Engine_ArenaClear(MemoryArena* arena);
 
 void Engine_GetArenaStats(ArenaType type, size_t* outCapacity, size_t* outUsed);

@@ -9,6 +9,7 @@
 #include "EngineAchievement.h"
 #include "EngineInput.h"
 #include "EngineUi.h"
+#include "GameAPI.h"
 #include "graphics/Renderer.h"
 #include "platform/Platform.h"
 
@@ -201,6 +202,55 @@ void Engine_Close()
     // The platform allocated the arena and pool blocks, so it frees them.
     if (g_Platform)
         g_Platform->GetMemory().Release();
+}
+
+
+void Engine_ResetRuntimeState()
+{
+    Engine_Game_ResetState();
+
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Resource))
+        Engine_Resource_Shutdown();
+
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Archive))
+        Engine_Archive_Shutdown();
+
+    if (g_Renderer)
+        g_Renderer->ClearDrawLists();
+
+    Engine_ResetArena(ARENA_CONFIG);
+    Engine_ResetArena(ARENA_LEVEL_DATA);
+
+    const Platform* platform = Engine_GetPlatform();
+    if (platform)
+    {
+        void* poolBuffer = Engine_PoolGetBufferMain();
+        if (poolBuffer)
+        {
+            Engine_PoolInitMain(poolBuffer, platform->GetConstant(PlatformConstant::MemoryPoolMainSize),
+                                platform->GetConstant(PlatformConstant::MemoryPoolChunkSize));
+        }
+    }
+
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Archive))
+    {
+        Engine_Archive_Init();
+
+        char bootArchive[IO_FILE_MAX_PATH];
+        const char* token = s_ResourceLocationToken ? s_ResourceLocationToken : "cdrom0:";
+        if (Engine_BuildPath(token, ARCH_BOOT_ARCHIVE_NAME, bootArchive, sizeof(bootArchive)))
+        {
+            if (Engine_Archive_Mount(bootArchive) < 0)
+                Engine_LogInfo("No boot archive at '%s' - assets will resolve as loose files.", bootArchive);
+        }
+    }
+
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Resource) && !Engine_Resource_Init())
+    {
+        Engine_Panic("Resource Manager failed to restart after a runtime reset");
+    }
+
+    Engine_LogInfo("Engine runtime state reset.");
 }
 
 const char* Engine_GetResourceLocationToken(void) { return s_ResourceLocationToken; }

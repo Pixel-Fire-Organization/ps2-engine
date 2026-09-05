@@ -40,6 +40,15 @@ void Engine_Update();
 
 void Engine_Close();
 
+// Return the engine to the state it was in just after startup, without
+// restarting it: the level, every loaded resource, the mounted archives, the
+// config and level-data arenas, the main pool and the draw lists all go back
+// to empty, and the subsystems that own them are brought up again.
+//
+// The renderer and its arena are deliberately untouched. See
+// docs/subsystems/MEMORY.md for why that is not an omission.
+void Engine_ResetRuntimeState();
+
 const char* Engine_GetResourceLocationToken();
 
 // Performance metrics
