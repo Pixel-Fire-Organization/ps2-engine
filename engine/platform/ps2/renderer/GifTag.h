@@ -86,9 +86,7 @@ class GifTagRenderer final : public Renderer
     };
     TexEntry m_textures[TAG_MAX_TEXTURES]{};
 
-    // Queued 2D rectangles (see Ps2GlRenderer for why DrawRect2D must be deferred).
-    // Sized for the rect-font UI (game/src/DebugFont); see Ps2GlRenderer note.
-    static constexpr uint16_t TAG_MAX_2D_RECTS = 2048;
+    static constexpr uint16_t TAG_MAX_2D_RECTS = 4096;
     struct Rect2D
     {
         int32_t x, y, w, h;
@@ -96,6 +94,7 @@ class GifTagRenderer final : public Renderer
     };
     Rect2D m_rects2D[TAG_MAX_2D_RECTS];
     uint16_t m_rect2DCount = 0;
+    uint16_t m_droppedRects2D = 0;
 
     uint16_t m_frameVertsUsed = 0;
     uint16_t m_frameDroppedObjects = 0; // objects dropped this frame (budget); logged once/frame

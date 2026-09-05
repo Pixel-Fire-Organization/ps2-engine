@@ -45,6 +45,13 @@ configuration.
   display packet corrupts the hardware transfer, which presents as a hang or
   garbage far from the cause — a dropped triangle and a log line are strictly
   better.
+- **Screen-space rectangles are queued, with a fixed per-frame ceiling.** Interface
+  drawing is submitted before the frame begins, so it is buffered and emitted at the
+  end. The queue holds roughly four thousand rectangles per frame; beyond that they
+  are dropped. The overflow is reported **once per frame, with a count** — never once
+  per dropped rectangle. A per-item diagnostic on this platform's console costs more
+  than the frame it describes, so it would replace the problem it reports rather than
+  measure it.
 - Reserved headroom exists so packet termination always fits. Filling a packet
   exactly to capacity leaves no room to close it.
 - Transform batching is fixed. It is sized to the coprocessor's local memory, not

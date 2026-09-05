@@ -34,12 +34,7 @@ class Ps2GlRenderer final : public Renderer
     unsigned int m_dlSphere = 0;
     unsigned int m_dlCylinder = 0;
 
-    // Queued 2D rectangles (DrawRect2D is also called outside a geometry block,
-    // e.g. during scripting or the panic loop). Flushed in EndFrame().
-    // Sized for a rect-font UI (game/src/DebugFont): a menu screen is a few
-    // hundred small rects (a ~6-entry menu ≈ 1200), so 2048 leaves headroom for a
-    // busy testbed screen (~57 KB array, DMA well within budget).
-    static constexpr uint16_t GL_MAX_2D_RECTS = 2048;
+    static constexpr uint16_t GL_MAX_2D_RECTS = 4096;
     struct Rect2D
     {
         int32_t x, y, w, h;
@@ -47,6 +42,7 @@ class Ps2GlRenderer final : public Renderer
     };
     Rect2D m_rects2D[GL_MAX_2D_RECTS];
     uint16_t m_rect2DCount = 0;
+    uint16_t m_droppedRects2D = 0;
 
     uint16_t m_frameDrawCallsUsed = 0;
 

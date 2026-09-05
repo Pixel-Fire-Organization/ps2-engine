@@ -375,7 +375,7 @@ void GifTagRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t hei
 {
     if (m_rect2DCount >= TAG_MAX_2D_RECTS)
     {
-        Engine_LogError("GifTagRenderer: 2D rect queue full (%u).", TAG_MAX_2D_RECTS);
+        ++m_droppedRects2D;
         return;
     }
     m_rects2D[m_rect2DCount++] = Rect2D{x, y, width, height, color};
@@ -383,6 +383,12 @@ void GifTagRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t hei
 
 void GifTagRenderer::FlushRects2D()
 {
+    if (m_droppedRects2D > 0)
+    {
+        Engine_LogError("GifTagRenderer: dropped %u 2D rect(s) this frame (queue capacity %u).", m_droppedRects2D, TAG_MAX_2D_RECTS);
+        m_droppedRects2D = 0;
+    }
+
     if (m_rect2DCount == 0)
         return;
 

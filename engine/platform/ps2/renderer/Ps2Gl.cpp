@@ -367,7 +367,7 @@ void Ps2GlRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t heig
 {
     if (m_rect2DCount >= GL_MAX_2D_RECTS)
     {
-        Engine_LogError("Ps2GlRenderer: 2D rect queue full (%u).", GL_MAX_2D_RECTS);
+        ++m_droppedRects2D;
         return;
     }
     m_rects2D[m_rect2DCount++] = Rect2D{x, y, width, height, color};
@@ -375,6 +375,12 @@ void Ps2GlRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t heig
 
 void Ps2GlRenderer::FlushRects2D()
 {
+    if (m_droppedRects2D > 0)
+    {
+        Engine_LogError("Ps2GlRenderer: dropped %u 2D rect(s) this frame (queue capacity %u).", m_droppedRects2D, GL_MAX_2D_RECTS);
+        m_droppedRects2D = 0;
+    }
+
     if (m_rect2DCount == 0)
         return;
 
