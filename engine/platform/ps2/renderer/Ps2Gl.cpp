@@ -286,15 +286,6 @@ void Ps2GlRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3&
     AddPrimitive(m_drawLists, primitive, position, rotation, scale, color, textureId);
 }
 
-void Ps2GlRenderer::AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
-{
-    UIDrawEntry entry{};
-    entry.ui = ui;
-    entry.offset = offset;
-    entry.scale = scale.x;
-    m_drawLists.AddUIDraw(entry);
-}
-
 void Ps2GlRenderer::AddLevelToDrawList(const Level& level) { UNUSED_VAR(level); }
 
 void Ps2GlRenderer::AddModelToDrawList(int32_t modelId, const Vector3& position, const Vector3& rotation, const Vector3& scale)
@@ -467,7 +458,6 @@ void Ps2GlRenderer::Render()
     RenderPrimitives(m_drawLists);
     RenderModels(m_drawLists);
     RenderLevel();
-    RenderUI(m_drawLists);
 
     m_drawLists.Reset(false);
 }
@@ -841,7 +831,6 @@ void Ps2GlRenderer::RenderModels(const DrawLists& lists)
     glDisable(GL_TEXTURE_2D);
 }
 
-void Ps2GlRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }
 
 Ps2GlRenderer::ModelDListEntry* Ps2GlRenderer::FindOrCompileModelDLists(const Model* model, int32_t resourceId)
 {

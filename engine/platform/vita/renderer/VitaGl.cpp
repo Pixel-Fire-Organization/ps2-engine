@@ -165,15 +165,6 @@ void VitaGlRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3
     m_drawLists.AddPrimitive(entry);
 }
 
-void VitaGlRenderer::AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
-{
-    UIDrawEntry entry;
-    entry.ui = ui;
-    entry.offset = offset;
-    entry.scale = scale.x;
-    m_drawLists.AddUIDraw(entry);
-}
-
 void VitaGlRenderer::AddLevelToDrawList(const Level& level) { UNUSED_VAR(level); }
 
 void VitaGlRenderer::AddModelToDrawList(int32_t modelId, const Vector3& position, const Vector3& rotation, const Vector3& scale)
@@ -329,4 +320,3 @@ Camera3D VitaGlRenderer::GetActiveCamera3D() const { return m_drawLists.GetCamer
 void VitaGlRenderer::RenderSkybox(const DrawLists& lists) { UNUSED_VAR(lists); }
 void VitaGlRenderer::RenderPrimitives(DrawLists& lists) { UNUSED_VAR(lists); }
 void VitaGlRenderer::RenderModels(const DrawLists& lists) { UNUSED_VAR(lists); }
-void VitaGlRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }

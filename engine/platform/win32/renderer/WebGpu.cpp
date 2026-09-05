@@ -712,15 +712,6 @@ void WebGpuRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3
     m_drawLists.AddPrimitive(entry);
 }
 
-void WebGpuRenderer::AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
-{
-    UIDrawEntry entry;
-    entry.ui = ui;
-    entry.offset = offset;
-    entry.scale = scale.x;
-    m_drawLists.AddUIDraw(entry);
-}
-
 // Level geometry is pulled from the sector manager at render time rather than
 // queued here, matching the PS2 backends: the resident ring is the source of
 // truth and re-queueing it every frame would duplicate that state.
@@ -971,4 +962,3 @@ Camera3D WebGpuRenderer::GetActiveCamera3D() const { return m_drawLists.GetCamer
 void WebGpuRenderer::RenderSkybox(const DrawLists& lists) { UNUSED_VAR(lists); }
 void WebGpuRenderer::RenderPrimitives(DrawLists& lists) { UNUSED_VAR(lists); }
 void WebGpuRenderer::RenderModels(const DrawLists& lists) { UNUSED_VAR(lists); }
-void WebGpuRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }

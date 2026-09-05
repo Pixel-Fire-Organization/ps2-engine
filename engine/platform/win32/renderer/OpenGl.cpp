@@ -481,15 +481,6 @@ void OpenGlRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3
     m_drawLists.AddPrimitive(entry);
 }
 
-void OpenGlRenderer::AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
-{
-    UIDrawEntry entry;
-    entry.ui = ui;
-    entry.offset = offset;
-    entry.scale = scale.x;
-    m_drawLists.AddUIDraw(entry);
-}
-
 // Level geometry is pulled from the sector manager at render time rather than
 // queued here, matching every other backend.
 void OpenGlRenderer::AddLevelToDrawList(const Level& level) { UNUSED_VAR(level); }
@@ -660,4 +651,3 @@ Camera3D OpenGlRenderer::GetActiveCamera3D() const { return m_drawLists.GetCamer
 void OpenGlRenderer::RenderSkybox(const DrawLists& lists) { UNUSED_VAR(lists); }
 void OpenGlRenderer::RenderPrimitives(DrawLists& lists) { UNUSED_VAR(lists); }
 void OpenGlRenderer::RenderModels(const DrawLists& lists) { UNUSED_VAR(lists); }
-void OpenGlRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }

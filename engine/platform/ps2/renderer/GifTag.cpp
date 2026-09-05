@@ -280,14 +280,6 @@ void GifTagRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3
 {
     AddPrimitive(m_drawLists, primitive, position, rotation, scale, color, textureId);
 }
-void GifTagRenderer::AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
-{
-    UIDrawEntry entry{};
-    entry.ui = ui;
-    entry.offset = offset;
-    entry.scale = scale.x;
-    m_drawLists.AddUIDraw(entry);
-}
 void GifTagRenderer::AddLevelToDrawList(const Level& level) { UNUSED_VAR(level); }
 void GifTagRenderer::AddModelToDrawList(int32_t modelId, const Vector3& position, const Vector3& rotation, const Vector3& scale)
 {
@@ -480,7 +472,6 @@ void GifTagRenderer::Render()
     }
 
     RenderModels(m_drawLists);
-    RenderUI(m_drawLists);
     m_drawLists.Reset(false);
 }
 
@@ -994,7 +985,6 @@ void GifTagRenderer::RenderModels(const DrawLists& lists)
     m_frameStats.modelCount = meshDraws;
 }
 
-void GifTagRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }
 
 // ---------------------------------------------------------------------------
 // GS-VRAM first-fit free-list (64-word aligned). graph_vram_free is FIFO-only,

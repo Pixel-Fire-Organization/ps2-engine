@@ -33,13 +33,6 @@ struct ModelDrawEntry
     Transform3D transform;
 };
 
-struct UIDrawEntry
-{
-    UI ui;
-    Vector2 offset;
-    float scale;
-};
-
 // Separated (stride-0) geometry arrays for one primitive shape. Every backend
 // consumes these; what each does with them is in its own renderer spec.
 struct PrimitiveArrays
@@ -55,11 +48,9 @@ class DrawLists
     PrimitiveDrawEntry untexturedPrims[GFX_MAX_DRAW_LIST_LENGTH];
     PrimitiveDrawEntry texturedPrims[GFX_MAX_DRAW_LIST_LENGTH];
     ModelDrawEntry models[GFX_MAX_DRAW_LIST_LENGTH];
-    UIDrawEntry uiItems[GFX_MAX_DRAW_LIST_LENGTH]{};
     uint16_t untexturedCount = 0;
     uint16_t texturedCount = 0;
     uint16_t modelCount = 0;
-    uint16_t uiCount = 0;
     int32_t skyboxResourceId = -1;
 
     // Fixed 3D camera slots; exactly one is active (rendered) per frame.
@@ -109,7 +100,6 @@ public:
 
     bool AddPrimitive(const PrimitiveDrawEntry& entry);
     bool AddModel(const ModelDrawEntry& entry);
-    bool AddUIDraw(const UIDrawEntry& entry);
     bool SetSkyboxTexture(int32_t skyboxTextureId);
 
     // Camera control (fixed-slot model).
@@ -142,8 +132,6 @@ public:
     const ModelDrawEntry* GetModels() const { return models; }
     uint16_t GetModelCount() const { return modelCount; }
 
-    const UIDrawEntry* GetUIItems() const { return uiItems; }
-    uint16_t GetUICount() const { return uiCount; }
 
     int32_t GetSkyboxResourceId() const { return skyboxResourceId; }
     const Camera3D& GetCamera3D() const { return cameras3D[activeCamera3D]; } // active slot

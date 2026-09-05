@@ -559,15 +559,6 @@ void GxmRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& p
     m_drawLists.AddPrimitive(entry);
 }
 
-void GxmRenderer::AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
-{
-    UIDrawEntry entry;
-    entry.ui = ui;
-    entry.offset = offset;
-    entry.scale = scale.x;
-    m_drawLists.AddUIDraw(entry);
-}
-
 void GxmRenderer::AddLevelToDrawList(const Level& level) { UNUSED_VAR(level); }
 
 void GxmRenderer::AddModelToDrawList(int32_t modelId, const Vector3& position, const Vector3& rotation, const Vector3& scale)
@@ -894,4 +885,3 @@ Camera3D GxmRenderer::GetActiveCamera3D() const { return m_drawLists.GetCamera3D
 void GxmRenderer::RenderSkybox(const DrawLists& lists) { UNUSED_VAR(lists); }
 void GxmRenderer::RenderPrimitives(DrawLists& lists) { UNUSED_VAR(lists); }
 void GxmRenderer::RenderModels(const DrawLists& lists) { UNUSED_VAR(lists); }
-void GxmRenderer::RenderUI(const DrawLists& lists) { UNUSED_VAR(lists); }

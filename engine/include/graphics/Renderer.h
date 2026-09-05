@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrawList.h"
+#include "UI.h"
 #include "EngineGraphics.h"
 #include "EngineLevel.h"
 
@@ -22,7 +23,30 @@ public:
     virtual void AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, Color3 color) = 0;
     virtual void AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, int32_t textureId) = 0;
     virtual void AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, Color3 color, int32_t textureId) = 0;
-    virtual void AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale) = 0;
+    /// Translate one frame of interface into this backend's screen-space path.
+    ///
+    /// Shared rather than per-backend so every renderer draws an identical
+    /// interface; a backend gaining a textured screen-space path overrides it.
+    /// @param ui The quads built this frame, in draw order.
+    /// @param offset Screen-space translation applied to every quad.
+    /// @param scale Screen-space scale applied to every quad.
+    virtual void AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
+    {
+        const UiQuad* quads = ui.Quads();
+        const uint32_t count = ui.Count();
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const UiQuad& quad = quads[i];
+            Color3 color;
+            color.r = static_cast<float>(quad.r) / 255.0f;
+            color.g = static_cast<float>(quad.g) / 255.0f;
+            color.b = static_cast<float>(quad.b) / 255.0f;
+            DrawRect2D(static_cast<int32_t>(offset.x + static_cast<float>(quad.x) * scale.x),
+                       static_cast<int32_t>(offset.y + static_cast<float>(quad.y) * scale.y),
+                       static_cast<int32_t>(static_cast<float>(quad.w) * scale.x),
+                       static_cast<int32_t>(static_cast<float>(quad.h) * scale.y), color);
+        }
+    }
     virtual void AddLevelToDrawList(const Level& level) = 0;
     virtual void AddModelToDrawList(int32_t modelId, const Vector3& position, const Vector3& rotation, const Vector3& scale) = 0;
     virtual void AddSkyToDrawList(int32_t resourceId) = 0;
@@ -62,5 +86,4 @@ protected:
     virtual void RenderSkybox(const DrawLists& lists) = 0;
     virtual void RenderPrimitives(DrawLists& lists) = 0;
     virtual void RenderModels(const DrawLists& lists) = 0;
-    virtual void RenderUI(const DrawLists& lists) = 0;
 };

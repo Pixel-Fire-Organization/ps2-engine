@@ -30,7 +30,6 @@ public:
     void AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, Color3 color) override;
     void AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, int32_t textureId) override;
     void AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, Color3 color, int32_t textureId) override;
-    void AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale) override;
     void AddLevelToDrawList(const Level& level) override;
     void AddModelToDrawList(int32_t modelId, const Vector3& position, const Vector3& rotation, const Vector3& scale) override;
     void AddSkyToDrawList(int32_t resourceId) override;
@@ -64,7 +63,6 @@ protected:
     void RenderSkybox(const DrawLists& lists) override;
     void RenderPrimitives(DrawLists& lists) override;
     void RenderModels(const DrawLists& lists) override;
-    void RenderUI(const DrawLists& lists) override;
 
 private:
     struct DisplayBuffer

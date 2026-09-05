@@ -28,6 +28,16 @@ at frame start discards work the game has already submitted. This is a real
 defect that has occurred, and it presents as screen-space content vanishing while
 world content is fine.
 
+**The interface is translated once, for every backend.** A frame of interface
+arrives as one batch of screen-space quads, and turning that batch into
+screen-space rectangles is done in the shared layer rather than per backend.
+This is deliberate: comparing two backends rendering the same frame is the
+primary way rendering bugs are located here, and an interface reimplemented six
+times would differ six ways and destroy that comparison. A backend that later
+grows a textured screen-space path replaces the translation for itself; until
+one does, every backend draws the interface identically and none of them
+honours per-quad transparency.
+
 **Built-in primitive shapes are staged, not built in.** The engine describes a
 cube, a sphere and a cylinder once, in a form no backend can consume directly.
 Converting them into drawable arrays is part of **constructing** a backend, and
