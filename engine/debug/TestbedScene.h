@@ -63,3 +63,21 @@ void Scene_Pointer_Update(float dt);
 
 void Scene_Chords_Init();
 void Scene_Chords_Update(float dt);
+
+void Scene_Primitives_Init();
+void Scene_Primitives_Update(float dt);
+
+void Scene_ScreenAspect_Init();
+void Scene_ScreenAspect_Update(float dt);
+
+void Scene_DepthRange_Init();
+void Scene_DepthRange_Update(float dt);
+
+void Scene_UiGallery_Init();
+void Scene_UiGallery_Update(float dt);
+
+void Scene_Style_Init();
+void Scene_Style_Update(float dt);
+
+void Scene_DrawLoad_Init();
+void Scene_DrawLoad_Update(float dt);

@@ -11,6 +11,12 @@ namespace
         {"TOUCH", TestbedCategory::InputDevices, Scene_Touch_Init, Scene_Touch_Update, nullptr},
         {"POINTER", TestbedCategory::InputDevices, Scene_Pointer_Init, Scene_Pointer_Update, nullptr},
         {"DEBUG CHORDS", TestbedCategory::InputDevices, Scene_Chords_Init, Scene_Chords_Update, nullptr},
+        {"PRIMITIVES", TestbedCategory::RenderingDisplay, Scene_Primitives_Init, Scene_Primitives_Update, nullptr},
+        {"SCREEN AND ASPECT", TestbedCategory::RenderingDisplay, Scene_ScreenAspect_Init, Scene_ScreenAspect_Update, nullptr},
+        {"DEPTH RANGE", TestbedCategory::RenderingDisplay, Scene_DepthRange_Init, Scene_DepthRange_Update, nullptr},
+        {"UI GALLERY", TestbedCategory::RenderingDisplay, Scene_UiGallery_Init, Scene_UiGallery_Update, nullptr},
+        {"STYLE", TestbedCategory::RenderingDisplay, Scene_Style_Init, Scene_Style_Update, nullptr},
+        {"DRAW LOAD", TestbedCategory::RenderingDisplay, Scene_DrawLoad_Init, Scene_DrawLoad_Update, nullptr},
         {"PLATFORM INFO", TestbedCategory::SystemsBudgets, Scene_PlatformInfo_Init, Scene_PlatformInfo_Update, nullptr},
     };
 

@@ -94,6 +94,12 @@ if(DEBUG)
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneTouch.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePointer.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneChords.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePrimitives.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneScreenAspect.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneDepthRange.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneUiGallery.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneStyle.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneDrawLoad.cpp"
         CACHE INTERNAL "")
     set(ENGINE_DEBUG_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/debug" CACHE INTERNAL "")
 else()

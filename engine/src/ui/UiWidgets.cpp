@@ -284,8 +284,10 @@ bool Ui_SliderInt(const char* label, int* value, int minimum, int maximum)
         step = 1;
     if (WasGamePadButtonPressed(0, GamepadButton::DPadLeft))
         step = -1;
-    if (IsGamePadButtonPressed(0, GamepadButton::R1))
-        step *= 16;
+
+    const int range = maximum - minimum;
+    const int grain = (range > 32) ? (range / 32) : 1;
+    step *= grain;
 
     if (step == 0)
         return activated;
