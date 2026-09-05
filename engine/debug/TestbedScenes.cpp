@@ -22,6 +22,8 @@ namespace
         {"RESOURCES", TestbedCategory::SystemsBudgets, Scene_Resources_Init, Scene_Resources_Update, nullptr},
         {"LEVEL STREAM", TestbedCategory::SystemsBudgets, Scene_LevelStream_Init, Scene_LevelStream_Update, Scene_LevelStream_Shutdown},
         {"ACHIEVEMENTS", TestbedCategory::SystemsBudgets, Scene_Achievements_Init, Scene_Achievements_Update, nullptr},
+        {"PERFORMANCE", TestbedCategory::TimingPacing, Scene_Performance_Init, Scene_Performance_Update, nullptr},
+        {"FRAME PACING", TestbedCategory::TimingPacing, Scene_FramePacing_Init, Scene_FramePacing_Update, nullptr},
     };
 
     const int s_SceneCount = static_cast<int>(sizeof(s_Scenes) / sizeof(s_Scenes[0]));

@@ -94,3 +94,9 @@ void Scene_LevelStream_Shutdown();
 
 void Scene_Achievements_Init();
 void Scene_Achievements_Update(float dt);
+
+void Scene_Performance_Init();
+void Scene_Performance_Update(float dt);
+
+void Scene_FramePacing_Init();
+void Scene_FramePacing_Update(float dt);

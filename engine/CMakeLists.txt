@@ -104,6 +104,8 @@ if(DEBUG)
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneResources.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneLevelStream.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneAchievements.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePerformance.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneFramePacing.cpp"
         CACHE INTERNAL "")
     set(ENGINE_DEBUG_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/debug" CACHE INTERNAL "")
 else()
