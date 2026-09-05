@@ -39,6 +39,7 @@ Read the guideline **before** starting, not while reviewing.
 | [Level](subsystems/LEVEL.md) | Yes |
 | [Sector](subsystems/SECTOR.md) | Yes |
 | [Input](subsystems/INPUT.md) | Yes |
+| [UI](subsystems/UI.md) | Yes |
 | [Achievement](subsystems/ACHIEVEMENT.md) | Yes |
 
 ## Formats
