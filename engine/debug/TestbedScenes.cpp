@@ -18,6 +18,10 @@ namespace
         {"STYLE", TestbedCategory::RenderingDisplay, Scene_Style_Init, Scene_Style_Update, nullptr},
         {"DRAW LOAD", TestbedCategory::RenderingDisplay, Scene_DrawLoad_Init, Scene_DrawLoad_Update, nullptr},
         {"PLATFORM INFO", TestbedCategory::SystemsBudgets, Scene_PlatformInfo_Init, Scene_PlatformInfo_Update, nullptr},
+        {"MEMORY", TestbedCategory::SystemsBudgets, Scene_Memory_Init, Scene_Memory_Update, nullptr},
+        {"RESOURCES", TestbedCategory::SystemsBudgets, Scene_Resources_Init, Scene_Resources_Update, nullptr},
+        {"LEVEL STREAM", TestbedCategory::SystemsBudgets, Scene_LevelStream_Init, Scene_LevelStream_Update, Scene_LevelStream_Shutdown},
+        {"ACHIEVEMENTS", TestbedCategory::SystemsBudgets, Scene_Achievements_Init, Scene_Achievements_Update, nullptr},
     };
 
     const int s_SceneCount = static_cast<int>(sizeof(s_Scenes) / sizeof(s_Scenes[0]));

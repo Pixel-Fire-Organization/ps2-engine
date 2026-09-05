@@ -81,3 +81,16 @@ void Scene_Style_Update(float dt);
 
 void Scene_DrawLoad_Init();
 void Scene_DrawLoad_Update(float dt);
+
+void Scene_Memory_Init();
+void Scene_Memory_Update(float dt);
+
+void Scene_Resources_Init();
+void Scene_Resources_Update(float dt);
+
+void Scene_LevelStream_Init();
+void Scene_LevelStream_Update(float dt);
+void Scene_LevelStream_Shutdown();
+
+void Scene_Achievements_Init();
+void Scene_Achievements_Update(float dt);

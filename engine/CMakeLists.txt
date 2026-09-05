@@ -100,6 +100,10 @@ if(DEBUG)
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneUiGallery.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneStyle.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneDrawLoad.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneMemory.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneResources.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneLevelStream.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneAchievements.cpp"
         CACHE INTERNAL "")
     set(ENGINE_DEBUG_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/debug" CACHE INTERNAL "")
 else()
