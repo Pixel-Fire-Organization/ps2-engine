@@ -41,6 +41,7 @@ Read the guideline **before** starting, not while reviewing.
 | [Input](subsystems/INPUT.md) | Yes |
 | [UI](subsystems/UI.md) | Yes |
 | [Achievement](subsystems/ACHIEVEMENT.md) | Yes |
+| [Testbed](subsystems/TESTBED.md) | Debug builds only |
 
 ## Formats
 
