@@ -187,23 +187,25 @@ bool VitaPlatform::VitaTrophies::PumpStartup()
     if (status == SCE_COMMON_DIALOG_STATUS_RUNNING && ++m_registerFrames < kSetupFrameLimit)
         return true;
 
-    bool installed = false;
+    SceNpTrophySetupDialogResult result;
+    memset(&result, 0, sizeof(result));
+    const int resultRc = sceNpTrophySetupDialogGetResult(&result);
+    const bool installed = (status != SCE_COMMON_DIALOG_STATUS_RUNNING && resultRc >= 0 && result.result == SCE_COMMON_DIALOG_RESULT_OK);
+
     if (status == SCE_COMMON_DIALOG_STATUS_RUNNING)
     {
-        Engine_LogError("%s: the trophy setup dialog did not finish within %d frames", m_owner->GetName(), kSetupFrameLimit);
+        Engine_LogError("%s: the trophy setup dialog was still running after %d frames; status %d, result call %08X, result %d",
+                        m_owner->GetName(), kSetupFrameLimit, status, static_cast<unsigned>(resultRc), static_cast<int>(result.result));
         sceNpTrophySetupDialogAbort();
+    }
+    else if (installed)
+    {
+        Engine_LogInfo("%s: the console installed the trophy set", m_owner->GetName());
     }
     else
     {
-        SceNpTrophySetupDialogResult result;
-        memset(&result, 0, sizeof(result));
-        const int resultRc = sceNpTrophySetupDialogGetResult(&result);
-        installed = (resultRc >= 0 && result.result == SCE_COMMON_DIALOG_RESULT_OK);
-        if (installed)
-            Engine_LogInfo("%s: the console installed the trophy set", m_owner->GetName());
-        else
-            Engine_LogError("%s: the trophy setup dialog closed without installing the set, call %08X result %d",
-                            m_owner->GetName(), static_cast<unsigned>(resultRc), static_cast<int>(result.result));
+        Engine_LogError("%s: the trophy setup dialog closed without installing the set; status %d, result call %08X, result %d",
+                        m_owner->GetName(), status, static_cast<unsigned>(resultRc), static_cast<int>(result.result));
     }
 
     sceNpTrophySetupDialogTerm();
