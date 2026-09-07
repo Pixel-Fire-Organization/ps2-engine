@@ -217,6 +217,7 @@ protected:
 
         bool IsUnlocked(uint32_t id) const override;
         uint32_t GetCount() const override;
+        uint32_t GetConsoleCount() const override;
         bool IsAvailable() const override;
         const char* GetUnavailableReason() const override;
 

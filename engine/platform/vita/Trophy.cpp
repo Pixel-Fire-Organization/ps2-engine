@@ -180,18 +180,16 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
     Engine_LogInfo("%s: console knows %u trophies, this build packaged %u", m_owner->GetName(), static_cast<unsigned>(m_serviceCount),
                    static_cast<unsigned>(m_count));
 
+    // A short count is a strong hint that the installed title never carried this
+    // set, since a set is registered when the title is installed. It is a hint
+    // rather than a verdict, so it is said loudly and recording still proceeds:
+    // refusing here on an inference would disable a system that might work.
     if (m_serviceCount < m_count)
     {
-        SetReason("THE CONSOLE HAS %u OF THE %u TROPHIES THIS BUILD PACKAGES. A SET IS REGISTERED WHEN THE TITLE IS "
-                  "INSTALLED, NOT AT RUN TIME, SO AN UPDATE OVER AN OLDER INSTALL KEEPS THE OLD SET. DELETE THE TITLE "
-                  "FROM THE CONSOLE AND INSTALL IT AGAIN.",
-                  static_cast<unsigned>(m_serviceCount), static_cast<unsigned>(m_count));
-        sceNpTrophyDestroyHandle(m_handle);
-        m_handle = -1;
-        sceNpTrophyDestroyContext(m_context);
-        m_context = -1;
-        sceNpTrophyTerm();
-        return false;
+        Engine_LogError("%s: the console has %u of the %u trophies this build packages. A set is registered when the "
+                        "title is installed, not at run time, so an update over an older install keeps the old set. "
+                        "Deleting the title and installing it again is the usual fix.",
+                        m_owner->GetName(), static_cast<unsigned>(m_serviceCount), static_cast<unsigned>(m_count));
     }
 
     m_reason[0] = '\0';
@@ -255,6 +253,8 @@ bool VitaPlatform::VitaTrophies::IsUnlocked(uint32_t id) const
 }
 
 uint32_t VitaPlatform::VitaTrophies::GetCount() const { return m_count; }
+
+uint32_t VitaPlatform::VitaTrophies::GetConsoleCount() const { return m_serviceCount; }
 
 const char* VitaPlatform::VitaTrophies::GetUnavailableReason() const { return (m_available || !m_reason[0]) ? nullptr : m_reason; }
 

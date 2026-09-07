@@ -35,6 +35,10 @@ public:
     ///         indistinguishable from a platform that refused.
     virtual uint32_t GetCount() const = 0;
 
+    /// @return How many the platform itself holds, which can be fewer than the
+    ///         title declares when the platform never took delivery of them.
+    virtual uint32_t GetConsoleCount() const = 0;
+
     /// @return Whether anything can actually be recorded right now.
     virtual bool IsAvailable() const = 0;
 
