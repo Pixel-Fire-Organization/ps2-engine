@@ -228,6 +228,25 @@ bool Ui_Selectable(const char* label, bool selected)
     return activated;
 }
 
+bool Ui_SelectableValue(const char* label, const char* value, bool selected)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    const bool activated = ActivatableRow(label, selected, &x, &y, &w);
+    if (w == 0)
+        return false;
+
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label,
+                Ui_GetColor(selected ? UiColor::TextAccent : UiColor::Text));
+
+    const int valueWidth = Ui_TextWidth(style.textScale, value);
+    UiFont_Draw(x + w - valueWidth - style.rowPadding, y + style.rowPadding, style.textScale, value,
+                Ui_GetColor(UiColor::TextDim));
+    return activated;
+}
+
 bool Ui_Checkbox(const char* label, bool* value)
 {
     const UiStyle& style = Ui_GetStyle();

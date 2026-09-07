@@ -157,6 +157,16 @@ bool Ui_Selectable(const char* label, bool selected);
 /// @return True on the frame the value changed.
 bool Ui_Checkbox(const char* label, bool* value);
 
+/// A row whose identity is its label and whose right-hand text may change.
+/// Use this rather than baking state into the label: identity is derived from
+/// the label, so a label that changes is a different widget and focus jumps off
+/// it at the moment the state it displays changes.
+/// @param label The name, which is also the widget identity.
+/// @param value Text drawn right-aligned; may differ every frame.
+/// @param selected Whether to draw it as the current choice.
+/// @return True on the frame it is activated.
+bool Ui_SelectableValue(const char* label, const char* value, bool selected);
+
 /// @param label The name, which is also the widget identity.
 /// @param value Read for the current position, written when it changes.
 /// @param minimum Lowest value the slider can reach.

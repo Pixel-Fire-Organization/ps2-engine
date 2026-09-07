@@ -11,9 +11,16 @@ namespace
     const int PANEL_MARGIN = 16;
     const int COLUMN_GAP = 8;
     const uint32_t IDS_SHOWN = 8;
+
+    int s_LastId = -1;
+    bool s_LastOk = false;
 } // namespace
 
-void Scene_Achievements_Init() {}
+void Scene_Achievements_Init()
+{
+    s_LastId = -1;
+    s_LastOk = false;
+}
 
 void Scene_Achievements_Update(float dt)
 {
@@ -55,13 +62,30 @@ void Scene_Achievements_Update(float dt)
     for (uint32_t id = 0; id < shown; ++id)
     {
         const bool unlocked = Engine_Achievement_IsUnlocked(id);
-        char row[48];
-        snprintf(row, sizeof(row), "%u %s", static_cast<unsigned>(id), unlocked ? "DONE" : (available ? "UNLOCK" : "DECLARED"));
-        if (Ui_Selectable(row, unlocked) && available)
-            Engine_Achievement_Unlock(id);
+
+        char label[32];
+        snprintf(label, sizeof(label), "TROPHY %u", static_cast<unsigned>(id));
+
+        if (Ui_SelectableValue(label, unlocked ? "DONE" : (available ? "UNLOCK" : "DECLARED"), unlocked) && available)
+        {
+            s_LastId = static_cast<int>(id);
+            s_LastOk = Engine_Achievement_Unlock(id);
+        }
     }
     if (count == 0)
         Ui_LabelColored("THIS TITLE DECLARES NONE", UiColor::TextDim);
+
+    if (s_LastId >= 0)
+    {
+        char outcome[48];
+        snprintf(outcome, sizeof(outcome), "TROPHY %d", s_LastId);
+        Ui_Separator();
+        Ui_LabelValue(outcome, s_LastOk ? "ACCEPTED" : "REFUSED");
+        if (!s_LastOk)
+            Testbed_DrawWrapped("REFUSED IS REPORTED, NOT SILENT. THE LOG CARRIES THE CODE. A PLATINUM CANNOT BE "
+                                "UNLOCKED DIRECTLY - THE CONSOLE AWARDS IT WHEN EVERY OTHER TROPHY IS UNLOCKED.",
+                                UiColor::TextDim);
+    }
     Ui_EndPanel();
 
     Ui_BeginPanel("NOTES", PANEL_MARGIN + width + COLUMN_GAP, PANEL_MARGIN, width, height);

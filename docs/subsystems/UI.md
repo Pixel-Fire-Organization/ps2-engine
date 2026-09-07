@@ -25,6 +25,13 @@ survives between frames without any widget owning it. Two widgets that would
 collide are a caller error and are reported as one, because silently sharing
 identity makes two controls act as one and looks like an input bug.
 
+**A label that changes is a different widget.** Identity is derived from the
+label, so text that carries mutable state -- a row reading "UNLOCK" one frame
+and "DONE" the next -- silently becomes a new widget, losing focus and its
+interaction state at the moment the state it displays changes. A row that
+displays something changeable keeps a fixed label and puts the changing part in
+a separate value.
+
 **One submission per frame.** Widget calls accumulate into a fixed buffer, and
 the whole buffer is handed to the renderer once. Backends therefore see the
 interface as a single batch to translate, not as a stream of individual calls,
