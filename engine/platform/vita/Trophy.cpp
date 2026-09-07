@@ -16,6 +16,7 @@
 
 extern "C" {
 #include <psp2/common_dialog.h>
+#include <psp2/kernel/modulemgr.h>
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/np/common.h>
 #include <psp2/sysmodule.h>
@@ -235,6 +236,13 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         Engine_LogInfo("%s: the trophy module is unavailable; trophies are off", m_owner->GetName());
         return false;
     }
+
+    SceKernelSystemSwVersion firmware;
+    memset(&firmware, 0, sizeof(firmware));
+    firmware.size = sizeof(firmware);
+    if (sceKernelGetSystemSwVersion(&firmware) >= 0)
+        Engine_LogInfo("%s: system software %s; an unsigned title needs a trophy plugin built for this exact version",
+                       m_owner->GetName(), firmware.versionString);
 
     if (sceNpTrophyInit(nullptr) < 0)
     {
