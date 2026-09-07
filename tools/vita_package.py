@@ -315,7 +315,7 @@ def _package_files(config, config_dir, generated_dir):
     if trophies.get("enabled"):
         trp = trophies.get("trp")
         src = _resolve(config_dir, trp) if trp else os.path.join(generated_dir, "TROPHY.TRP")
-        pairs.append((src, "sce_sys/trophy/TROPHY.TRP"))
+        pairs.append((src, trophy_pack_path(trophies["np_communication_id"])))
 
     for item in config.get("files") or []:
         pairs.append((_resolve(config_dir, item["src"]), item["dst"]))
@@ -385,37 +385,66 @@ def _xml_escape(text):
             .replace('"', "&quot;").replace("'", "&apos;"))
 
 
+# Observed on a registered set: every trophy carries this when none of them
+# contributes to a platinum. A set that has one links to it instead, and what
+# that link looks like has not been seen, so it is not written.
+TROPHY_NO_PLATINUM = -1
+
+
+def trophy_pack_path(comm):
+    """Where the container sits inside the package.
+
+    A console looks for it under a directory named after the communication
+    identifier, not directly under the trophy directory. A pack one level up is
+    simply not found, and what the console then reports is that the set is not
+    registered -- which reads as a bad pack rather than a misplaced one.
+    """
+    return "sce_sys/trophy/{}/TROPHY.TRP".format(comm)
+
+
+TRPPARAM_INI = (
+    "\ufeffTROPSYSVER=1.0\r\n"
+    "NPCOMMID={comm}\r\n"
+    "TROPAPPVER=1.0\r\n"
+    "LANG=1\r\n"
+)
+
+
 def emit_trophy_conf(config, out_dir):
-    """Write the trophy set definition and its localised strings.
+    """Write the trophy set definition, its localised strings and its parameters.
 
-    Identifiers are written unpadded. The console matches them against the
-    integer trophy id it is asked to unlock, so a zero-padded identifier names
-    a trophy that is not in the set, and the set reads as unregistered rather
-    than as malformed.
-
-    Both files declare the set version and the identifier, because a reader
-    that cross-checks them sees two different sets when only one does.
+    The shape here is taken from a configuration read off a console that had
+    registered it, rather than from a description of the format. Identifiers are
+    three digits, the root element carries a version and the platforms the set is
+    valid for, and every trophy names the platinum it contributes to.
     """
     trophies = config["trophies"]
     entries = sorted(trophies["list"], key=lambda e: e["id"])
     comm = trophies["np_communication_id"]
-    parental = int((config.get("sfo") or {}).get("parental_level", 1))
+    parental = int((config.get("sfo") or {}).get("parental_level", 0))
+    name = _xml_escape(config["title"]["name"])
+    detail = _xml_escape(trophies.get("detail") or config["title"]["name"])
 
-    conf = ['<?xml version="1.0" encoding="utf-8"?>',
-            f'<trophyconf><npcommid>{comm}</npcommid><trophyset-version>01.00</trophyset-version>',
-            f'<parental-level>{parental}</parental-level>']
-    strings = ['<?xml version="1.0" encoding="utf-8"?>',
-               f'<trophyconf><npcommid>{comm}</npcommid><trophyset-version>01.00</trophyset-version>',
-               f'<title-name>{_xml_escape(config["title"]["name"])}</title-name>']
+    def head():
+        return ['<?xml version="1.0" encoding="utf-8"?>',
+                '<trophyconf version="1.1" platform="psp2">',
+                f' <npcommid>{comm}</npcommid>',
+                ' <trophyset-version>01.00</trophyset-version>',
+                f' <parental-level license-area="default">{parental}</parental-level>',
+                f' <title-name>{name}</title-name>',
+                f' <title-detail>{detail}</title-detail>']
 
+    conf = head()
+    strings = head()
     for entry in entries:
         hidden = "yes" if entry.get("hidden") else "no"
         ttype = entry["grade"][0].upper()
-        conf.append(f'<trophy id="{entry["id"]}" hidden="{hidden}" ttype="{ttype}"/>')
-        strings.append(
-            f'<trophy id="{entry["id"]}" hidden="{hidden}" ttype="{ttype}">'
-            f'<name>{_xml_escape(entry["name"])}</name>'
-            f'<detail>{_xml_escape(entry.get("detail", ""))}</detail></trophy>')
+        attrs = f'id="{entry["id"]:03d}" hidden="{hidden}" ttype="{ttype}" pid="{TROPHY_NO_PLATINUM}"'
+        conf.append(f' <trophy {attrs}/>')
+        strings.append(f' <trophy {attrs}>')
+        strings.append(f'  <name>{_xml_escape(entry["name"])}</name>')
+        strings.append(f'  <detail>{_xml_escape(entry.get("detail", ""))}</detail>')
+        strings.append(' </trophy>')
 
     conf.append("</trophyconf>")
     strings.append("</trophyconf>")
@@ -423,6 +452,7 @@ def emit_trophy_conf(config, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     _write(os.path.join(out_dir, "TROPCONF.SFM"), "\n".join(conf) + "\n")
     _write(os.path.join(out_dir, "TROP.SFM"), "\n".join(strings) + "\n")
+    _write_crlf(os.path.join(out_dir, "TRPPARAM.INI"), TRPPARAM_INI.format(comm=comm))
     return out_dir
 
 
@@ -446,7 +476,7 @@ def trp_payloads(config, config_dir, conf_dir):
     """
     trophies = config["trophies"]
     files = []
-    for name in ("TROPCONF.SFM", "TROP.SFM"):
+    for name in ("TROPCONF.SFM", "TROP.SFM", "TRPPARAM.INI"):
         with open(os.path.join(conf_dir, name), "rb") as fh:
             files.append((name, fh.read()))
 
@@ -551,6 +581,16 @@ def _write(path, text):
     if parent:
         os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
+def _write_crlf(path, text):
+    """Write a file whose line endings and byte order mark are part of its
+    format, rather than a detail a text writer may normalise away."""
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as fh:
         fh.write(text)
 
 

@@ -124,7 +124,7 @@ the container layout is [TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
 **A pack is generated automatically** when `trophies.enabled` is set: the build
 writes the configuration files, the container and the identifier header, and
-stages the container at `sce_sys/trophy/TROPHY.TRP`. `VITA_TRP_MAGIC` overrides
+stages the container at `sce_sys/trophy/<communication id>/TROPHY.TRP`. `VITA_TRP_MAGIC` overrides
 the container identifier and is not normally needed; see
 [../formats/TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
@@ -186,7 +186,7 @@ sce_sys/pic0.png                           optional
 sce_sys/livearea/contents/bg0.png
 sce_sys/livearea/contents/startup.png
 sce_sys/livearea/contents/template.xml
-sce_sys/trophy/TROPHY.TRP                  when trophies are enabled
+sce_sys/trophy/<NPWR#####_00>/TROPHY.TRP   when trophies are enabled
 RASSETS.PS2R                               the cooked asset archive
 LEVELS/                                    compiled worlds
 ```

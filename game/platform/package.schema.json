@@ -108,6 +108,10 @@
           "type": "string",
           "description": "The set's own icon, packed as ICON0.PNG and distinct from the per-trophy icons. Defaults to the store-front icon when absent."
         },
+        "detail": {
+          "type": "string",
+          "description": "The set's description, shown beside its name. Defaults to the title name."
+        },
         "list": {
           "type": "array",
           "description": "Trophy definitions, from which the pack is generated. Mutually exclusive with 'trp'.",

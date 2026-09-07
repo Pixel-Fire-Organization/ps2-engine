@@ -135,8 +135,11 @@ bool VitaPlatform::VitaTrophies::PackPresent() const
     if (!platform)
         return false;
 
+    char relative[IO_FILE_MAX_PATH];
+    snprintf(relative, sizeof(relative), "sce_sys/trophy/%s/TROPHY.TRP", VITA_NP_COMM_ID_STR);
+
     char path[IO_FILE_MAX_PATH];
-    if (!platform->BuildPath("sce_sys/trophy/TROPHY.TRP", path, sizeof(path)))
+    if (!platform->BuildPath(relative, path, sizeof(path)))
         return false;
 
     FileHandle file = platform->FileOpen(path, FileMode::Read);

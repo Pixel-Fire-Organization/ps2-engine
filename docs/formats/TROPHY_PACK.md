@@ -64,12 +64,27 @@ not a rule** — one is the size of the header and the other is the size of one
 entry. Third-party tools conflate them and work by luck; a reader should take the
 table as starting at `0x40` and stride by `entrySize`.
 
+## Where it goes
+
+**Under a directory named after the communication identifier**, not directly in
+the trophy directory:
+
+```
+sce_sys/trophy/<NPWR#####_00>/TROPHY.TRP
+```
+
+A pack one level up is not found at all, and what the console reports for a pack
+it never found is that the **set is not registered** — the same thing it reports
+for a pack it read and rejected. The two are indistinguishable from the outside
+and have nothing to do with each other, so this is the first thing to check.
+
 ## Contents
 
 | Name | Required | Meaning |
 |---|---|---|
 | `TROPCONF.SFM` | Yes | The trophy set: identifiers, grades, hidden flags |
 | `TROP.SFM` | Yes | Localised names and descriptions |
+| `TRPPARAM.INI` | Yes | Set parameters; see below |
 | `ICON0.PNG` | Yes | The trophy-set icon |
 | `TROP000.PNG` … | One per trophy | Per-trophy icons, numbered to match identifiers |
 
@@ -89,16 +104,37 @@ with the display strings filled in; a reader may cross-check them, so **each
 carries the communication identifier and the set version** rather than leaving
 either to the other.
 
-**Trophy identifiers are written unpadded** — `0`, not `000`. The console
-matches them against the integer identifier it is asked to unlock, and a padded
-identifier names a trophy that is not in the set. The failure this produces is
-misleading: the set parses, a context opens against the communication
-identifier, and every read and unlock afterwards reports that no set is
-registered. The per-trophy icon *file names* are padded to three digits and are
-a separate convention — `TROP000.PNG` carries trophy `0`.
+**Trophy identifiers are three digits** — `000`, not `0` — matching the icon
+file names. This is settled by reading a configuration off a console that had
+registered it, which is the only authority worth having here: the format is
+undocumented, and reasoning about which form "must" be right produced the wrong
+answer.
 
-`TROPCONF.SFM` also declares a parental level. It is the trophy set's own, taken
-from the same declaration the package parameters use so the two cannot disagree.
+The root element carries a version and the platforms the set is valid for, the
+parental level names the licence area it applies to, and every trophy declares
+the platinum it contributes to. A set with no platinum uses `-1` throughout. What
+a set *with* a platinum puts there has not been observed and is therefore not
+written; the platinum in a generated set is presently unlinked.
+
+A registered configuration also carries a signature, as an XML comment ahead of
+the root element. Nothing here can produce one. An unsigned title needs the
+signature check disabled regardless, which is what the plugin described in
+[../vita/PACKAGING.md](../vita/PACKAGING.md) does.
+
+### `TRPPARAM.INI`
+
+Four keys, **CRLF line endings and a byte order mark**, both of which are part of
+the format rather than incidental:
+
+```
+TROPSYSVER=1.0
+NPCOMMID=<the communication identifier>
+TROPAPPVER=1.0
+LANG=1
+```
+
+The identifier appears here as well as in both configuration files. Read off a
+registered set and reproduced byte for byte.
 
 ## The magic value
 
@@ -135,15 +171,14 @@ and a wrong version rather than printing them.
 
 ## Contents this build does not produce
 
-A pack produced here holds the two configuration files, the set icon and one
-icon per trophy. Packs taken off a retail title are reported to also carry
-**`TRPPARAM.INI`**, and group icons where a set uses groups.
+A pack produced here holds the two configuration files, the set parameters, the
+set icon and one icon per trophy. A retail set also carries group icons where it
+uses groups, which nothing here does.
 
-Whether the console *requires* `TRPPARAM.INI` is unknown, and no trustworthy
-description of it was found, so it is not written rather than guessed at. If a
-console refuses a pack this build produced, this is the first thing to suspect,
-and the way to settle it is to extract a genuine pack with the vendored tool and
-look at what is in it.
+**A retail pack is encrypted.** Its container begins `0xED895CE2` rather than the
+magic below, so it cannot be read with this layout and is no use as a reference
+for what a pack contains. What *can* be read is the configuration a console
+writes out when it registers a set, which is where everything above came from.
 
 Two fields a retail configuration carries are also absent, for the same reason.
 A set with a platinum links each contributing trophy to it, and a configuration
@@ -176,10 +211,10 @@ checked against software that works.
 
 ## Still unverified
 
-**No genuine retail pack has been round-tripped**, only one this build produced.
-Reading a real `TROPHY.TRP` and reproducing it byte-for-byte would confirm the
-remaining unknowns: the meaning of the zero fields at `0x30` and `0x38` in each
-entry, and the `devFlag`.
+**No genuine retail pack has been round-tripped**, because retail packs are
+encrypted. The remaining unknowns are the meaning of the zero fields at `0x30`
+and `0x38` in each entry, the `devFlag`, and how a set with a platinum links its
+trophies to it.
 
 **Nothing here has run on hardware.** Acceptance by the console trophy service is
 unproven, and needs the player-installed plugin described in
