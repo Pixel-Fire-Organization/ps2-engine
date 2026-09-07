@@ -202,6 +202,27 @@ one backend drives the hardware directly and is the default, the other is a
 library exposing an older and simpler drawing model, kept as a known-good
 reference to compare against. They share no code.
 
+### System dialogs are drawn into the title's own frame
+
+A system dialog on this platform is not drawn over the running title by the
+system. It is composited into the title's own back buffer, which means **every
+renderer must hand each presented frame to the dialog service while a dialog is
+open**, and the title must keep presenting frames for as long as one is.
+
+Two failure modes follow, and neither reports itself:
+
+- A title that opens a dialog and then waits for it **without presenting frames**
+  waits forever. The dialog stays running, the screen holds the last frame, and
+  the only symptom is a timeout somewhere unrelated — the dialog never says it
+  was not serviced.
+- A renderer that presents frames but does not hand them over draws the title
+  correctly with **no dialog visible on it**, while the dialog is nonetheless
+  open and consuming input.
+
+This is why the flag saying a dialog is open is platform state rather than
+something a caller passes: a renderer added later must observe it, and a caller
+must not be able to forget to.
+
 ## Known limitations
 
 - **Trophies require software the player must install themselves**, and never

@@ -6,9 +6,13 @@
 #include <cstring>
 
 #include "EngineAchievement.h"
+#include "EngineCore.h"
 #include "EngineDebug.h"
 #include "Macros.h"
 #include "EngineIO.h"
+#include "graphics/Renderer.h"
+
+#include "CommonDialog.h"
 
 extern "C" {
 #include <psp2/common_dialog.h>
@@ -72,8 +76,8 @@ int sceNpTrophySetupDialogTerm(void);
 
 namespace
 {
-    const uint32_t kSetupPollMicros = 50000;
-    const int kSetupSpinLimit = 400;
+    const uint32_t kSetupPollMicros = 16000;
+    const int kSetupFrameLimit = 1800;
 
     const unsigned kTrophyInvalidArgument = 0x80551604u;
     const unsigned kTrophyNotRegistered = 0x80551610u;
@@ -164,19 +168,33 @@ bool VitaPlatform::VitaTrophies::RegisterSet()
         return false;
     }
 
-    int spins = 0;
+    VitaCommonDialog_SetActive(true);
+    Renderer* renderer = Engine_GetRenderer();
+
+    int frames = 0;
     while (sceNpTrophySetupDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED)
     {
-        if (++spins >= kSetupSpinLimit)
+        if (++frames >= kSetupFrameLimit)
         {
-            Engine_LogError("%s: the trophy setup dialog did not finish within %d seconds", m_owner->GetName(),
-                            static_cast<int>((static_cast<uint32_t>(kSetupSpinLimit) * kSetupPollMicros) / 1000000u));
+            Engine_LogError("%s: the trophy setup dialog did not finish within %d frames", m_owner->GetName(), kSetupFrameLimit);
             sceNpTrophySetupDialogAbort();
             sceNpTrophySetupDialogTerm();
+            VitaCommonDialog_SetActive(false);
             return false;
         }
-        sceKernelDelayThread(kSetupPollMicros);
+
+        if (renderer)
+        {
+            renderer->BeginFrame();
+            renderer->EndFrame();
+        }
+        else
+        {
+            sceKernelDelayThread(kSetupPollMicros);
+        }
     }
+
+    VitaCommonDialog_SetActive(false);
 
     SceNpTrophySetupDialogResult result;
     memset(&result, 0, sizeof(result));

@@ -1,5 +1,7 @@
 #include "VitaGl.h"
 
+#include "../CommonDialog.h"
+
 #include <cstdlib>
 #include <cstring>
 
@@ -273,7 +275,7 @@ void VitaGlRenderer::EndFrame()
 
     Platform* platform = Engine_GetPlatform();
     const double waitStart = platform->GetTimeSeconds();
-    vglSwapBuffers(GL_FALSE);
+    vglSwapBuffers(VitaCommonDialog_IsActive() ? GL_TRUE : GL_FALSE);
     m_frameStats.presentWaitMs = static_cast<float>((platform->GetTimeSeconds() - waitStart) * 1000.0);
 
     m_geometry.EndFrame();

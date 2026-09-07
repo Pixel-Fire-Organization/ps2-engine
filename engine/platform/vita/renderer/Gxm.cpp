@@ -10,7 +10,10 @@
 #include "graphics/TextureExpand.h"
 #include "platform/Platform.h"
 
+#include "../CommonDialog.h"
+
 extern "C" {
+#include <psp2/common_dialog.h>
 #include <psp2/display.h>
 }
 
@@ -766,6 +769,20 @@ void GxmRenderer::EndFrame()
 
     sceGxmEndScene(m_context, nullptr, nullptr);
     m_sceneActive = false;
+
+    if (VitaCommonDialog_IsActive())
+    {
+        SceCommonDialogUpdateParam dialogParam;
+        memset(&dialogParam, 0, sizeof(dialogParam));
+        dialogParam.renderTarget.colorSurfaceData = back.address;
+        dialogParam.renderTarget.surfaceType = SCE_GXM_COLOR_SURFACE_LINEAR;
+        dialogParam.renderTarget.colorFormat = SCE_GXM_COLOR_FORMAT_A8B8G8R8;
+        dialogParam.renderTarget.width = GFX_SCREEN_WIDTH;
+        dialogParam.renderTarget.height = GFX_SCREEN_HEIGHT;
+        dialogParam.renderTarget.strideInPixels = kDisplayStride;
+        dialogParam.displaySyncObject = back.sync;
+        sceCommonDialogUpdate(&dialogParam);
+    }
 
     DisplayCallbackData callbackData;
     callbackData.address = back.address;

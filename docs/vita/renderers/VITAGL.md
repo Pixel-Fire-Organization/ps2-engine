@@ -39,6 +39,11 @@ split back apart.
 
 ## Quirks and limits
 
+**It tells the library when a system dialog is open.** The library composites the
+dialog itself, but only when the frame is presented with that fact declared;
+presenting without it draws the title correctly and leaves the dialog invisible
+though open. See [../PLATFORM.md](../PLATFORM.md).
+
 - **Its boot splash is compiled out.** The library shows an animated logo from
   initialisation until the first frame is drawn. Left on, an engine that starts
   the renderer and then fails to draw looks like a working application showing

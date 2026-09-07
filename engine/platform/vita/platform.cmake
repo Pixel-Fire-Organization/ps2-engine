@@ -136,6 +136,8 @@ function(platform_configure PLATFORM)
         "${_baseDir}/Input.cpp"
         "${_baseDir}/Window.cpp"
         "${_baseDir}/Trophy.cpp"
+        "${_baseDir}/CommonDialog.cpp"
+        "${_baseDir}/CommonDialog.h"
         "${_baseDir}/Platform.h"
         "${_baseDir}/PlatformConstantsVita.h"
         "${_baseDir}/renderer/Gxm.cpp"

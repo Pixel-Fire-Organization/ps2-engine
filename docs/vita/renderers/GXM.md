@@ -41,6 +41,13 @@ screen-space geometry stage independently.
 
 ## Quirks and limits
 
+**It hands each presented frame to the dialog service while a system dialog is
+open.** A dialog on this platform is composited into the title's own back buffer,
+so the surface, its format, its stride and the frame's sync object are passed
+over after the scene is closed and before the frame is queued for display. Skip
+it and the title draws perfectly with no dialog on it, while the dialog is open
+and taking input. See [../PLATFORM.md](../PLATFORM.md).
+
 - **Pixels are not square.** The framebuffer is 960 x 544 but the panel is 16:9,
   so projection must use the display aspect. Using the framebuffer ratio produces
   a frame that is subtly stretched and looks correct until compared against
