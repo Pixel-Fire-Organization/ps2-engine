@@ -38,7 +38,7 @@ typedef struct SceNpTrophyFlagArray
 
 int sceNpTrophyInit(void* opt);
 int sceNpTrophyTerm(void);
-int sceNpTrophyCreateContext(SceNpTrophyContext* context, const SceNpCommunicationId* commId, void* commSign, uint64_t options);
+int sceNpTrophyCreateContext(SceNpTrophyContext* context, const SceNpCommunicationId* commId, const SceNpCommunicationSignature* commSign, uint64_t options);
 int sceNpTrophyDestroyContext(SceNpTrophyContext context);
 int sceNpTrophyCreateHandle(SceNpTrophyHandle* handle);
 int sceNpTrophyDestroyHandle(SceNpTrophyHandle handle);
@@ -48,7 +48,7 @@ int sceNpTrophyGetTrophyUnlockState(SceNpTrophyContext context, SceNpTrophyHandl
 
 namespace
 {
-    const unsigned kTrophyAlreadyAwarded = 0x80022911u;
+    const unsigned kTrophyInvalidArgument = 0x80551604u;
 
     bool FlagIsSet(const SceNpTrophyFlagArray& flags, uint32_t id)
     {
@@ -137,15 +137,19 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
     memcpy(comm.data, id, sizeof(comm.data));
     comm.num = separator ? static_cast<uint8_t>(atoi(separator + 1)) : 0;
 
-    const int rc = sceNpTrophyCreateContext(&m_context, &comm, nullptr, 0);
+    SceNpCommunicationSignature sign;
+    memset(&sign, 0, sizeof(sign));
+
+    const int rc = sceNpTrophyCreateContext(&m_context, &comm, &sign, 0);
     if (rc < 0)
     {
         Engine_LogInfo("%s: trophies unavailable (0x%08X). An unsigned title needs the NoTrpDrm plugin at "
                        "ux0:tai/NoTrpDrm.suprx, listed under *main in config.txt. The game runs normally without it.",
                        m_owner->GetName(), static_cast<unsigned>(rc));
-        SetReason("CONSOLE REFUSED THE SET, CODE %08X. IF THE PLUGIN IS INSTALLED AND THIS PERSISTS, IT IS "
-                  "NOT PATCHING THIS FIRMWARE. TROPHY PACK ON DISC: %s",
-                  static_cast<unsigned>(rc), PackPresent() ? "FOUND" : "MISSING");
+        SetReason("CONSOLE REFUSED THE SET, CODE %08X%s. TROPHY PACK ON DISC: %s",
+                  static_cast<unsigned>(rc),
+                  (static_cast<unsigned>(rc) == kTrophyInvalidArgument) ? " (INVALID ARGUMENT - A CALL IS WRONG, NOT THE PLUGIN)" : "",
+                  PackPresent() ? "FOUND" : "MISSING");
         m_context = -1;
         sceNpTrophyTerm();
         return false;
@@ -200,9 +204,14 @@ bool VitaPlatform::VitaTrophies::Unlock(uint32_t id)
     SceNpTrophyId platinum = -1;
 
     const int rc = sceNpTrophyUnlockTrophy(m_context, m_handle, static_cast<SceNpTrophyId>(id), &platinum);
-    if (rc < 0)
-        return static_cast<unsigned>(rc) == kTrophyAlreadyAwarded;
-    return true;
+    if (rc >= 0)
+        return true;
+
+    if (IsUnlocked(id))
+        return true;
+
+    Engine_LogError("%s: unlocking trophy %u was refused (0x%08X)", m_owner->GetName(), static_cast<unsigned>(id), static_cast<unsigned>(rc));
+    return false;
 }
 
 bool VitaPlatform::VitaTrophies::IsUnlocked(uint32_t id) const

@@ -53,6 +53,13 @@ achievement data does not start the platform service to discover that; it is
 known before the engine runs. Starting it anyway costs a module load on every
 boot and reports a console problem for what is a build configuration.
 
+**A refusal is not automatically the player's problem.** The platform reports a
+reason, and the reason distinguishes a console declining to record from a call
+the service considered malformed. Presenting every failure as "install the
+plugin" sent a real invalid-argument fault back to the player as an
+installation problem, which no amount of reinstalling could resolve. A code the
+service returns is quoted rather than interpreted.
+
 ## Depends on
 
 - **Platform** — the achievement contract, which a platform supplies only if it
