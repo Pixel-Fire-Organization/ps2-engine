@@ -35,6 +35,7 @@
 
 #define IO_ASYNC_MAX_REQUESTS 16
 #define IO_THREAD_SLEEP_USEC 1000
+#define IO_DRAIN_MAX_SPINS 10000
 #define IO_THREAD_STACK_SIZE (32 * 1024)
 
 // Maximum file size for a single async IO read. One shared buffer of this size

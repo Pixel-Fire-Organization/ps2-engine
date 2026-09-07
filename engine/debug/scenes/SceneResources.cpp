@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 
 #include "EngineCore.h"
 #include "EngineIO.h"
@@ -13,7 +14,33 @@ namespace
     const int PANEL_MARGIN = 16;
     const int COLUMN_GAP = 8;
     const int SLOTS = 4;
+    const uint32_t TABLE_ROWS_SHOWN = 8;
+    const int KEY_CHARS_SHOWN = 18;
     const char* const TEXTURE_PATH = "RASSETS\\BOX.PS2A";
+
+    const char* TypeName(ResourceType type)
+    {
+        switch (type)
+        {
+        case RES_TEXTURE:
+            return "TEX";
+        case RES_MODEL:
+            return "MDL";
+        case RES_SOUND:
+            return "SND";
+        case RES_FONT:
+            return "FNT";
+        }
+        return "?";
+    }
+
+    /// @param key The canonical key.
+    /// @return Its tail, which is the part that identifies it in a narrow panel.
+    const char* ShortKey(const char* key)
+    {
+        const int length = static_cast<int>(strlen(key));
+        return (length <= KEY_CHARS_SHOWN) ? key : (key + length - KEY_CHARS_SHOWN);
+    }
 
     int32_t s_Handles[SLOTS];
 
@@ -91,10 +118,30 @@ void Scene_Resources_Update(float dt)
     snprintf(text, sizeof(text), "%u KB", static_cast<unsigned>(platform->GetConstant(PlatformConstant::MaxTextureBytes) / 1024u));
     Ui_LabelValue("MAX TEXTURE", text);
     Ui_Separator();
-    Ui_Label("LOADING THE SAME PATH");
-    Ui_Label("FOUR TIMES SHOULD COST");
-    Ui_Label("THE BUDGET ONCE.");
-    Ui_Label("SOUND AND FONT ARE NOT");
-    Ui_Label("IMPLEMENTED ANYWHERE.");
+    Ui_Header("LIVE TABLE");
+
+    const uint32_t capacity = Engine_Resource_GetCapacity();
+    uint32_t live = 0;
+    uint32_t shown = 0;
+    for (uint32_t i = 0; i < capacity; ++i)
+    {
+        ResourceInfo info;
+        if (!Engine_Resource_GetInfo(static_cast<int32_t>(i), &info))
+            continue;
+        ++live;
+        if (shown >= TABLE_ROWS_SHOWN)
+            continue;
+        ++shown;
+
+        char row[64];
+        snprintf(row, sizeof(row), "%s%s R%u", info.pinned ? "PIN " : "", TypeName(info.type), static_cast<unsigned>(info.refCount));
+        Ui_LabelValue(row, ShortKey(info.key));
+    }
+
+    if (live == 0)
+        Ui_LabelColored("NOTHING RESIDENT", UiColor::TextDim);
+
+    snprintf(text, sizeof(text), "%u / %u", static_cast<unsigned>(live), static_cast<unsigned>(capacity));
+    Ui_LabelValue("SLOTS USED", text);
     Ui_EndPanel();
 }

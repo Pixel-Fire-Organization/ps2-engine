@@ -216,6 +216,9 @@ void Engine_ResetRuntimeState()
 {
     Engine_Game_ResetState();
 
+    if (Engine_Subsystem_IsEnabled(EngineSubsystem::Io))
+        Engine_IO_Drain();
+
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Resource))
         Engine_Resource_Shutdown();
 

@@ -313,6 +313,38 @@ void Engine_IO_Update()
     platform->SemaphoreSignal(s_IOMutex);
 }
 
+bool Engine_IO_Drain()
+{
+    Platform* platform = Engine_GetPlatform();
+    if (!s_IOMutex || !platform)
+        return true;
+
+    for (uint32_t spin = 0; spin < IO_DRAIN_MAX_SPINS; ++spin)
+    {
+        Engine_IO_Update();
+
+        bool busy = false;
+        platform->SemaphoreWait(s_IOMutex);
+        for (int i = 0; i < MAX_IO_REQUESTS; ++i)
+        {
+            if (s_Requests[i].state != IO_STATE_IDLE)
+            {
+                busy = true;
+                break;
+            }
+        }
+        platform->SemaphoreSignal(s_IOMutex);
+
+        if (!busy)
+            return true;
+
+        platform->SleepMicros(IO_THREAD_SLEEP_USEC);
+    }
+
+    Engine_LogError("IO: drain gave up with requests still outstanding");
+    return false;
+}
+
 void Engine_IO_Shutdown()
 {
     Platform* platform = Engine_GetPlatform();

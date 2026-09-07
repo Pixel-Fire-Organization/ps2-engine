@@ -96,6 +96,9 @@
 #ifndef IO_THREAD_SLEEP_USEC
 #error "platform must define IO_THREAD_SLEEP_USEC in its PlatformConstants.h"
 #endif
+#ifndef IO_DRAIN_MAX_SPINS
+#error "platform must define IO_DRAIN_MAX_SPINS in its PlatformConstants.h"
+#endif
 #ifndef IO_THREAD_STACK_SIZE
 #error "platform must define IO_THREAD_STACK_SIZE in its PlatformConstants.h"
 #endif

@@ -102,6 +102,7 @@ if(DEBUG)
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneDrawLoad.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneMemory.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneResources.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneAssetBrowser.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneLevelStream.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneAchievements.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePerformance.cpp"

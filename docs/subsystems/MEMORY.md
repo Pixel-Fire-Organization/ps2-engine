@@ -63,6 +63,12 @@ construction of a renderer already depends on it. Released last, after every
 subsystem that borrowed from it has shut down. It has no partial state: either
 the whole map is reserved or startup fails.
 
+**Emptying waits for storage to go quiet first.** Reads run on their own thread
+and their callbacks write into resource slots, so a reset that began while one
+was in flight would hand the worker memory it had just taken back. The wait is
+part of the reset, not something a caller remembers to do; it is bounded, and
+giving up is reported rather than retried forever.
+
 **The map is reserved once; its contents can be emptied many times.** Returning
 the engine to a just-started state does not re-reserve anything. Each arena
 segment goes back to a zero bump offset with every slot emptied and unlocked,

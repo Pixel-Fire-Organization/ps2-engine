@@ -88,6 +88,10 @@ void Scene_Memory_Update(float dt);
 void Scene_Resources_Init();
 void Scene_Resources_Update(float dt);
 
+void Scene_AssetBrowser_Init();
+void Scene_AssetBrowser_Update(float dt);
+void Scene_AssetBrowser_Shutdown();
+
 void Scene_LevelStream_Init();
 void Scene_LevelStream_Update(float dt);
 void Scene_LevelStream_Shutdown();

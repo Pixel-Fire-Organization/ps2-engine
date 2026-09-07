@@ -20,6 +20,7 @@ namespace
         {"PLATFORM INFO", TestbedCategory::SystemsBudgets, Scene_PlatformInfo_Init, Scene_PlatformInfo_Update, nullptr},
         {"MEMORY", TestbedCategory::SystemsBudgets, Scene_Memory_Init, Scene_Memory_Update, nullptr},
         {"RESOURCES", TestbedCategory::SystemsBudgets, Scene_Resources_Init, Scene_Resources_Update, nullptr},
+        {"ASSET BROWSER", TestbedCategory::SystemsBudgets, Scene_AssetBrowser_Init, Scene_AssetBrowser_Update, Scene_AssetBrowser_Shutdown},
         {"LEVEL STREAM", TestbedCategory::SystemsBudgets, Scene_LevelStream_Init, Scene_LevelStream_Update, Scene_LevelStream_Shutdown},
         {"ACHIEVEMENTS", TestbedCategory::SystemsBudgets, Scene_Achievements_Init, Scene_Achievements_Update, nullptr},
         {"PERFORMANCE", TestbedCategory::TimingPacing, Scene_Performance_Init, Scene_Performance_Update, nullptr},
