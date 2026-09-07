@@ -110,6 +110,19 @@ above. That exercises magic, version, count, table offset, entry names, offsets
 and sizes against an independent implementation — one that refuses a bad magic
 and a wrong version rather than printing them.
 
+## Contents this build does not produce
+
+A pack produced here holds the two configuration files and one icon per trophy.
+Packs taken off a retail title are reported to also carry **`TRPPARAM.INI`** and
+**`ICON0.PNG`** — the set's own icon, as distinct from the per-trophy ones — and
+group icons where a set uses groups.
+
+Whether the console *requires* either is unknown, and no trustworthy description
+of `TRPPARAM.INI` was found, so neither is written rather than guessed at. If a
+console refuses a pack this build produced, this is the first thing to suspect,
+and the way to settle it is to extract a genuine pack with the vendored tool and
+look at what is in it.
+
 ## Still unverified
 
 **No genuine retail pack has been round-tripped**, only one this build produced.

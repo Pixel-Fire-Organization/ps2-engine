@@ -221,11 +221,19 @@ protected:
         const char* GetUnavailableReason() const override;
 
     private:
+        /// Record why nothing can be recorded, and log it.
+        /// @param format printf-style reason, kept for the player-facing notice.
+        void SetReason(const char* format, ...);
+
+        /// @return Whether the installed title actually carries a trophy pack,
+        ///         which separates a packaging fault from a console refusal.
+        bool PackPresent() const;
+
         const VitaPlatform* m_owner;
         int32_t m_context;
         int32_t m_handle;
         uint32_t m_count;
-        const char* m_reason;
+        char m_reason[192];
         bool m_available;
     };
 
