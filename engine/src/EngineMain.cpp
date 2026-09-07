@@ -5,6 +5,7 @@
 #include "EngineCore.h"
 #include "EngineDebug.h"
 #include "EngineSubsystems.h"
+#include "EngineNotice.h"
 #include "EngineTestbed.h"
 #include "GameAPI.h"
 #include "graphics/Renderer.h"
@@ -182,6 +183,7 @@ int Engine_Main(int argc, char** argv)
         config.subsystems = Engine_Subsystems_Default(&config.subsystemCount);
     Engine_Subsystems_Set(config.subsystems, config.subsystemCount);
     Engine_Testbed_RequestSubsystems();
+    Engine_Notice_RequestSubsystems(platform);
 
     WindowDesc window;
     window.title = config.windowTitle;

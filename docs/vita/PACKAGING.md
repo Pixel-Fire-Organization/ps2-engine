@@ -122,6 +122,19 @@ The generated header lands in the build tree, the same way the entity definition
 are generated. Runtime behaviour is [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md);
 the container layout is [TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
+**Generating a pack needs the container magic**, which no public reader
+establishes. Configure with `-DVITA_TRP_MAGIC=0x........`, taken from the first
+four bytes of a genuine pack, or use `trophies.trp`. With `trophies.enabled` set
+and neither supplied, configuring fails and names this file — a guessed magic
+produces a package that installs as an error code naming nothing.
+
+**A title that ships no trophy data declares none.** The count the engine
+reports is what was packaged, so it does not drop to zero merely because a
+console refused, and a packaging mistake stays distinguishable from a missing
+plugin. Where trophies are packaged but the console refuses them, the engine
+shows the player a dismissible notice at boot; see
+[../subsystems/DEBUG.md](../subsystems/DEBUG.md).
+
 ---
 
 ## Package layout

@@ -110,4 +110,4 @@ bool Engine_Achievement_IsUnlocked(uint32_t id)
     return s_Contract->IsUnlocked(id);
 }
 
-uint32_t Engine_Achievement_GetCount() { return Available() ? s_Contract->GetCount() : 0u; }
+uint32_t Engine_Achievement_GetCount() { return (s_Loaded && s_Contract) ? s_Contract->GetCount() : 0u; }

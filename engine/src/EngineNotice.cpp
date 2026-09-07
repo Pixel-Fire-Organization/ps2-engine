@@ -1,0 +1,136 @@
+#include "EngineNotice.h"
+
+#include <cstring>
+
+#include "EngineAchievement.h"
+#include "EngineDebug.h"
+#include "EngineSubsystems.h"
+#include "EngineUi.h"
+#include "platform/Platform.h"
+
+namespace
+{
+    const int NOTICE_MARGIN_RATIO = 8;
+    const int NOTICE_TITLE_SCALE = 3;
+    const int WRAP_MAX_CHARS = 64;
+
+    bool s_Pending = false;
+    char s_Title[64] = {0};
+    char s_Reason[256] = {0};
+
+    void Raise(const char* title, const char* reason)
+    {
+        strncpy(s_Title, title, sizeof(s_Title) - 1);
+        s_Title[sizeof(s_Title) - 1] = '\0';
+        strncpy(s_Reason, reason ? reason : "", sizeof(s_Reason) - 1);
+        s_Reason[sizeof(s_Reason) - 1] = '\0';
+        s_Pending = true;
+        Engine_LogInfo("Notice: %s - %s", s_Title, s_Reason);
+    }
+
+    void DrawWrapped(const char* text)
+    {
+        if (!text || !text[0])
+            return;
+
+        const int scale = Ui_GetStyle().textScale;
+        const int advance = UI_GLYPH_ADVANCE * scale;
+        int perLine = (advance > 0) ? (Ui_ContentWidth() / advance) : 0;
+        if (perLine < 4)
+            perLine = 4;
+        if (perLine > WRAP_MAX_CHARS)
+            perLine = WRAP_MAX_CHARS;
+
+        const int length = static_cast<int>(strlen(text));
+        int start = 0;
+        while (start < length)
+        {
+            int take = ((length - start) < perLine) ? (length - start) : perLine;
+            if (start + take < length)
+            {
+                int space = take;
+                while (space > 0 && text[start + space] != ' ')
+                    --space;
+                if (space > 0)
+                    take = space;
+            }
+
+            char line[WRAP_MAX_CHARS + 1];
+            memcpy(line, text + start, static_cast<size_t>(take));
+            line[take] = '\0';
+            Ui_Label(line);
+
+            start += take;
+            while (start < length && text[start] == ' ')
+                ++start;
+        }
+    }
+} // namespace
+
+void Engine_Notice_RequestSubsystems(Platform* platform)
+{
+    // A notice can only be raised where the platform has achievements at all,
+    // and whether it will be is not knowable until they have been initialised.
+    if (!platform || !platform->GetAchievements())
+        return;
+
+    Engine_Subsystem_Enable(EngineSubsystem::Input);
+    Engine_Subsystem_Enable(EngineSubsystem::Ui);
+}
+
+void Engine_Notice_Evaluate()
+{
+    s_Pending = false;
+
+    if (!Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
+        return;
+    if (Engine_Achievement_IsAvailable())
+        return;
+
+    // A title that packaged none is not missing anything; only one that ships
+    // achievements it cannot record has something to tell the player.
+    if (Engine_Achievement_GetCount() == 0)
+        return;
+    if (!Engine_Ui_IsActive())
+        return;
+
+    Raise("TROPHIES UNAVAILABLE", Engine_Achievement_GetUnavailableReason());
+}
+
+bool Engine_Notice_IsPending() { return s_Pending; }
+
+bool Engine_Notice_Update(float dt)
+{
+    (void)dt;
+
+    if (!s_Pending)
+        return false;
+
+    Platform* platform = Engine_GetPlatform();
+    if (!platform || !Engine_Ui_IsActive())
+    {
+        s_Pending = false;
+        return false;
+    }
+
+    const int screenW = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenWidth));
+    const int screenH = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenHeight));
+    const int margin = screenW / NOTICE_MARGIN_RATIO;
+
+    Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
+    Ui_Text((screenW - Ui_TextWidth(NOTICE_TITLE_SCALE, s_Title)) / 2, margin / 2, NOTICE_TITLE_SCALE, s_Title, UiColor::Header);
+
+    Ui_BeginPanel("", margin, margin, screenW - margin * 2, screenH - margin * 2);
+    DrawWrapped(s_Reason);
+    Ui_Separator();
+    Ui_Label("THE GAME PLAYS NORMALLY.");
+    Ui_Label("NOTHING WILL BE RECORDED");
+    Ui_Label("UNTIL THIS IS RESOLVED.");
+    Ui_Spacing(Ui_TextHeight(Ui_GetStyle().textScale));
+
+    if (Ui_Button("CONTINUE"))
+        s_Pending = false;
+
+    Ui_EndPanel();
+    return s_Pending;
+}

@@ -77,6 +77,24 @@ one that persists.
 This is the engine best smoke test: timing, memory, input and rendering in one
 screen. If it prints sane numbers, the engine is working.
 
+### Startup notice
+
+**One thing the player can act on, said once, before the game runs.** A notice
+is not a log line and not a panic: the condition is not fatal and the game runs
+normally without it being resolved, but the person who can resolve it is the
+player, who never reads a log. It therefore exists in every configuration,
+unlike the testbed, and the engine brings up what it needs to draw itself
+rather than requiring the game to have asked.
+
+**It is raised from a fact, never from a guess.** The only condition today is a
+title that ships achievements the console will not record. A title that ships
+none is not missing anything and says nothing, which is why declared and
+recordable have to be separate numbers -- see [ACHIEVEMENT.md](ACHIEVEMENT.md).
+
+**It owns the frame until dismissed.** Neither the game nor the testbed updates
+behind it, so what the player is reading cannot be scrolled away by something
+else drawing. Dismissal is explicit; there is no timeout.
+
 ### Panic
 
 **A panic never returns.** It is a graceful crash, not an error path a caller

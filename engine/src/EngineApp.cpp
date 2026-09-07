@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "EngineCore.h"
 #include "EngineInput.h"
+#include "EngineNotice.h"
 #include "EngineTestbed.h"
 #include "EngineUi.h"
 #include "GameAPI.h"
@@ -33,6 +34,7 @@ bool EngineStart(const EngineConfig& config, Platform* platform, Renderer* rende
 
     // Gameplay (and UI) is authored in C++: hand control to the game module.
     Engine_LogInfo("EngineStart: token='%s' — starting C++ game module", config.resourceLocationToken ? config.resourceLocationToken : "<none>");
+    Engine_Notice_Evaluate();
     GameInit();
     return true;
 }
@@ -51,9 +53,12 @@ void EngineUpdate()
 
     // 1. Gameplay Phase (C++) — the game module's per-frame update + draw submission.
     Ui_BeginFrame();
-    Engine_Testbed_Update(dt);
-    if (!Engine_Testbed_IsOpen())
-        GameUpdate(dt);
+    if (!Engine_Notice_Update(dt))
+    {
+        Engine_Testbed_Update(dt);
+        if (!Engine_Testbed_IsOpen())
+            GameUpdate(dt);
+    }
     Ui_EndFrame();
     gameLogicEndTime = platform->GetTimeSeconds();
 

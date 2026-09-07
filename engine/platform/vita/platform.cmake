@@ -110,6 +110,9 @@ function(vita_read_package PLATFORM OUT_GENERATED_DIR)
     set(${OUT_GENERATED_DIR} "${_generated}" PARENT_SCOPE)
 endfunction()
 
+set(VITA_TRP_MAGIC "" CACHE STRING
+    "Container magic for a generated TROPHY.TRP. Empty unless trophies are enabled; see docs/formats/TROPHY_PACK.md.")
+
 function(platform_configure PLATFORM)
     engine_platform_dirs(${PLATFORM} _variantDir _baseDir)
     vita_read_package(${PLATFORM} _generated)
@@ -185,13 +188,35 @@ function(platform_package PLATFORM EXE_TARGET DIST_DIR)
     string(REPLACE ";" " " _fselfArgs "${VITA_MAKE_FSELF_ARGS}")
     separate_arguments(_fselfArgs UNIX_COMMAND "${_fselfArgs}")
 
+    # Generating the pack needs the container magic, which no public reader
+    # establishes. Refuse at configure time rather than producing a package
+    # that installs as an error code naming nothing. See
+    # docs/formats/TROPHY_PACK.md.
+    set(_trophyGen "")
+    if(VITA_TROPHY_GENERATE)
+        if(NOT VITA_TRP_MAGIC)
+            message(FATAL_ERROR
+                "trophies.enabled is set for ${PLATFORM}, so a TROPHY.TRP must be built, but VITA_TRP_MAGIC is empty.
+"
+                "Configure with -DVITA_TRP_MAGIC=0x........ (the first four bytes of a genuine TROPHY.TRP), "
+                "or set trophies.trp to a pre-built pack in ${VITA_PACKAGE_CONFIG}.
+"
+                "See docs/formats/TROPHY_PACK.md.")
+        endif()
+        set(_trophyGen
+            --emit-trophy-conf "${_generated}"
+            --emit-trp "${_generated}/TROPHY.TRP"
+            --trp-magic "${VITA_TRP_MAGIC}")
+    endif()
+
     set(_regen
         COMMAND ${PYTHON3_BIN} "${VITA_PACKAGE_TOOL}"
                 --config "${VITA_PACKAGE_CONFIG}" --schema "${VITA_PACKAGE_SCHEMA}"
                 --variant "${_variant}" --generated-dir "${_generated}"
                 --validate
                 --emit-template "${_generated}/template.xml"
-                --emit-ids "${_generated}/TrophyIds.h")
+                --emit-ids "${_generated}/TrophyIds.h"
+                ${_trophyGen})
 
     set(_addArgs "")
     foreach(_pair ${VITA_PACKAGE_FILES})
