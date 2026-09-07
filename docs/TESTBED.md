@@ -56,7 +56,8 @@ deliberate: a scene measures itself rather than whatever ran before it.
 |---|---|
 | **Platform info** | Name, renderer, framebuffer, display aspect, frame budget and every capability on one page; every memory, texture and draw budget on the other. |
 | **Memory** | Arena, pool, heap and texture occupancy. Also how the runtime reset is checked: these figures should read the same on entry to every scene, and the renderer arena should never be among the ones that empty. |
-| **Resources** | Four slots loading and unloading the same texture against the budget. Loading one path four times should cost the budget once. |
+| **Resources** | Four slots loading and unloading the same texture against the budget, over a live view of the resource table: every resident slot with its type, reference count, pinned flag and key. Loading one path four times should cost the budget once and occupy one slot, not four. |
+| **Asset browser** | What is actually mounted and what is inside it. Every mounted archive with the path it came from, its entry count and payload size; that archive's entries with their size, offset and key hash; and for a selected entry, its asset header read straight out of the archive without loading it — type, source extension, payload size and declared dependencies. A texture can then be loaded and previewed on a rotating cube, which is the only check that an asset both resolves and decodes. An entry that is not an asset, such as a level chunk, says so rather than being guessed at. |
 | **Level stream** | Level load and unload, and the resident sector ring around a streaming centre that can be walked in a circle. Load and unload twice; a leak shows up in the memory scene. |
 | **Achievements** | Whether the platform records them, how many are declared, and an unlock per id. On most platforms this reports unavailable, and that path is the common one. |
 
