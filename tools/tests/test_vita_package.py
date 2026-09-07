@@ -332,10 +332,13 @@ def test_trp_refuses_an_over_long_entry_name():
         vp.build_trp([("X" * 40, b"x")], magic=0xDCA24D00)
 
 
-def test_emit_trp_requires_an_explicit_magic(tmp_path):
-    """The magic is not established by any public reader, so the tool must refuse
-    to guess rather than write a container that installs as an error code."""
+def test_emit_trp_writes_the_established_magic(tmp_path):
+    """The magic is established, so a pack builds without being told it, and the
+    value written is the one a validating reader accepts."""
     _config(tmp_path, trophies=_trophies())
+    out = tmp_path / "TROPHY.TRP"
     rc = vp.main(["--config", str(tmp_path / "package.json"),
-                  "--emit-trp", str(tmp_path / "TROPHY.TRP")])
-    assert rc == 1
+                  "--emit-trophy-conf", str(tmp_path),
+                  "--emit-trp", str(out)])
+    assert rc == 0
+    assert struct.unpack(">I", out.read_bytes()[:4])[0] == 0xDCA24D00

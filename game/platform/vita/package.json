@@ -29,7 +29,7 @@
   },
 
   "trophies": {
-    "enabled": false,
+    "enabled": true,
     "np_communication_id": "NPWR00001_00",
     "list": [
       {

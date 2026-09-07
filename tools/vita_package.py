@@ -412,15 +412,16 @@ TRP_HEADER_SIZE = 0x40
 TRP_ENTRY_SIZE = 0x40
 TRP_NAME_SIZE = 0x24
 TRP_VERSION = 3
+# Established by a reader that rejects anything else (TTEMMA/TRPWork) and by the
+# PS3/PS4 developer wikis. See docs/formats/TROPHY_PACK.md.
+TRP_MAGIC = 0xDCA24D00
 
 
-def build_trp(files, magic, dev_flag=0):
+def build_trp(files, magic=TRP_MAGIC, dev_flag=0):
     """Pack (name, bytes) pairs into a trophy container.
 
-    `magic` has no default on purpose. Neither public reader validates the field,
-    so its correct value is not established, and a container written with a
-    guessed one installs as an error code that names nothing. See the "Unverified"
-    section of docs/formats/TROPHY_PACK.md.
+    `magic` defaults to the established container identifier and is overridable
+    only so a pack can be produced for a reader that wants a different one.
     """
     count = len(files)
     data_start = TRP_HEADER_SIZE + count * TRP_ENTRY_SIZE
@@ -521,7 +522,7 @@ def main(argv=None):
     ap.add_argument("--emit-trophy-conf", metavar="DIR")
     ap.add_argument("--emit-trp", metavar="FILE")
     ap.add_argument("--emit-ids", metavar="FILE")
-    ap.add_argument("--trp-magic", help="container magic, e.g. 0xDCA24D00. Required by --emit-trp; see docs/formats/TROPHY_PACK.md")
+    ap.add_argument("--trp-magic", help="override the container magic; defaults to the established value. See docs/formats/TROPHY_PACK.md")
     args = ap.parse_args(argv)
 
     config_dir = os.path.dirname(os.path.abspath(args.config))
@@ -541,15 +542,9 @@ def main(argv=None):
                 print("trophy conf ->", emit_trophy_conf(config, args.emit_trophy_conf))
             did_something = True
         if args.emit_trp:
-            if not args.trp_magic:
-                raise PackageError(
-                    "--emit-trp",
-                    "needs --trp-magic. The container magic is not established by any public reader, "
-                    "and a guessed value installs as an error code that names nothing. Take the first "
-                    "four bytes of any genuine TROPHY.TRP, or set trophies.trp to a pre-built pack "
-                    "instead. See docs/formats/TROPHY_PACK.md.")
             conf_dir = args.emit_trophy_conf or os.path.dirname(os.path.abspath(args.emit_trp))
-            print("trophy pack ->", emit_trp(config, config_dir, conf_dir, args.emit_trp, int(args.trp_magic, 0)))
+            magic = int(args.trp_magic, 0) if args.trp_magic else TRP_MAGIC
+            print("trophy pack ->", emit_trp(config, config_dir, conf_dir, args.emit_trp, magic))
             did_something = True
         if args.emit_ids:
             print("trophy ids ->", emit_ids(config, args.emit_ids))

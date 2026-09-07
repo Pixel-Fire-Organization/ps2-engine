@@ -1,5 +1,6 @@
 #include "Platform.h"
 
+#include <cstdlib>
 #include <cstring>
 
 #include "EngineAchievement.h"
@@ -92,8 +93,19 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
 
     SceNpCommunicationId comm;
     memset(&comm, 0, sizeof(comm));
-    strncpy(comm.data, id, sizeof(comm.data) - 1);
-    comm.num = 0;
+
+    const char* separator = strchr(id, '_');
+    const size_t idLength = separator ? static_cast<size_t>(separator - id) : strlen(id);
+    if (idLength != sizeof(comm.data))
+    {
+        m_reason = "THE PACKAGED COMMUNICATION ID IS MALFORMED";
+        Engine_LogError("%s: communication id '%s' is not nine characters and a set number", m_owner->GetName(), id);
+        sceNpTrophyTerm();
+        return false;
+    }
+
+    memcpy(comm.data, id, sizeof(comm.data));
+    comm.num = separator ? static_cast<uint8_t>(atoi(separator + 1)) : 0;
 
     const int rc = sceNpTrophyCreateContext(&m_context, &comm, nullptr, 0);
     if (rc < 0)

@@ -122,11 +122,11 @@ The generated header lands in the build tree, the same way the entity definition
 are generated. Runtime behaviour is [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md);
 the container layout is [TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
-**Generating a pack needs the container magic**, which no public reader
-establishes. Configure with `-DVITA_TRP_MAGIC=0x........`, taken from the first
-four bytes of a genuine pack, or use `trophies.trp`. With `trophies.enabled` set
-and neither supplied, configuring fails and names this file — a guessed magic
-produces a package that installs as an error code naming nothing.
+**A pack is generated automatically** when `trophies.enabled` is set: the build
+writes the configuration files, the container and the identifier header, and
+stages the container at `sce_sys/trophy/TROPHY.TRP`. `VITA_TRP_MAGIC` overrides
+the container identifier and is not normally needed; see
+[../formats/TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
 **A title that ships no trophy data declares none.** The count the engine
 reports is what was packaged, so it does not drop to zero merely because a

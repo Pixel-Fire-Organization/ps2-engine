@@ -38,7 +38,7 @@ and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 
 | Offset | Field | Width | Meaning |
 |---|---|---|---|
-| 0x00 | `magic` | 4 | Container identifier — **see the caveat below** |
+| 0x00 | `magic` | 4 | Container identifier, `0xDCA24D00` |
 | 0x04 | `version` | 4 | Format version; `3` for the packs this targets |
 | 0x08 | `fileSize` | 8 | Total size of the container, 64-bit |
 | 0x10 | `entryCount` | 4 | Number of entries |
@@ -76,20 +76,31 @@ Trophy identifiers are dense and start at zero. A gap is a packaging error, not 
 runtime condition — nothing at runtime can recover from an icon that is not
 there.
 
-## Unverified
+## The magic value
 
-Two things in this document have **not** been confirmed against a real pack, and
-must be before the generator is trusted:
+`0xDCA24D00`, big-endian like the rest of the header. This is settled, and the
+generator writes it without being told:
 
-- **The magic value.** Both public extractors read the field and print it without
-  comparing it to anything, so neither establishes what it should be. A generator
-  that writes the wrong magic produces a pack the console rejects with a code that
-  names nothing.
-- **The exact meaning of the reserved fields**, which are consistently zero in
-  observed packs but are not documented as reserved anywhere authoritative.
+- A reader that **rejects** anything else — TRPWork reads the first four bytes
+  big-endian and raises `Bad TRP Magic` on a mismatch. A reader that merely
+  printed the field, as the extractors this document was first written against
+  did, establishes nothing; one that refuses on a mismatch does.
+- The PS3 and PS4 developer wikis document the same value for the same container,
+  which is consistent with this being a format inherited rather than designed.
 
-Until both are confirmed by round-tripping a genuine pack — read a real
-`TROPHY.TRP`, regenerate it byte-for-byte, compare — the generator should be
-treated as unproven and the pre-built path preferred. Validation of the digest
-over a real pack is the cheapest way to confirm the whole layout at once: it can
-only match if every offset and size above is right.
+The value is a fact about the format, not a component: nothing third-party is
+vendored or linked to obtain it, and the generator here remains the project's
+own. Overriding it is possible for a reader that wants something else, but there
+is no known reason to.
+
+## Still unverified
+
+**The exact meaning of the reserved fields**, which are consistently zero in
+observed packs but are not documented as reserved anywhere authoritative.
+
+**No genuine pack has been round-tripped.** Reading a real `TROPHY.TRP`,
+regenerating it byte-for-byte and comparing would confirm every offset and size
+here at once — the digest can only match if the whole layout is right — and that
+has not been done. A generated pack has been checked for internal consistency
+(header, entry table, digest) but not against hardware, so acceptance by the
+console trophy service is still unproven.
