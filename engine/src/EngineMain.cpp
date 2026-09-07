@@ -213,7 +213,7 @@ int Engine_Main(int argc, char** argv)
         return -1;
     }
 
-    Engine_LogInfo("Engine starting: platform=%s", platform->GetName());
+    Engine_LogInfo("Engine starting: platform=%s, built %s %s", platform->GetName(), __DATE__, __TIME__);
 
     if (!EngineStart(config, platform, renderer))
         return -1;
