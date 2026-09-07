@@ -57,14 +57,14 @@ typedef struct SceNpTrophySetupDialogParam
     uint32_t sdkVersion;
     SceCommonDialogParam commonParam;
     SceNpTrophyContext context;
-    int32_t options;
-    uint8_t reserved[32];
+    uint32_t options;
+    uint8_t reserved[128];
 } SceNpTrophySetupDialogParam;
 
 typedef struct SceNpTrophySetupDialogResult
 {
     int32_t result;
-    uint8_t reserved[32];
+    uint8_t reserved[128];
 } SceNpTrophySetupDialogResult;
 
 int sceNpTrophySetupDialogInit(const SceNpTrophySetupDialogParam* param);

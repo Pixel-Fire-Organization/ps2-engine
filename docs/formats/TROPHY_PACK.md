@@ -151,6 +151,29 @@ carries the communication signature that authenticates the set. Neither is
 written, because the linkage semantics are unverified and no signature can
 honestly be produced for an identifier that was declared rather than allocated.
 
+
+## The set is installed by a system dialog
+
+Registration is not a trophy-module call and not something installation does. The
+running title opens a system dialog, which reads the pack out of the title and
+installs the set. Two things about its parameter block have cost time and are
+recorded here because neither is discoverable from the platform SDK, which ships
+no header for the dialog at all:
+
+- The block is **216 bytes**: a version, the common dialog block, the trophy
+  context, an options word, and **128 bytes of reserved space**. A caller that
+  reserves less passes a short object, and the dialog reads uninitialised memory
+  past the end of it. This does not fail at the call — the dialog opens, reports
+  success and runs — it fails later, as a system error with no relation to the
+  cause.
+- The context comes after the common dialog block, not before it, and the common
+  dialog block carries the magic number every system dialog requires.
+
+An independent reimplementation of the platform was the source for both, which is
+worth recording as a method: where a vendor SDK ships no header, an emulator that
+runs retail software is a better authority than a search result, because it is
+checked against software that works.
+
 ## Still unverified
 
 **No genuine retail pack has been round-tripped**, only one this build produced.
