@@ -213,7 +213,10 @@ void VitaPlatform::VitaTrophies::Shutdown()
         m_context = -1;
     }
     if (m_available)
+    {
         sceNpTrophyTerm();
+        sceSysmoduleUnloadModule(SCE_SYSMODULE_NP_TROPHY);
+    }
 
     m_available = false;
     m_count = VITA_TROPHY_DECLARED;
