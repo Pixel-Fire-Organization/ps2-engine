@@ -217,7 +217,7 @@ protected:
 
         bool IsUnlocked(uint32_t id) const override;
         uint32_t GetCount() const override;
-        uint32_t GetConsoleCount() const override;
+        int32_t GetConsoleCount() const override;
         bool IsAvailable() const override;
         const char* GetUnavailableReason() const override;
 
@@ -235,6 +235,7 @@ protected:
         int32_t m_handle;
         uint32_t m_count;
         uint32_t m_serviceCount;
+        bool m_stateRead;
         char m_reason[192];
         bool m_available;
     };

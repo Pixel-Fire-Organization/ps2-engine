@@ -48,8 +48,16 @@ void Scene_Achievements_Update(float dt)
     char text[48];
     snprintf(text, sizeof(text), "%u", static_cast<unsigned>(count));
     Ui_LabelValue("DECLARED", text);
-    snprintf(text, sizeof(text), "%u", static_cast<unsigned>(Engine_Achievement_GetConsoleCount()));
-    Ui_LabelValue("CONSOLE HAS", text);
+    const int32_t consoleCount = Engine_Achievement_GetConsoleCount();
+    if (consoleCount < 0)
+    {
+        Ui_LabelValue("CONSOLE HAS", "WOULD NOT SAY");
+    }
+    else
+    {
+        snprintf(text, sizeof(text), "%d", static_cast<int>(consoleCount));
+        Ui_LabelValue("CONSOLE HAS", text);
+    }
 
     if (!available)
     {

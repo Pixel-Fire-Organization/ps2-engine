@@ -35,7 +35,7 @@ namespace
     }
 }
 
-uint32_t Engine_Achievement_GetConsoleCount() { return (s_Loaded && s_Contract) ? s_Contract->GetConsoleCount() : 0u; }
+int32_t Engine_Achievement_GetConsoleCount() { return (s_Loaded && s_Contract) ? s_Contract->GetConsoleCount() : -1; }
 
 const char* Engine_Achievement_GetUnavailableReason()
 {

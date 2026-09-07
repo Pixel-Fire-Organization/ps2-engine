@@ -36,8 +36,10 @@ public:
     virtual uint32_t GetCount() const = 0;
 
     /// @return How many the platform itself holds, which can be fewer than the
-    ///         title declares when the platform never took delivery of them.
-    virtual uint32_t GetConsoleCount() const = 0;
+    ///         title declares when it never took delivery of them, or -1 when
+    ///         the platform would not say. Not answering is not an answer of
+    ///         zero, and the two need telling apart.
+    virtual int32_t GetConsoleCount() const = 0;
 
     /// @return Whether anything can actually be recorded right now.
     virtual bool IsAvailable() const = 0;

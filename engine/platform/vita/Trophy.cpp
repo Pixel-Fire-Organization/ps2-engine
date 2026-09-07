@@ -88,7 +88,7 @@ bool VitaPlatform::VitaTrophies::PackPresent() const
 }
 
 VitaPlatform::VitaTrophies::VitaTrophies(const VitaPlatform* owner)
-    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_serviceCount(0), m_available(false)
+    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_serviceCount(0), m_stateRead(false), m_available(false)
 {
     m_reason[0] = '\0';
 }
@@ -168,28 +168,28 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         return false;
     }
 
-    // How many trophies the console believes this set has. The system registers
-    // a set when the title is installed, not at run time, so a count short of
-    // what was packaged means the installed title never carried this set.
+    // A failure here is not a count of zero: the console did not answer, and
+    // reporting the untouched variable as its answer would invent a fact.
     SceNpTrophyFlagArray flags;
     memset(&flags, 0, sizeof(flags));
-    m_serviceCount = 0;
-    if (sceNpTrophyGetTrophyUnlockState(m_context, m_handle, &flags, &m_serviceCount) < 0)
-        Engine_LogInfo("%s: trophy state could not be read", m_owner->GetName());
+    uint32_t reported = 0;
+    const int stateRc = sceNpTrophyGetTrophyUnlockState(m_context, m_handle, &flags, &reported);
+    m_stateRead = (stateRc >= 0);
+    m_serviceCount = m_stateRead ? reported : 0;
 
-    Engine_LogInfo("%s: console knows %u trophies, this build packaged %u", m_owner->GetName(), static_cast<unsigned>(m_serviceCount),
-                   static_cast<unsigned>(m_count));
-
-    // A short count is a strong hint that the installed title never carried this
-    // set, since a set is registered when the title is installed. It is a hint
-    // rather than a verdict, so it is said loudly and recording still proceeds:
-    // refusing here on an inference would disable a system that might work.
-    if (m_serviceCount < m_count)
+    if (!m_stateRead)
     {
-        Engine_LogError("%s: the console has %u of the %u trophies this build packages. A set is registered when the "
-                        "title is installed, not at run time, so an update over an older install keeps the old set. "
-                        "Deleting the title and installing it again is the usual fix.",
-                        m_owner->GetName(), static_cast<unsigned>(m_serviceCount), static_cast<unsigned>(m_count));
+        Engine_LogError("%s: the console would not report trophy state, code %08X. It accepted the identifier but holds "
+                        "no data for this set, which is what an unlock is then refused against.",
+                        m_owner->GetName(), static_cast<unsigned>(stateRc));
+    }
+    else
+    {
+        Engine_LogInfo("%s: console holds %u trophies, this build packages %u", m_owner->GetName(), static_cast<unsigned>(m_serviceCount),
+                       static_cast<unsigned>(m_count));
+        if (m_serviceCount < m_count)
+            Engine_LogError("%s: the console holds %u of the %u trophies this build packages.", m_owner->GetName(),
+                            static_cast<unsigned>(m_serviceCount), static_cast<unsigned>(m_count));
     }
 
     m_reason[0] = '\0';
@@ -254,7 +254,7 @@ bool VitaPlatform::VitaTrophies::IsUnlocked(uint32_t id) const
 
 uint32_t VitaPlatform::VitaTrophies::GetCount() const { return m_count; }
 
-uint32_t VitaPlatform::VitaTrophies::GetConsoleCount() const { return m_serviceCount; }
+int32_t VitaPlatform::VitaTrophies::GetConsoleCount() const { return m_stateRead ? static_cast<int32_t>(m_serviceCount) : -1; }
 
 const char* VitaPlatform::VitaTrophies::GetUnavailableReason() const { return (m_available || !m_reason[0]) ? nullptr : m_reason; }
 
