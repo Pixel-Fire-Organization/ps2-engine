@@ -233,6 +233,7 @@ protected:
         int32_t m_context;
         int32_t m_handle;
         uint32_t m_count;
+        uint32_t m_serviceCount;
         char m_reason[192];
         bool m_available;
     };

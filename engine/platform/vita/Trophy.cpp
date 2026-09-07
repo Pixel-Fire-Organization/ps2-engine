@@ -7,6 +7,7 @@
 
 #include "EngineAchievement.h"
 #include "EngineDebug.h"
+#include "Macros.h"
 #include "EngineIO.h"
 
 extern "C" {
@@ -50,6 +51,8 @@ namespace
 {
     const unsigned kTrophyInvalidArgument = 0x80551604u;
 
+
+
     bool FlagIsSet(const SceNpTrophyFlagArray& flags, uint32_t id)
     {
         if (id >= ACHV_MAX_ENTRIES)
@@ -85,7 +88,7 @@ bool VitaPlatform::VitaTrophies::PackPresent() const
 }
 
 VitaPlatform::VitaTrophies::VitaTrophies(const VitaPlatform* owner)
-    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_available(false)
+    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_serviceCount(0), m_available(false)
 {
     m_reason[0] = '\0';
 }
@@ -165,11 +168,31 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         return false;
     }
 
+    // How many trophies the console believes this set has. The system registers
+    // a set when the title is installed, not at run time, so a count short of
+    // what was packaged means the installed title never carried this set.
     SceNpTrophyFlagArray flags;
     memset(&flags, 0, sizeof(flags));
-    uint32_t count = 0;
-    if (sceNpTrophyGetTrophyUnlockState(m_context, m_handle, &flags, &count) < 0)
-        Engine_LogInfo("%s: trophy state could not be read; unlocks will still be attempted", m_owner->GetName());
+    m_serviceCount = 0;
+    if (sceNpTrophyGetTrophyUnlockState(m_context, m_handle, &flags, &m_serviceCount) < 0)
+        Engine_LogInfo("%s: trophy state could not be read", m_owner->GetName());
+
+    Engine_LogInfo("%s: console knows %u trophies, this build packaged %u", m_owner->GetName(), static_cast<unsigned>(m_serviceCount),
+                   static_cast<unsigned>(m_count));
+
+    if (m_serviceCount < m_count)
+    {
+        SetReason("THE CONSOLE HAS %u OF THE %u TROPHIES THIS BUILD PACKAGES. A SET IS REGISTERED WHEN THE TITLE IS "
+                  "INSTALLED, NOT AT RUN TIME, SO AN UPDATE OVER AN OLDER INSTALL KEEPS THE OLD SET. DELETE THE TITLE "
+                  "FROM THE CONSOLE AND INSTALL IT AGAIN.",
+                  static_cast<unsigned>(m_serviceCount), static_cast<unsigned>(m_count));
+        sceNpTrophyDestroyHandle(m_handle);
+        m_handle = -1;
+        sceNpTrophyDestroyContext(m_context);
+        m_context = -1;
+        sceNpTrophyTerm();
+        return false;
+    }
 
     m_reason[0] = '\0';
     m_available = true;
