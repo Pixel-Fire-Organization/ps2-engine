@@ -258,6 +258,10 @@ def _validate_trophies(config, config_dir, where):
         if icon and not os.path.exists(_resolve(config_dir, icon)):
             raise PackageError(where, f"trophy {entry.get('id')} icon points at a missing file: {icon}")
 
+    icon0 = trophies.get("icon")
+    if icon0 and not os.path.exists(_resolve(config_dir, icon0)):
+        raise PackageError(where, f"trophies.icon points at a missing file: {icon0}")
+
 
 def _validate_files(config, config_dir, where):
     for item in config.get("files") or []:
@@ -382,22 +386,34 @@ def _xml_escape(text):
 
 
 def emit_trophy_conf(config, out_dir):
-    """Write the trophy set definition and its localised strings."""
+    """Write the trophy set definition and its localised strings.
+
+    Identifiers are written unpadded. The console matches them against the
+    integer trophy id it is asked to unlock, so a zero-padded identifier names
+    a trophy that is not in the set, and the set reads as unregistered rather
+    than as malformed.
+
+    Both files declare the set version and the identifier, because a reader
+    that cross-checks them sees two different sets when only one does.
+    """
     trophies = config["trophies"]
     entries = sorted(trophies["list"], key=lambda e: e["id"])
     comm = trophies["np_communication_id"]
+    parental = int((config.get("sfo") or {}).get("parental_level", 1))
 
     conf = ['<?xml version="1.0" encoding="utf-8"?>',
-            f'<trophyconf><npcommid>{comm}</npcommid><trophyset-version>01.00</trophyset-version>']
+            f'<trophyconf><npcommid>{comm}</npcommid><trophyset-version>01.00</trophyset-version>',
+            f'<parental-level>{parental}</parental-level>']
     strings = ['<?xml version="1.0" encoding="utf-8"?>',
-               f'<trophyconf><npcommid>{comm}</npcommid>',
+               f'<trophyconf><npcommid>{comm}</npcommid><trophyset-version>01.00</trophyset-version>',
                f'<title-name>{_xml_escape(config["title"]["name"])}</title-name>']
 
     for entry in entries:
         hidden = "yes" if entry.get("hidden") else "no"
-        conf.append(f'<trophy id="{entry["id"]:03d}" hidden="{hidden}" ttype="{entry["grade"][0].upper()}"/>')
+        ttype = entry["grade"][0].upper()
+        conf.append(f'<trophy id="{entry["id"]}" hidden="{hidden}" ttype="{ttype}"/>')
         strings.append(
-            f'<trophy id="{entry["id"]:03d}" hidden="{hidden}" ttype="{entry["grade"][0].upper()}">'
+            f'<trophy id="{entry["id"]}" hidden="{hidden}" ttype="{ttype}">'
             f'<name>{_xml_escape(entry["name"])}</name>'
             f'<detail>{_xml_escape(entry.get("detail", ""))}</detail></trophy>')
 
@@ -421,12 +437,24 @@ TRP_MAGIC = 0xDCA24D00
 
 
 def trp_payloads(config, config_dir, conf_dir):
-    """(name, bytes) for every file that belongs in the container, in order."""
+    """(name, bytes) for every file that belongs in the container, in order.
+
+    The set's own icon is named ICON0.PNG inside the container whatever it is
+    called on disc, and is distinct from the per-trophy icons. A set may declare
+    its own; where it does not the store-front icon stands in, so that a pack
+    always carries the file the format lists as required.
+    """
     trophies = config["trophies"]
     files = []
     for name in ("TROPCONF.SFM", "TROP.SFM"):
         with open(os.path.join(conf_dir, name), "rb") as fh:
             files.append((name, fh.read()))
+
+    icon0 = trophies.get("icon") or (config.get("livearea") or {}).get("icon")
+    if icon0:
+        with open(_resolve(config_dir, icon0), "rb") as fh:
+            files.append(("ICON0.PNG", fh.read()))
+
     for entry in sorted(trophies["list"], key=lambda e: e["id"]):
         icon = entry.get("icon")
         if not icon:

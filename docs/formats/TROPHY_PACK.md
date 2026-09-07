@@ -77,6 +77,29 @@ Trophy identifiers are dense and start at zero. A gap is a packaging error, not 
 runtime condition — nothing at runtime can recover from an icon that is not
 there.
 
+The set icon is named `ICON0.PNG` inside the container whatever it is called on
+disc, and is the set's own icon rather than one of the per-trophy ones. A set
+that does not declare one is given the store-front icon, because the file is
+required and an approximate icon is better than an absent one.
+
+### The configuration files
+
+Both are XML. `TROPCONF.SFM` is the set itself and `TROP.SFM` is the same set
+with the display strings filled in; a reader may cross-check them, so **each
+carries the communication identifier and the set version** rather than leaving
+either to the other.
+
+**Trophy identifiers are written unpadded** — `0`, not `000`. The console
+matches them against the integer identifier it is asked to unlock, and a padded
+identifier names a trophy that is not in the set. The failure this produces is
+misleading: the set parses, a context opens against the communication
+identifier, and every read and unlock afterwards reports that no set is
+registered. The per-trophy icon *file names* are padded to three digits and are
+a separate convention — `TROP000.PNG` carries trophy `0`.
+
+`TROPCONF.SFM` also declares a parental level. It is the trophy set's own, taken
+from the same declaration the package parameters use so the two cannot disagree.
+
 ## The magic value
 
 `0xDCA24D00`, big-endian like the rest of the header. This is settled, and the
@@ -112,16 +135,21 @@ and a wrong version rather than printing them.
 
 ## Contents this build does not produce
 
-A pack produced here holds the two configuration files and one icon per trophy.
-Packs taken off a retail title are reported to also carry **`TRPPARAM.INI`** and
-**`ICON0.PNG`** — the set's own icon, as distinct from the per-trophy ones — and
-group icons where a set uses groups.
+A pack produced here holds the two configuration files, the set icon and one
+icon per trophy. Packs taken off a retail title are reported to also carry
+**`TRPPARAM.INI`**, and group icons where a set uses groups.
 
-Whether the console *requires* either is unknown, and no trustworthy description
-of `TRPPARAM.INI` was found, so neither is written rather than guessed at. If a
+Whether the console *requires* `TRPPARAM.INI` is unknown, and no trustworthy
+description of it was found, so it is not written rather than guessed at. If a
 console refuses a pack this build produced, this is the first thing to suspect,
 and the way to settle it is to extract a genuine pack with the vendored tool and
 look at what is in it.
+
+Two fields a retail configuration carries are also absent, for the same reason.
+A set with a platinum links each contributing trophy to it, and a configuration
+carries the communication signature that authenticates the set. Neither is
+written, because the linkage semantics are unverified and no signature can
+honestly be produced for an identifier that was declared rather than allocated.
 
 ## Still unverified
 

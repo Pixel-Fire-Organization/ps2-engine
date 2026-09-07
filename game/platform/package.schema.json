@@ -104,6 +104,10 @@
           "type": "string",
           "description": "A pre-built pack, staged as-is. Mutually exclusive with 'list'."
         },
+        "icon": {
+          "type": "string",
+          "description": "The set's own icon, packed as ICON0.PNG and distinct from the per-trophy icons. Defaults to the store-front icon when absent."
+        },
         "list": {
           "type": "array",
           "description": "Trophy definitions, from which the pack is generated. Mutually exclusive with 'trp'.",
