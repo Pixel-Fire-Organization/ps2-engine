@@ -11,6 +11,8 @@
 #include "EngineIO.h"
 
 extern "C" {
+#include <psp2/common_dialog.h>
+#include <psp2/kernel/threadmgr.h>
 #include <psp2/np/common.h>
 #include <psp2/sysmodule.h>
 }
@@ -45,10 +47,34 @@ int sceNpTrophyCreateHandle(SceNpTrophyHandle* handle);
 int sceNpTrophyDestroyHandle(SceNpTrophyHandle handle);
 int sceNpTrophyUnlockTrophy(SceNpTrophyContext context, SceNpTrophyHandle handle, SceNpTrophyId trophyId, SceNpTrophyId* platinumId);
 int sceNpTrophyGetTrophyUnlockState(SceNpTrophyContext context, SceNpTrophyHandle handle, SceNpTrophyFlagArray* flags, uint32_t* count);
+
+typedef struct SceNpTrophySetupDialogParam
+{
+    uint32_t sdkVersion;
+    SceCommonDialogParam commonParam;
+    SceNpTrophyContext context;
+    int32_t options;
+    uint8_t reserved[32];
+} SceNpTrophySetupDialogParam;
+
+typedef struct SceNpTrophySetupDialogResult
+{
+    int32_t result;
+    uint8_t reserved[32];
+} SceNpTrophySetupDialogResult;
+
+int sceNpTrophySetupDialogInit(const SceNpTrophySetupDialogParam* param);
+int sceNpTrophySetupDialogGetStatus(void);
+int sceNpTrophySetupDialogGetResult(SceNpTrophySetupDialogResult* result);
+int sceNpTrophySetupDialogAbort(void);
+int sceNpTrophySetupDialogTerm(void);
 }
 
 namespace
 {
+    const uint32_t kSetupPollMicros = 50000;
+    const int kSetupSpinLimit = 400;
+
     const unsigned kTrophyInvalidArgument = 0x80551604u;
     const unsigned kTrophyNotRegistered = 0x80551610u;
     const unsigned kTrophyRegistrationLast = 0x80551612u;
@@ -121,6 +147,53 @@ VitaPlatform::VitaTrophies::VitaTrophies(const VitaPlatform* owner)
     m_reason[0] = '\0';
 }
 
+bool VitaPlatform::VitaTrophies::RegisterSet()
+{
+    SceNpTrophySetupDialogParam param;
+    memset(&param, 0, sizeof(param));
+    param.sdkVersion = PSP2_SDK_VERSION;
+    _sceCommonDialogSetMagicNumber(&param.commonParam);
+    param.context = m_context;
+
+    const int rc = sceNpTrophySetupDialogInit(&param);
+    if (rc < 0)
+    {
+        const char* named = TrophyErrorName(rc);
+        Engine_LogError("%s: the console refused to open the trophy setup dialog, code %08X%s%s", m_owner->GetName(),
+                        static_cast<unsigned>(rc), named ? " - " : "", named ? named : "");
+        return false;
+    }
+
+    int spins = 0;
+    while (sceNpTrophySetupDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED)
+    {
+        if (++spins >= kSetupSpinLimit)
+        {
+            Engine_LogError("%s: the trophy setup dialog did not finish within %d seconds", m_owner->GetName(),
+                            static_cast<int>((static_cast<uint32_t>(kSetupSpinLimit) * kSetupPollMicros) / 1000000u));
+            sceNpTrophySetupDialogAbort();
+            sceNpTrophySetupDialogTerm();
+            return false;
+        }
+        sceKernelDelayThread(kSetupPollMicros);
+    }
+
+    SceNpTrophySetupDialogResult result;
+    memset(&result, 0, sizeof(result));
+    const int resultRc = sceNpTrophySetupDialogGetResult(&result);
+    sceNpTrophySetupDialogTerm();
+
+    if (resultRc < 0 || result.result != SCE_COMMON_DIALOG_RESULT_OK)
+    {
+        Engine_LogError("%s: the trophy setup dialog closed without installing the set, call %08X result %d",
+                        m_owner->GetName(), static_cast<unsigned>(resultRc), static_cast<int>(result.result));
+        return false;
+    }
+
+    Engine_LogInfo("%s: the console installed the trophy set", m_owner->GetName());
+    return true;
+}
+
 bool VitaPlatform::VitaTrophies::Init(const char* commId)
 {
     if (!VITA_TROPHIES_PACKAGED)
@@ -186,6 +259,8 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         return false;
     }
 
+    RegisterSet();
+
     if (sceNpTrophyCreateHandle(&m_handle) < 0)
     {
         SetReason("CONSOLE REFUSED A TROPHY HANDLE");
@@ -218,9 +293,8 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         const unsigned code = static_cast<unsigned>(stateRc);
         if (code >= kTrophyNotRegistered && code <= kTrophyRegistrationLast)
         {
-            SetReason("THE SET IS NOT REGISTERED ON THIS CONSOLE (%08X). A VITA REGISTERS A SET WHEN THE TITLE IS "
-                      "INSTALLED - THERE IS NO CALL TO DO IT LATER. DELETE THE TITLE AND INSTALL IT AGAIN WITH THE "
-                      "PLUGIN ALREADY ACTIVE. TROPHY PACK ON DISC: %s",
+            SetReason("THE SET IS NOT REGISTERED ON THIS CONSOLE (%08X). THE GAME ASKED THE CONSOLE TO INSTALL IT "
+                      "AND IT DID NOT. TROPHY PACK ON DISC: %s",
                       code, PackPresent() ? "FOUND" : "MISSING");
             sceNpTrophyDestroyHandle(m_handle);
             m_handle = -1;

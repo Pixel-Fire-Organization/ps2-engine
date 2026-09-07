@@ -128,19 +128,28 @@ stages the container at `sce_sys/trophy/TROPHY.TRP`. `VITA_TRP_MAGIC` overrides
 the container identifier and is not normally needed; see
 [../formats/TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
-**A trophy set is registered when the title is installed, not when it runs.**
-There is no call to register one: the module exports fifteen functions and none
-of them registers a set, which both the firmware NID database and an independent
-reimplementation agree on. The system takes delivery of the pack out of the
-package.
+**A trophy set is registered when the game asks, not when the title is
+installed.** Installing a title delivers the pack; it does not register the set.
+The game requests that once, at start, through a system dialog, and the console
+installs the set from the pack the title carries.
 
-The console says so when it has not. Errors `0x80551610` and `0x80551611` are
-"not registered" and "already registered"; a code in that group coming back from
-reading trophy state means the console recognises the identifier and holds no set
-behind it. Every later call is refused against nothing. The remedy is to delete
-the title and install it again **with the trophy plugin already active**, because
-registration happens once, at install, and an unsigned title needs the plugin
-present at that moment.
+**The call that does it does not belong to the trophy module.** That module
+exports fifteen functions and none of them registers a set, which is true and
+also misleading: the setup dialog lives with the other system dialogs, in the
+common dialog module. Searching the trophy module alone concludes that the
+platform cannot register a set at run time, which is wrong and costs a great
+deal of time, because the symptom it produces is indistinguishable from a
+malformed pack.
+
+Attempting registration is not required to succeed. A set already installed
+needs nothing, so a refusal is recorded and the state read that follows stays
+the test of whether trophies can be recorded.
+
+The console says when nothing is registered. Errors `0x80551610` and `0x80551611`
+are "not registered" and "already registered"; a code in that group coming back
+from reading trophy state means the console recognises the identifier and holds
+no set behind it, and every later call is refused against nothing. Reinstalling
+does not fix it, because installation was never what registered the set.
 
 **A title that ships no trophy data declares none.** The count the engine
 reports is what was packaged, so it does not drop to zero merely because a

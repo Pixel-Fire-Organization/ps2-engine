@@ -84,6 +84,14 @@ succeeds and the subsystem runs in its unsupported state — that is not a failu
 because a game asking for achievements on a platform that has none is running
 correctly.
 
+**Binding to a set may not be enough to record against it.** A platform is
+entitled to require that the set be installed on the console before it can be
+read or written, and to make the running title ask for that rather than doing it
+when the title was installed. Start therefore asks, once, where the platform has
+such a step. The request is allowed to fail without failing start: a set already
+installed needs nothing, and the state read that follows is what decides whether
+anything can be recorded.
+
 There is no per-frame work. Shutdown releases whatever the platform opened.
 
 ## When not loaded

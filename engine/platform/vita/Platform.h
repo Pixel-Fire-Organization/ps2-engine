@@ -230,6 +230,21 @@ protected:
         ///         which separates a packaging fault from a console refusal.
         bool PackPresent() const;
 
+        /// Ask the console to install this title's trophy set.
+        ///
+        /// Installing the title does not register its trophies. A set is
+        /// registered when the game asks for it, through a system dialog that
+        /// belongs to the common dialog module rather than the trophy one.
+        /// Until that has happened the service recognises the communication
+        /// identifier and answers every read and unlock with a registration
+        /// error, which looks exactly like a malformed pack.
+        ///
+        /// Attempting this is not required to succeed: a set already installed
+        /// needs nothing, so a refusal here is reported and the state read that
+        /// follows remains the test of whether trophies can be recorded.
+        /// @return Whether the console said it installed the set.
+        bool RegisterSet();
+
         const VitaPlatform* m_owner;
         int32_t m_context;
         int32_t m_handle;
