@@ -12,6 +12,7 @@ typedef struct
     PlatformArray<char> strings; // string table [stringsSize]
     uint32_t entryCount;
     bool inUse;
+    char path[IO_FILE_MAX_PATH];
 } MountedArchive;
 
 static MountedArchive s_Mounts[ARCH_MAX_MOUNTED];
@@ -114,6 +115,8 @@ int32_t Engine_Archive_Mount(const char* discPath)
     s_Mounts[slot].toc = std::move(toc);
     s_Mounts[slot].strings = std::move(strings);
     s_Mounts[slot].entryCount = header.entryCount;
+    strncpy(s_Mounts[slot].path, discPath, IO_FILE_MAX_PATH - 1);
+    s_Mounts[slot].path[IO_FILE_MAX_PATH - 1] = '\0';
     s_Mounts[slot].inUse = true;
 
     Engine_LogInfo("Archive: mounted '%s' (slot %d, %u entries)", discPath, slot, header.entryCount);
@@ -188,6 +191,41 @@ bool Engine_Archive_ReadSync(const ArchiveLocator* loc, uint32_t spanOffset, voi
         ok = (platform->FileRead(m->file, dst, bytes) == bytes);
     Engine_IO_ReleaseFileAccess();
     return ok;
+}
+
+bool Engine_Archive_GetMount(int32_t slot, ArchiveMountInfo* outInfo)
+{
+    if (!outInfo || slot < 0 || slot >= ARCH_MAX_MOUNTED || !s_Mounts[slot].inUse)
+        return false;
+
+    const MountedArchive* m = &s_Mounts[slot];
+    uint32_t payload = 0;
+    for (uint32_t i = 0; i < m->entryCount; ++i)
+        payload += m->toc[i].size;
+
+    outInfo->path = m->path;
+    outInfo->entryCount = m->entryCount;
+    outInfo->payloadBytes = payload;
+    return true;
+}
+
+bool Engine_Archive_GetEntry(int32_t slot, uint32_t index, ArchiveTocEntry* outEntry, char* outName, uint32_t nameSize)
+{
+    if (slot < 0 || slot >= ARCH_MAX_MOUNTED || !s_Mounts[slot].inUse)
+        return false;
+
+    const MountedArchive* m = &s_Mounts[slot];
+    if (index >= m->entryCount)
+        return false;
+
+    if (outEntry)
+        *outEntry = m->toc[index];
+    if (outName && nameSize > 0)
+    {
+        strncpy(outName, m->strings.get() + m->toc[index].nameOffset, nameSize - 1);
+        outName[nameSize - 1] = '\0';
+    }
+    return true;
 }
 
 void Engine_Archive_Shutdown()

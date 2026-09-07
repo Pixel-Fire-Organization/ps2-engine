@@ -38,6 +38,13 @@ are therefore safe to issue from the main thread while the IO worker is active.
 Storage is cheap on the target media; a shared-asset index would add a lookup
 layer and a failure mode to save space that is not scarce.
 
+**A mount can be enumerated.** What is mounted, where it was mounted from, how
+many entries it holds and what those entries are, are all readable without
+reading a payload. Diagnostics need to show an archive that resolution alone
+cannot describe: a lookup that misses says only that a key was not found, never
+which keys the archive actually contains -- which is the question being asked
+whenever a lookup misses.
+
 ## Depends on
 
 - [IO](IO.md) — the file-access lock, and the platform file primitives reached

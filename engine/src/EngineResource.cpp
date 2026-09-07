@@ -687,6 +687,29 @@ void Engine_Resource_UnloadAll()
 
 void Engine_Resource_Update() { s_CurrentFrame++; }
 
+bool Engine_Resource_GetInfo(int32_t handle, ResourceInfo* outInfo)
+{
+    if (!outInfo || handle < 0 || handle >= static_cast<int32_t>(RES_MAX_ENTRIES))
+        return false;
+
+    const ResourceEntry* e = &s_Entries[handle];
+    if (e->state == RES_STATE_EMPTY)
+        return false;
+
+    outInfo->key = e->key;
+    outInfo->type = e->type;
+    outInfo->state = e->state;
+    outInfo->refCount = e->refCount;
+    outInfo->textureBytes = e->textureBytes;
+    outInfo->width = (e->type == RES_TEXTURE) ? e->handle.texture.width : 0;
+    outInfo->height = (e->type == RES_TEXTURE) ? e->handle.texture.height : 0;
+    outInfo->depCount = e->depCount;
+    outInfo->pinned = e->pinned;
+    return true;
+}
+
+uint32_t Engine_Resource_GetCapacity() { return RES_MAX_ENTRIES; }
+
 uint32_t Engine_Resource_GetTextureBudgetUsed() { return s_TextureBytesUsed; }
 uint32_t Engine_Resource_GetTextureBudget()
 {

@@ -47,6 +47,11 @@ the platform what a given texture costs and compares the total against a
 platform-supplied ceiling. Byte accounting is what makes that comparison mean the
 same thing everywhere.
 
+**The table can be enumerated.** Every live slot, its key, type, state,
+reference count, pinned flag and footprint are readable. A budget figure says
+how much is spent; only the table says on what, which is the difference between
+knowing a load was refused and knowing what to release.
+
 ## Depends on
 
 - [IO](IO.md) — all asset reads.

@@ -69,4 +69,23 @@ bool Engine_Archive_Find(const char* assetPath, ArchiveLocator* outLoc);
 // safe to call from the main thread while the IO worker may also touch a file.
 bool Engine_Archive_ReadSync(const ArchiveLocator* loc, uint32_t spanOffset, void* dst, uint32_t bytes);
 
+// --- Introspection ---
+// Read-only, for diagnostics. Nothing here mounts, reads or changes state.
+
+// What one mounted slot holds.
+typedef struct
+{
+    const char* path; // the path it was mounted from; valid while mounted
+    uint32_t entryCount;
+    uint32_t payloadBytes; // sum of every entry's payload size
+} ArchiveMountInfo;
+
+// Describe one mount slot. Returns false when the slot is free or invalid,
+// which is how a caller walks all ARCH_MAX_MOUNTED slots.
+bool Engine_Archive_GetMount(int32_t slot, ArchiveMountInfo* outInfo);
+
+// Read one TOC entry and its canonical key. `outName` may be null. Returns
+// false when the slot is free or the index is past its entry count.
+bool Engine_Archive_GetEntry(int32_t slot, uint32_t index, ArchiveTocEntry* outEntry, char* outName, uint32_t nameSize);
+
 void Engine_Archive_Shutdown();

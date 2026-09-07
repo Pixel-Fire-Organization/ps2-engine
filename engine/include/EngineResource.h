@@ -82,6 +82,30 @@ void Engine_Resource_UnloadAll();
 // Called once per frame (from Engine_Update) to advance the current frame counter.
 void Engine_Resource_Update();
 
+// --- Introspection ---
+// Read-only, for diagnostics. Nothing here loads, unloads or touches use order.
+
+// What one slot of the resource table holds.
+typedef struct
+{
+    const char* key; // canonical key; valid while the slot holds this asset
+    ResourceType type;
+    ResourceState state;
+    uint32_t refCount;
+    uint32_t textureBytes; // RES_TEXTURE only; zero otherwise
+    int32_t width; // RES_TEXTURE only
+    int32_t height; // RES_TEXTURE only
+    uint8_t depCount;
+    bool pinned;
+} ResourceInfo;
+
+// Describe one slot. Returns false when the slot is empty or out of range,
+// which is how a caller walks the whole table.
+bool Engine_Resource_GetInfo(int32_t handle, ResourceInfo* outInfo);
+
+// How many slots the table has, empty ones included.
+uint32_t Engine_Resource_GetCapacity();
+
 uint32_t Engine_Resource_GetTextureBudgetUsed();
 
 // The active platform's total texture budget, in bytes.
