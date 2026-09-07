@@ -110,6 +110,9 @@ function(vita_read_package PLATFORM OUT_GENERATED_DIR)
     set(${OUT_GENERATED_DIR} "${_generated}" PARENT_SCOPE)
 endfunction()
 
+set(VITA_TRPWORK "${CMAKE_SOURCE_DIR}/external/trpwork/Win32/Release/TRPWork.exe" CACHE FILEPATH
+    "TRPWork, which packs the trophy container. See docs/formats/TROPHY_PACK.md.")
+
 set(VITA_TRP_MAGIC "" CACHE STRING
     "Override the generated TROPHY.TRP container magic. Empty uses the established value; see docs/formats/TROPHY_PACK.md.")
 
@@ -188,14 +191,21 @@ function(platform_package PLATFORM EXE_TARGET DIST_DIR)
     string(REPLACE ";" " " _fselfArgs "${VITA_MAKE_FSELF_ARGS}")
     separate_arguments(_fselfArgs UNIX_COMMAND "${_fselfArgs}")
 
+    # The container is built by TRPWork, not here: it owns the payload
+    # alignment and the digest, and it is the reference reader for this format.
+    # We supply the entry table and the payloads; it packs them.
     set(_trophyGen "")
     if(VITA_TROPHY_GENERATE)
+        if(NOT EXISTS "${VITA_TRPWORK}")
+            message(FATAL_ERROR
+                "trophies.enabled is set for ${PLATFORM}, but TRPWork is missing at ${VITA_TRPWORK}.
+"
+                "Run: git submodule update --init external/trpwork")
+        endif()
         set(_trophyGen
             --emit-trophy-conf "${_generated}"
-            --emit-trp "${_generated}/TROPHY.TRP")
-        if(VITA_TRP_MAGIC)
-            list(APPEND _trophyGen --trp-magic "${VITA_TRP_MAGIC}")
-        endif()
+            --emit-trp-index "${_generated}"
+            --trpwork "${VITA_TRPWORK}")
     endif()
 
     set(_regen

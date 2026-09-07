@@ -8,3 +8,6 @@
 [submodule "external/vitaGL"]
 	path = external/vitaGL
 	url = https://github.com/Rinnegatamante/vitaGL
+[submodule "external/trpwork"]
+	path = external/trpwork
+	url = https://github.com/TTEMMA/TRPWork

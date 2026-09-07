@@ -27,7 +27,9 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import struct
+import subprocess
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -411,43 +413,15 @@ def emit_trophy_conf(config, out_dir):
 TRP_HEADER_SIZE = 0x40
 TRP_ENTRY_SIZE = 0x40
 TRP_NAME_SIZE = 0x24
-TRP_VERSION = 3
+# 2 is the PS3/Vita container; 3 is PS4. The Vita reader rejects 3 outright.
+TRP_VERSION = 2
 # Established by a reader that rejects anything else (TTEMMA/TRPWork) and by the
 # PS3/PS4 developer wikis. See docs/formats/TROPHY_PACK.md.
 TRP_MAGIC = 0xDCA24D00
 
 
-def build_trp(files, magic=TRP_MAGIC, dev_flag=0):
-    """Pack (name, bytes) pairs into a trophy container.
-
-    `magic` defaults to the established container identifier and is overridable
-    only so a pack can be produced for a reader that wants a different one.
-    """
-    count = len(files)
-    data_start = TRP_HEADER_SIZE + count * TRP_ENTRY_SIZE
-
-    entries, blobs, offset = [], [], data_start
-    for name, payload in files:
-        encoded = name.encode("ascii")
-        if len(encoded) >= TRP_NAME_SIZE:
-            raise PackageError("TROPHY.TRP", f"entry name too long: {name}")
-        entries.append(encoded.ljust(TRP_NAME_SIZE, b"\0")
-                       + struct.pack(">III", offset, 0, len(payload))
-                       + b"\0" * 16)
-        blobs.append(payload)
-        offset += len(payload)
-
-    total = offset
-    header = (struct.pack(">IIQIII", magic, TRP_VERSION, total, count, TRP_ENTRY_SIZE, dev_flag)
-              + b"\0" * 20 + b"\0" * 16)
-    assert len(header) == TRP_HEADER_SIZE, len(header)
-
-    body = header + b"".join(entries) + b"".join(blobs)
-    digest = hashlib.sha1(body).digest()
-    return body[:0x1C] + digest + body[0x30:]
-
-
-def emit_trp(config, config_dir, conf_dir, out_path, magic):
+def trp_payloads(config, config_dir, conf_dir):
+    """(name, bytes) for every file that belongs in the container, in order."""
     trophies = config["trophies"]
     files = []
     for name in ("TROPCONF.SFM", "TROP.SFM"):
@@ -458,11 +432,61 @@ def emit_trp(config, config_dir, conf_dir, out_path, magic):
         if not icon:
             continue
         with open(_resolve(config_dir, icon), "rb") as fh:
-            files.append((f"TROP{entry['id']:03d}.PNG", fh.read()))
+            files.append(("TROP{:03d}.PNG".format(entry["id"]), fh.read()))
+    return files
 
-    _write_bytes(out_path, build_trp(files, magic))
-    return out_path
 
+def _host_path(path):
+    """A path the packer can open.
+
+    TRPWork is a Windows binary and the Vita build runs under WSL, so a Linux
+    path reaches it as a drive-relative one that does not exist. Translate when
+    the translator is there, and pass through when it is not.
+    """
+    if not shutil.which("wslpath"):
+        return path
+    try:
+        done = subprocess.run(["wslpath", "-w", path], check=True, capture_output=True, text=True)
+        return done.stdout.strip() or path
+    except (OSError, subprocess.CalledProcessError):
+        return path
+
+
+def emit_trp_index(config, config_dir, conf_dir, out_dir, magic=TRP_MAGIC):
+    """Write what TRPWork repacks from: a header and an entry table naming the
+    payloads, with the payloads themselves in a directory beside it.
+
+    Offsets, sizes, the total length and the digest are left zero on purpose.
+    TRPWork recomputes all four, including the sixteen-byte payload alignment
+    that is the reason the container is its job rather than ours.
+    """
+    files = trp_payloads(config, config_dir, conf_dir)
+    payload_dir = os.path.join(out_dir, "TROPHY")
+    os.makedirs(payload_dir, exist_ok=True)
+    for name, blob in files:
+        _write_bytes(os.path.join(payload_dir, name), blob)
+
+    count = len(files)
+    header = (struct.pack(">IIQIII", magic, TRP_VERSION, 0, count, TRP_HEADER_SIZE, 0)
+              + b"\0" * 20 + b"\0" * 16)
+    entries = b"".join(
+        name.encode("ascii").ljust(TRP_NAME_SIZE, b"\0") + b"\0" * 28 for name, _ in files)
+    index_path = os.path.join(out_dir, "TROPHY.index")
+    _write_bytes(index_path, header + entries)
+    return index_path
+
+
+def pack_trp(trpwork, index_path):
+    """Hand the entry table and payloads to TRPWork, which writes the container."""
+    done = subprocess.run([trpwork, _host_path(index_path)], capture_output=True, text=True)
+    output = (done.stdout or "") + (done.stderr or "")
+    if done.returncode != 0 or "Exception" in output:
+        raise PackageError("TRPWork", output.strip() or "exited {}".format(done.returncode))
+
+    out = os.path.join(os.path.dirname(index_path), "TROPHY.TRP")
+    if not os.path.exists(out):
+        raise PackageError("TRPWork", "produced no container at {}: {}".format(out, output.strip()))
+    return out
 
 def emit_ids(config, out_path):
     """A C++ header of trophy identifiers, generated from the same declaration
@@ -520,9 +544,12 @@ def main(argv=None):
     ap.add_argument("--emit-cmake", metavar="FILE")
     ap.add_argument("--emit-template", metavar="FILE")
     ap.add_argument("--emit-trophy-conf", metavar="DIR")
-    ap.add_argument("--emit-trp", metavar="FILE")
+    ap.add_argument("--emit-trp-index", metavar="DIR",
+                    help="write TROPHY.index and TROPHY/ for TRPWork to repack into a container")
+    ap.add_argument("--trpwork", metavar="EXE",
+                    help="TRPWork, run after --emit-trp-index to build the container")
     ap.add_argument("--emit-ids", metavar="FILE")
-    ap.add_argument("--trp-magic", help="override the container magic; defaults to the established value. See docs/formats/TROPHY_PACK.md")
+    ap.add_argument("--trp-magic", help="override the container magic written into the index. See docs/formats/TROPHY_PACK.md")
     args = ap.parse_args(argv)
 
     config_dir = os.path.dirname(os.path.abspath(args.config))
@@ -541,10 +568,13 @@ def main(argv=None):
             if (config.get("trophies") or {}).get("list"):
                 print("trophy conf ->", emit_trophy_conf(config, args.emit_trophy_conf))
             did_something = True
-        if args.emit_trp:
-            conf_dir = args.emit_trophy_conf or os.path.dirname(os.path.abspath(args.emit_trp))
-            magic = int(args.trp_magic, 0) if args.trp_magic else TRP_MAGIC
-            print("trophy pack ->", emit_trp(config, config_dir, conf_dir, args.emit_trp, magic))
+        if args.emit_trp_index:
+            if (config.get("trophies") or {}).get("list"):
+                conf_dir = args.emit_trophy_conf or args.emit_trp_index
+                index_path = emit_trp_index(config, config_dir, conf_dir, args.emit_trp_index)
+                print("trophy index ->", index_path)
+                if args.trpwork:
+                    print("trophy pack  ->", pack_trp(args.trpwork, index_path))
             did_something = True
         if args.emit_ids:
             print("trophy ids ->", emit_ids(config, args.emit_ids))

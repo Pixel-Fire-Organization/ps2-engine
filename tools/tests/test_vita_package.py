@@ -300,45 +300,33 @@ def test_emit_template_uses_the_declared_style(tmp_path):
     assert 'style="psmobile"' in out.read_text()
 
 
-def test_trp_layout_round_trips():
-    """Parse the container back with the layout documented in
-    docs/formats/TROPHY_PACK.md, independently of how it was written."""
-    files = [("TROPCONF.SFM", b"conf-payload"), ("TROP000.PNG", b"\x89PNG-icon-bytes")]
-    blob = vp.build_trp(files, magic=0xDCA24D00)
-
-    magic, version, size, count, entry_size, dev = struct.unpack(">IIQIII", blob[:0x1C])
-    assert (magic, version, count, entry_size) == (0xDCA24D00, 3, 2, 0x40)
-    assert size == len(blob)
-
-    for i, (name, payload) in enumerate(files):
-        base = vp.TRP_HEADER_SIZE + i * vp.TRP_ENTRY_SIZE
-        entry = blob[base:base + vp.TRP_ENTRY_SIZE]
-        assert entry[:vp.TRP_NAME_SIZE].rstrip(b"\0").decode() == name
-        offset, high, length = struct.unpack(">III", entry[0x24:0x30])
-        assert high == 0
-        assert blob[offset:offset + length] == payload
-
-
-def test_trp_digest_covers_the_container():
-    import hashlib
-    blob = vp.build_trp([("A.SFM", b"x")], magic=0xDCA24D00)
-    stored = blob[0x1C:0x30]
-    recomputed = hashlib.sha1(blob[:0x1C] + b"\0" * 20 + blob[0x30:]).digest()
-    assert stored == recomputed
-
-
-def test_trp_refuses_an_over_long_entry_name():
-    with pytest.raises(vp.PackageError, match="name too long"):
-        vp.build_trp([("X" * 40, b"x")], magic=0xDCA24D00)
-
-
-def test_emit_trp_writes_the_established_magic(tmp_path):
-    """The magic is established, so a pack builds without being told it, and the
-    value written is the one a validating reader accepts."""
+def test_trp_index_names_every_payload(tmp_path):
+    """The index is what TRPWork repacks from: a header it accepts and an entry
+    per payload, with the payloads written beside it. Offsets, sizes and the
+    digest are deliberately absent -- TRPWork computes those."""
     _config(tmp_path, trophies=_trophies())
-    out = tmp_path / "TROPHY.TRP"
-    rc = vp.main(["--config", str(tmp_path / "package.json"),
-                  "--emit-trophy-conf", str(tmp_path),
-                  "--emit-trp", str(out)])
-    assert rc == 0
-    assert struct.unpack(">I", out.read_bytes()[:4])[0] == 0xDCA24D00
+    config = vp.load_config(str(tmp_path / "package.json"))
+    vp.emit_trophy_conf(config, str(tmp_path))
+    index = vp.emit_trp_index(config, str(tmp_path), str(tmp_path), str(tmp_path))
+
+    blob = pathlib.Path(index).read_bytes()
+    magic, version, size, count, info_off = struct.unpack(">IIQII", blob[:0x18])
+    assert (magic, version, info_off) == (0xDCA24D00, 2, vp.TRP_HEADER_SIZE)
+    assert size == 0
+    assert len(blob) == vp.TRP_HEADER_SIZE + count * vp.TRP_ENTRY_SIZE
+
+    names = [blob[vp.TRP_HEADER_SIZE + i * vp.TRP_ENTRY_SIZE:][:0x20].rstrip(b"\0").decode()
+             for i in range(count)]
+    assert names[:2] == ["TROPCONF.SFM", "TROP.SFM"]
+    for name in names:
+        assert (tmp_path / "TROPHY" / name).exists()
+
+
+def test_trp_index_version_is_the_vita_one(tmp_path):
+    """2 is PS3/Vita; 3 is PS4, and the Vita reader refuses it."""
+    _config(tmp_path, trophies=_trophies())
+    config = vp.load_config(str(tmp_path / "package.json"))
+    vp.emit_trophy_conf(config, str(tmp_path))
+    index = vp.emit_trp_index(config, str(tmp_path), str(tmp_path), str(tmp_path))
+    assert struct.unpack(">I", pathlib.Path(index).read_bytes()[4:8])[0] == 2
+

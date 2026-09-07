@@ -14,10 +14,11 @@ service. Runtime behaviour built on it is in
 [subsystems/ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md); how packs are produced
 and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 
-> **This engine does not have to write this format.** The packaging config
-> accepts a pre-built pack as a first-class alternative, and that path involves no
-> knowledge of the layout below. The generator exists as a convenience; the spec
-> exists so it can be checked.
+> **This engine does not write this format.** The container is packed by TRPWork,
+> vendored as a submodule, which owns the offsets, the payload alignment and the
+> digest. The build supplies an entry table naming the payloads and the payloads
+> themselves. A pre-built pack remains a first-class alternative. This spec exists
+> so what TRPWork produces can be checked, not so it can be reimplemented.
 
 ## Layout
 
@@ -39,10 +40,10 @@ and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 | Offset | Field | Width | Meaning |
 |---|---|---|---|
 | 0x00 | `magic` | 4 | Container identifier, `0xDCA24D00` |
-| 0x04 | `version` | 4 | Format version; `3` for the packs this targets |
+| 0x04 | `version` | 4 | Format version; **`2`** for PS3 and Vita. `3` is PS4 |
 | 0x08 | `fileSize` | 8 | Total size of the container, 64-bit |
 | 0x10 | `entryCount` | 4 | Number of entries |
-| 0x14 | `entrySize` | 4 | Size of one entry: `0x40` |
+| 0x14 | `entrySize` | 4 | Size of one entry, `0x40`, which is also where the table starts |
 | 0x18 | `devFlag` | 4 | Non-zero marks a development pack |
 | 0x1C | `sha1` | 20 | Digest over the container, this field zeroed |
 | 0x30 | padding | 16 | Zero, to `0x40` |
@@ -51,11 +52,11 @@ and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 
 | Offset | Field | Width | Meaning |
 |---|---|---|---|
-| 0x00 | `name` | 0x24 | NUL-padded file name, no directory component |
-| 0x24 | `offset` | 4 | Payload start, from the beginning of the container |
-| 0x28 | reserved | 4 | Zero — the high half of a 64-bit offset |
-| 0x2C | `size` | 4 | Payload length in bytes |
-| 0x30 | reserved | 16 | Zero |
+| 0x00 | `name` | 0x20 | NUL-padded file name, no directory component |
+| 0x20 | `offset` | 8 | Payload start, from the beginning of the container |
+| 0x28 | `size` | 8 | Payload length in bytes |
+| 0x30 | `type` | 8 | Zero in observed packs |
+| 0x38 | reserved | 8 | Zero |
 
 `entrySize` is `0x40`, and the header is also `0x40`, so the entry table begins
 immediately after the header. **These two numbers being equal is a coincidence,
@@ -93,14 +94,29 @@ vendored or linked to obtain it, and the generator here remains the project's
 own. Overriding it is possible for a reader that wants something else, but there
 is no known reason to.
 
+## Payload alignment
+
+Payloads start on **sixteen-byte boundaries**, padded with zeros. This is not
+visible from the layout above — it shows up only when a pack is repacked and the
+offsets move — and it is one of the reasons the container is TRPWork's job. A
+contiguous pack parses correctly and may still be wrong on hardware.
+
+## Verified by round-trip
+
+A generated pack has been round-tripped through TRPWork: extracted to its five
+payloads and an entry table, repacked, and compared. Both the original and the
+repack carry a self-consistent digest, and the only difference is the alignment
+above. That exercises magic, version, count, table offset, entry names, offsets
+and sizes against an independent implementation — one that refuses a bad magic
+and a wrong version rather than printing them.
+
 ## Still unverified
 
-**The exact meaning of the reserved fields**, which are consistently zero in
-observed packs but are not documented as reserved anywhere authoritative.
+**No genuine retail pack has been round-tripped**, only one this build produced.
+Reading a real `TROPHY.TRP` and reproducing it byte-for-byte would confirm the
+remaining unknowns: the meaning of the zero fields at `0x30` and `0x38` in each
+entry, and the `devFlag`.
 
-**No genuine pack has been round-tripped.** Reading a real `TROPHY.TRP`,
-regenerating it byte-for-byte and comparing would confirm every offset and size
-here at once — the digest can only match if the whole layout is right — and that
-has not been done. A generated pack has been checked for internal consistency
-(header, entry table, digest) but not against hardware, so acceptance by the
-console trophy service is still unproven.
+**Nothing here has run on hardware.** Acceptance by the console trophy service is
+unproven, and needs the player-installed plugin described in
+[../vita/PACKAGING.md](../vita/PACKAGING.md) regardless.
