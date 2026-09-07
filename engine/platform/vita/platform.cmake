@@ -104,7 +104,7 @@ function(vita_read_package PLATFORM OUT_GENERATED_DIR)
     include("${_emitted}")
     foreach(_var VITA_TITLE_ID VITA_TITLE_NAME VITA_TITLE_VERSION VITA_MKSFOEX_ARGS
                  VITA_MAKE_FSELF_ARGS VITA_PACKAGE_FILES VITA_TROPHIES_ENABLED
-                 VITA_TROPHY_GENERATE VITA_NP_COMM_ID)
+                 VITA_TROPHY_GENERATE VITA_NP_COMM_ID VITA_TROPHY_COUNT)
         set(${_var} "${${_var}}" PARENT_SCOPE)
     endforeach()
     set(${OUT_GENERATED_DIR} "${_generated}" PARENT_SCOPE)
@@ -147,6 +147,8 @@ function(platform_configure PLATFORM)
     set(ENGINE_PLATFORM_${PLATFORM}_DEFINES
         "VITA_TITLE_ID_STR=\"${VITA_TITLE_ID}\""
         "VITA_NP_COMM_ID_STR=\"${VITA_NP_COMM_ID}\""
+        "VITA_TROPHIES_PACKAGED=$<IF:$<STREQUAL:${VITA_TROPHIES_ENABLED},ON>,1,0>"
+        "VITA_TROPHY_DECLARED=${VITA_TROPHY_COUNT}"
         PARENT_SCOPE)
 
     # Not optional: see docs/vita/BUILD.md. The executable conversion appends

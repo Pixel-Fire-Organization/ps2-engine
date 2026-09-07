@@ -14,6 +14,14 @@ extern "C" {
 #define VITA_NP_COMM_ID_STR ""
 #endif
 
+#ifndef VITA_TROPHIES_PACKAGED
+#define VITA_TROPHIES_PACKAGED 0
+#endif
+
+#ifndef VITA_TROPHY_DECLARED
+#define VITA_TROPHY_DECLARED 0
+#endif
+
 extern "C" {
 typedef int32_t SceNpTrophyContext;
 typedef int32_t SceNpTrophyHandle;
@@ -46,25 +54,38 @@ namespace
     }
 }
 
-VitaPlatform::VitaTrophies::VitaTrophies(const VitaPlatform* owner) : m_owner(owner), m_context(-1), m_handle(-1), m_count(0), m_available(false) {}
+VitaPlatform::VitaTrophies::VitaTrophies(const VitaPlatform* owner)
+    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_reason(nullptr), m_available(false)
+{
+}
 
 bool VitaPlatform::VitaTrophies::Init(const char* commId)
 {
+    if (!VITA_TROPHIES_PACKAGED)
+    {
+        m_reason = "THIS BUILD PACKAGED NO TROPHY DATA";
+        Engine_LogInfo("%s: no trophy data was packaged (trophies.enabled is off); the trophy service is not started", m_owner->GetName());
+        return false;
+    }
+
     const char* id = (commId && commId[0]) ? commId : VITA_NP_COMM_ID_STR;
     if (!id[0])
     {
+        m_reason = "NO COMMUNICATION ID PACKAGED";
         Engine_LogInfo("%s: no trophy communication id was packaged; trophies are off", m_owner->GetName());
         return false;
     }
 
     if (sceSysmoduleLoadModule(SCE_SYSMODULE_NP_TROPHY) < 0)
     {
+        m_reason = "CONSOLE TROPHY MODULE UNAVAILABLE";
         Engine_LogInfo("%s: the trophy module is unavailable; trophies are off", m_owner->GetName());
         return false;
     }
 
     if (sceNpTrophyInit(nullptr) < 0)
     {
+        m_reason = "CONSOLE TROPHY SERVICE FAILED TO START";
         Engine_LogInfo("%s: sceNpTrophyInit failed; trophies are off", m_owner->GetName());
         return false;
     }
@@ -80,6 +101,7 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         Engine_LogInfo("%s: trophies unavailable (0x%08X). An unsigned title needs the NoTrpDrm plugin at "
                        "ux0:tai/NoTrpDrm.suprx, listed under *main in config.txt. The game runs normally without it.",
                        m_owner->GetName(), static_cast<unsigned>(rc));
+        m_reason = "CONSOLE REFUSED AN UNSIGNED SET - NEEDS THE NOTRPDRM PLUGIN AND A REBOOT";
         m_context = -1;
         sceNpTrophyTerm();
         return false;
@@ -87,6 +109,7 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
 
     if (sceNpTrophyCreateHandle(&m_handle) < 0)
     {
+        m_reason = "CONSOLE REFUSED A TROPHY HANDLE";
         Engine_LogInfo("%s: sceNpTrophyCreateHandle failed; trophies are off", m_owner->GetName());
         sceNpTrophyDestroyContext(m_context);
         m_context = -1;
@@ -97,9 +120,10 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
     SceNpTrophyFlagArray flags;
     memset(&flags, 0, sizeof(flags));
     uint32_t count = 0;
-    if (sceNpTrophyGetTrophyUnlockState(m_context, m_handle, &flags, &count) >= 0)
-        m_count = (count > ACHV_MAX_ENTRIES) ? ACHV_MAX_ENTRIES : count;
+    if (sceNpTrophyGetTrophyUnlockState(m_context, m_handle, &flags, &count) < 0)
+        Engine_LogInfo("%s: trophy state could not be read; unlocks will still be attempted", m_owner->GetName());
 
+    m_reason = nullptr;
     m_available = true;
     Engine_LogInfo("%s: trophies ready (%s, %u trophies)", m_owner->GetName(), id, m_count);
     return true;
@@ -121,7 +145,7 @@ void VitaPlatform::VitaTrophies::Shutdown()
         sceNpTrophyTerm();
 
     m_available = false;
-    m_count = 0;
+    m_count = VITA_TROPHY_DECLARED;
 }
 
 bool VitaPlatform::VitaTrophies::Unlock(uint32_t id)
@@ -151,6 +175,8 @@ bool VitaPlatform::VitaTrophies::IsUnlocked(uint32_t id) const
     return FlagIsSet(flags, id);
 }
 
-uint32_t VitaPlatform::VitaTrophies::GetCount() const { return m_available ? m_count : 0u; }
+uint32_t VitaPlatform::VitaTrophies::GetCount() const { return m_count; }
+
+const char* VitaPlatform::VitaTrophies::GetUnavailableReason() const { return m_available ? nullptr : m_reason; }
 
 bool VitaPlatform::VitaTrophies::IsAvailable() const { return m_available; }

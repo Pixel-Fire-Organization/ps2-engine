@@ -23,5 +23,8 @@ bool Engine_Achievement_Unlock(uint32_t id);
 /// @return False when not unlocked, unknown, unavailable, or not loaded.
 bool Engine_Achievement_IsUnlocked(uint32_t id);
 
-/// @return Achievements this title declares; zero when unavailable.
+/// @return Achievements this title declares, whether or not any can be recorded.
 uint32_t Engine_Achievement_GetCount();
+
+/// @return Why nothing can be recorded, or null when it can.
+const char* Engine_Achievement_GetUnavailableReason();

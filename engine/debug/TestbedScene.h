@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "EngineUi.h"
+
 /// Which group of the catalogue a scene belongs to. The menu draws one heading
 /// per category with that category's scenes beneath it.
 enum class TestbedCategory : uint8_t
@@ -39,6 +41,12 @@ const char* Testbed_CategoryName(TestbedCategory category);
 /// @param pageCount How many pages the scene has.
 /// @return The page to draw, counting from zero.
 int Testbed_Page(int pageCount);
+
+/// Draw a long string across as many label rows as the open panel needs,
+/// breaking on spaces. A diagnostic is only useful if it is readable.
+/// @param text The string to lay out.
+/// @param role Which colour role to draw it in.
+void Testbed_DrawWrapped(const char* text, UiColor role);
 
 /// Draw the panel a scene shows when the thing it tests is not present here.
 /// @param what The capability or subsystem that is unavailable.

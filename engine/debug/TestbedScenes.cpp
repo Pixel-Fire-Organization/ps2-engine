@@ -1,5 +1,7 @@
 #include "TestbedScene.h"
 
+#include <cstring>
+
 #include "EngineUi.h"
 #include "platform/Platform.h"
 
@@ -28,6 +30,7 @@ namespace
     };
 
     const int s_SceneCount = static_cast<int>(sizeof(s_Scenes) / sizeof(s_Scenes[0]));
+    const int WRAP_MAX_CHARS = 64;
 } // namespace
 
 const TestbedScene* Testbed_Catalogue(int* outCount)
@@ -53,6 +56,44 @@ const char* Testbed_CategoryName(TestbedCategory category)
         break;
     }
     return "?";
+}
+
+void Testbed_DrawWrapped(const char* text, UiColor role)
+{
+    if (!text || !text[0])
+        return;
+
+    const int scale = Ui_GetStyle().textScale;
+    const int advance = UI_GLYPH_ADVANCE * scale;
+    int perLine = (advance > 0) ? (Ui_ContentWidth() / advance) : 0;
+    if (perLine < 4)
+        perLine = 4;
+    if (perLine > WRAP_MAX_CHARS)
+        perLine = WRAP_MAX_CHARS;
+
+    const int length = static_cast<int>(strlen(text));
+    int start = 0;
+    while (start < length)
+    {
+        int take = ((length - start) < perLine) ? (length - start) : perLine;
+        if (start + take < length)
+        {
+            int space = take;
+            while (space > 0 && text[start + space] != ' ')
+                --space;
+            if (space > 0)
+                take = space;
+        }
+
+        char line[WRAP_MAX_CHARS + 1];
+        memcpy(line, text + start, static_cast<size_t>(take));
+        line[take] = '\0';
+        Ui_LabelColored(line, role);
+
+        start += take;
+        while (start < length && text[start] == ' ')
+            ++start;
+    }
 }
 
 void Testbed_DrawUnavailable(const char* what)

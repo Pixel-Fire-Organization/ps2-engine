@@ -40,6 +40,19 @@ is not loaded, or when the identifier is out of range.
 which is what a player sees in the system interface. The subsystem holds no
 authoritative copy, so state cannot drift from what the console reports.
 
+**What a title declares and what a platform will record are separate facts.**
+The count comes from what was packaged and does not drop to zero when recording
+is unavailable. Collapsing the two into one number makes a title that declares
+no achievements indistinguishable from a platform that refused the ones it has,
+and those need opposite fixes -- one is a packaging mistake, the other is the
+console. A refusal therefore also carries a reason, phrased for whoever can act
+on it.
+
+**Nothing is attempted when nothing was packaged.** A title that shipped no
+achievement data does not start the platform service to discover that; it is
+known before the engine runs. Starting it anyway costs a module load on every
+boot and reports a console problem for what is a build configuration.
+
 ## Depends on
 
 - **Platform** — the achievement contract, which a platform supplies only if it

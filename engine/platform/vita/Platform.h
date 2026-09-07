@@ -218,12 +218,14 @@ protected:
         bool IsUnlocked(uint32_t id) const override;
         uint32_t GetCount() const override;
         bool IsAvailable() const override;
+        const char* GetUnavailableReason() const override;
 
     private:
         const VitaPlatform* m_owner;
         int32_t m_context;
         int32_t m_handle;
         uint32_t m_count;
+        const char* m_reason;
         bool m_available;
     };
 

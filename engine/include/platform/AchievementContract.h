@@ -29,11 +29,20 @@ public:
     /// @return False when not unlocked, unknown, or unavailable.
     virtual bool IsUnlocked(uint32_t id) const = 0;
 
-    /// @return Achievements this title declares; zero when unavailable.
+    /// @return Achievements this title declares, whether or not any can be
+    ///         recorded. Availability is a separate question, and answering
+    ///         both with one number makes a title that declares none
+    ///         indistinguishable from a platform that refused.
     virtual uint32_t GetCount() const = 0;
 
     /// @return Whether anything can actually be recorded right now.
     virtual bool IsAvailable() const = 0;
+
+    /// @return Why nothing can be recorded, in terms a player or a developer
+    ///         can act on, or null when it can. The two causes need opposite
+    ///         fixes -- one is a packaging mistake, the other is the console
+    ///         refusing -- and look identical without this.
+    virtual const char* GetUnavailableReason() const = 0;
 
 protected:
     AchievementContract() = default;

@@ -35,6 +35,15 @@ namespace
     }
 }
 
+const char* Engine_Achievement_GetUnavailableReason()
+{
+    if (!s_Loaded)
+        return "ACHIEVEMENT SUBSYSTEM NOT REQUESTED";
+    if (!s_Contract)
+        return "THIS PLATFORM HAS NO ACHIEVEMENTS";
+    return s_Contract->GetUnavailableReason();
+}
+
 bool Engine_Achievement_Init(const char* commId)
 {
     s_Loaded = true;

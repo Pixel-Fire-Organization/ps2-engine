@@ -344,6 +344,7 @@ def emit_cmake(config, config_dir, generated_dir, out_path):
         'set(VITA_TROPHIES_ENABLED "{}")'.format("ON" if trophies.get("enabled") else "OFF"),
         'set(VITA_NP_COMM_ID "{}")'.format(trophies.get("np_communication_id", "")),
         'set(VITA_TROPHY_GENERATE "{}")'.format("ON" if trophies.get("enabled") and not trophies.get("trp") else "OFF"),
+        'set(VITA_TROPHY_COUNT "{}")'.format(len(trophies.get("list") or [])),
     ]
 
     pairs = _package_files(config, config_dir, generated_dir)
