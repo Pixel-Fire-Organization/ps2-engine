@@ -242,8 +242,18 @@ protected:
         /// Attempting this is not required to succeed: a set already installed
         /// needs nothing, so a refusal here is reported and the state read that
         /// follows remains the test of whether trophies can be recorded.
-        /// @return Whether the console said it installed the set.
+        /// @return Whether a dialog is now open and must be pumped each frame.
         bool RegisterSet();
+
+        /// Advance the open setup dialog. A system dialog only progresses while
+        /// the title presents frames, so this cannot run during start.
+        /// @return True while the dialog is still running.
+        bool PumpStartup() override;
+
+        /// Take a handle and read the set's state, settling whether anything
+        /// can be recorded. Runs once registration has been attempted, whether
+        /// or not it succeeded, because a set already installed needs nothing.
+        void FinishInit();
 
         const VitaPlatform* m_owner;
         int32_t m_context;
@@ -251,6 +261,8 @@ protected:
         uint32_t m_count;
         uint32_t m_serviceCount;
         bool m_stateRead;
+        bool m_registering;
+        int m_registerFrames;
         char m_reason[192];
         bool m_available;
     };

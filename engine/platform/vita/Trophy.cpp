@@ -147,7 +147,7 @@ bool VitaPlatform::VitaTrophies::PackPresent() const
 }
 
 VitaPlatform::VitaTrophies::VitaTrophies(const VitaPlatform* owner)
-    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_serviceCount(0), m_stateRead(false), m_available(false)
+    : m_owner(owner), m_context(-1), m_handle(-1), m_count(VITA_TROPHY_DECLARED), m_serviceCount(0), m_stateRead(false), m_registering(false), m_registerFrames(0), m_available(false)
 {
     m_reason[0] = '\0';
 }
@@ -160,6 +160,8 @@ bool VitaPlatform::VitaTrophies::RegisterSet()
     _sceCommonDialogSetMagicNumber(&param.commonParam);
     param.context = m_context;
 
+    Engine_LogInfo("%s: opening the trophy setup dialog", m_owner->GetName());
+
     const int rc = sceNpTrophySetupDialogInit(&param);
     if (rc < 0)
     {
@@ -169,48 +171,47 @@ bool VitaPlatform::VitaTrophies::RegisterSet()
         return false;
     }
 
+    m_registering = true;
+    m_registerFrames = 0;
     VitaCommonDialog_SetActive(true);
-    Renderer* renderer = Engine_GetRenderer();
-
-    int frames = 0;
-    while (sceNpTrophySetupDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED)
-    {
-        if (++frames >= kSetupFrameLimit)
-        {
-            Engine_LogError("%s: the trophy setup dialog did not finish within %d frames", m_owner->GetName(), kSetupFrameLimit);
-            sceNpTrophySetupDialogAbort();
-            sceNpTrophySetupDialogTerm();
-            VitaCommonDialog_SetActive(false);
-            return false;
-        }
-
-        if (renderer)
-        {
-            renderer->BeginFrame();
-            renderer->EndFrame();
-        }
-        else
-        {
-            sceKernelDelayThread(kSetupPollMicros);
-        }
-    }
-
-    VitaCommonDialog_SetActive(false);
-
-    SceNpTrophySetupDialogResult result;
-    memset(&result, 0, sizeof(result));
-    const int resultRc = sceNpTrophySetupDialogGetResult(&result);
-    sceNpTrophySetupDialogTerm();
-
-    if (resultRc < 0 || result.result != SCE_COMMON_DIALOG_RESULT_OK)
-    {
-        Engine_LogError("%s: the trophy setup dialog closed without installing the set, call %08X result %d",
-                        m_owner->GetName(), static_cast<unsigned>(resultRc), static_cast<int>(result.result));
-        return false;
-    }
-
-    Engine_LogInfo("%s: the console installed the trophy set", m_owner->GetName());
+    Engine_LogInfo("%s: the trophy setup dialog is open; waiting for it to finish", m_owner->GetName());
     return true;
+}
+
+bool VitaPlatform::VitaTrophies::PumpStartup()
+{
+    if (!m_registering)
+        return false;
+
+    const int status = sceNpTrophySetupDialogGetStatus();
+    if (status == SCE_COMMON_DIALOG_STATUS_RUNNING && ++m_registerFrames < kSetupFrameLimit)
+        return true;
+
+    bool installed = false;
+    if (status == SCE_COMMON_DIALOG_STATUS_RUNNING)
+    {
+        Engine_LogError("%s: the trophy setup dialog did not finish within %d frames", m_owner->GetName(), kSetupFrameLimit);
+        sceNpTrophySetupDialogAbort();
+    }
+    else
+    {
+        SceNpTrophySetupDialogResult result;
+        memset(&result, 0, sizeof(result));
+        const int resultRc = sceNpTrophySetupDialogGetResult(&result);
+        installed = (resultRc >= 0 && result.result == SCE_COMMON_DIALOG_RESULT_OK);
+        if (installed)
+            Engine_LogInfo("%s: the console installed the trophy set", m_owner->GetName());
+        else
+            Engine_LogError("%s: the trophy setup dialog closed without installing the set, call %08X result %d",
+                            m_owner->GetName(), static_cast<unsigned>(resultRc), static_cast<int>(result.result));
+    }
+
+    sceNpTrophySetupDialogTerm();
+    VitaCommonDialog_SetActive(false);
+    m_registering = false;
+
+    FinishInit();
+    return false;
 }
 
 bool VitaPlatform::VitaTrophies::Init(const char* commId)
@@ -286,8 +287,17 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         return false;
     }
 
-    RegisterSet();
+    Engine_LogInfo("%s: bound to %s", m_owner->GetName(), id);
 
+    if (RegisterSet())
+        return true;
+
+    FinishInit();
+    return true;
+}
+
+void VitaPlatform::VitaTrophies::FinishInit()
+{
     if (sceNpTrophyCreateHandle(&m_handle) < 0)
     {
         SetReason("CONSOLE REFUSED A TROPHY HANDLE");
@@ -295,7 +305,7 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         sceNpTrophyDestroyContext(m_context);
         m_context = -1;
         sceNpTrophyTerm();
-        return false;
+        return;
     }
 
     // A failure here is not a count of zero: the console did not answer, and
@@ -329,7 +339,7 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
             m_context = -1;
             sceNpTrophyTerm();
             sceSysmoduleUnloadModule(SCE_SYSMODULE_NP_TROPHY);
-            return false;
+            return;
         }
     }
     else
@@ -343,8 +353,7 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
 
     m_reason[0] = '\0';
     m_available = true;
-    Engine_LogInfo("%s: trophies ready (%s, %u trophies)", m_owner->GetName(), id, m_count);
-    return true;
+    Engine_LogInfo("%s: trophies ready (%u trophies)", m_owner->GetName(), m_count);
 }
 
 void VitaPlatform::VitaTrophies::Shutdown()

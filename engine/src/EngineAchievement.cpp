@@ -35,6 +35,11 @@ namespace
     }
 }
 
+bool Engine_Achievement_PumpStartup()
+{
+    return (s_Loaded && s_Contract) ? s_Contract->PumpStartup() : false;
+}
+
 int32_t Engine_Achievement_GetConsoleCount() { return (s_Loaded && s_Contract) ? s_Contract->GetConsoleCount() : -1; }
 
 const char* Engine_Achievement_GetUnavailableReason()

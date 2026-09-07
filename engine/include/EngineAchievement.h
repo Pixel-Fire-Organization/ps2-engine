@@ -14,6 +14,12 @@ void Engine_Achievement_Close();
 /// @return True only when the subsystem is loaded and the platform can record.
 bool Engine_Achievement_IsAvailable();
 
+/// Advance whatever the platform could not finish while binding, now that
+/// frames are running. Called once per frame until it answers false.
+/// @return True while binding is still settling, so a caller that must wait for
+///         a settled answer knows not to read one yet.
+bool Engine_Achievement_PumpStartup();
+
 /// Record an achievement as earned. Idempotent, one-way, and safe on every platform.
 /// @param id Achievement identifier.
 /// @return Whether the platform accepted it.

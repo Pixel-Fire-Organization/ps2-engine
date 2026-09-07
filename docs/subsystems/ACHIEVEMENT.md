@@ -92,6 +92,20 @@ such a step. The request is allowed to fail without failing start: a set already
 installed needs nothing, and the state read that follows is what decides whether
 anything can be recorded.
 
+**That request cannot always be completed during start.** Where the platform
+answers it with a system dialog, the dialog advances only while the title is
+presenting frames, which start is not doing and cannot do — driving a renderer
+from inside subsystem bring-up runs it before the engine is in a state to render,
+and takes the process down. Start therefore only *opens* such a request, and the
+frame loop finishes it: the subsystem is asked once per frame whether it is still
+settling, and stops being asked once it says no.
+
+Nothing may report on achievements until that answer settles. A subsystem asked
+whether it is available before the set finished installing gets a truthful "no"
+that is about to stop being true, so anything shown to a player on the strength
+of it would be wrong. This is why the boot-time notice is raised from the frame
+loop rather than from start.
+
 There is no per-frame work. Shutdown releases whatever the platform opened.
 
 ## When not loaded

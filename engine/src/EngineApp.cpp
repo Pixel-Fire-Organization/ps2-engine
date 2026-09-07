@@ -1,5 +1,6 @@
 #include "EngineApp.h"
 #include "Engine.h"
+#include "EngineAchievement.h"
 #include "EngineCore.h"
 #include "EngineInput.h"
 #include "EngineNotice.h"
@@ -15,6 +16,7 @@
 // Internal exit flag — set by EngineApp_OnExitRequested (called by game::Exit()).
 // ---------------------------------------------------------------------------
 static bool s_ExitRequested = false;
+static bool s_StartupSettled = false;
 
 void EngineApp_OnExitRequested() { s_ExitRequested = true; }
 
@@ -31,10 +33,10 @@ bool EngineStart(const EngineConfig& config, Platform* platform, Renderer* rende
     }
 
     s_ExitRequested = false;
+    s_StartupSettled = false;
 
     // Gameplay (and UI) is authored in C++: hand control to the game module.
     Engine_LogInfo("EngineStart: token='%s' — starting C++ game module", config.resourceLocationToken ? config.resourceLocationToken : "<none>");
-    Engine_Notice_Evaluate();
     GameInit();
     return true;
 }
@@ -50,6 +52,14 @@ void EngineUpdate()
 
     Engine_Update();
     float dt = Engine_GetDeltaTime();
+
+    // A platform may finish binding to its achievement set only once frames are
+    // running, so nothing may report on it until it has stopped settling.
+    if (!s_StartupSettled && !Engine_Achievement_PumpStartup())
+    {
+        s_StartupSettled = true;
+        Engine_Notice_Evaluate();
+    }
 
     // 1. Gameplay Phase (C++) — the game module's per-frame update + draw submission.
     Ui_BeginFrame();

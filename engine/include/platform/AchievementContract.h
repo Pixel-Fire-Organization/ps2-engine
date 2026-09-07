@@ -41,6 +41,16 @@ public:
     ///         zero, and the two need telling apart.
     virtual int32_t GetConsoleCount() const = 0;
 
+    /// Advance whatever binding could not finish before frames were running.
+    ///
+    /// A platform may require the title to install its achievement set before
+    /// anything can be read or written, through a system dialog that only
+    /// advances while the title presents frames. That cannot happen during
+    /// start, so start opens it and this finishes it. Called once per frame
+    /// until it answers false, and never again after that.
+    /// @return True while binding is still settling.
+    virtual bool PumpStartup() { return false; }
+
     /// @return Whether anything can actually be recorded right now.
     virtual bool IsAvailable() const = 0;
 
