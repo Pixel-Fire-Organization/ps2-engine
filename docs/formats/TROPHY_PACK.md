@@ -44,7 +44,7 @@ and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 | 0x08 | `fileSize` | 8 | Total size of the container, 64-bit |
 | 0x10 | `entryCount` | 4 | Number of entries |
 | 0x14 | `entrySize` | 4 | Size of one entry, `0x40`, which is also where the table starts |
-| 0x18 | `devFlag` | 4 | Non-zero marks a development pack |
+| 0x18 | `devFlag` | 4 | Non-zero marks a pack whose payloads are in the clear |
 | 0x1C | `sha1` | 20 | Digest over the container, this field zeroed |
 | 0x30 | padding | 16 | Zero, to `0x40` |
 
@@ -136,6 +136,25 @@ LANG=1
 The identifier appears here as well as in both configuration files. Read off a
 registered set and reproduced byte for byte.
 
+## Encrypted and unencrypted packs
+
+**Every pack read off a retail title is encrypted end to end.** Its first four
+bytes differ from title to title, none of them the magic below, and the whole
+file measures at the maximum eight bits of entropy per byte. Nothing in it can be
+parsed with the layout above.
+
+A pack this build produces is in the clear: the entry names are readable and the
+configuration files are plain text. That is the intended arrangement, and the
+flag at `0x18` is what declares it. **A pack that leaves the flag zero claims to
+be the encrypted kind**, and a reader that believes it will decrypt what is
+already plain and reject the result. The flag is therefore set deliberately, and
+the digest recomputed after setting it, because the digest covers the header.
+
+This is also the practical limit on authoring a set for an unsigned title: the
+signature that binds a pack to a title can be disabled on the console, but no
+tool here can produce the encrypted form, so an unsigned title's pack has to be
+the unencrypted one.
+
 ## The magic value
 
 `0xDCA24D00`, big-endian like the rest of the header. This is settled, and the
@@ -213,8 +232,8 @@ checked against software that works.
 
 **No genuine retail pack has been round-tripped**, because retail packs are
 encrypted. The remaining unknowns are the meaning of the zero fields at `0x30`
-and `0x38` in each entry, the `devFlag`, and how a set with a platinum links its
-trophies to it.
+and `0x38` in each entry, and how a set with a platinum links its trophies to
+it.
 
 **Nothing here has run on hardware.** Acceptance by the console trophy service is
 unproven, and needs the player-installed plugin described in

@@ -464,6 +464,11 @@ TRP_VERSION = 2
 # Established by a reader that rejects anything else (TTEMMA/TRPWork) and by the
 # PS3/PS4 developer wikis. See docs/formats/TROPHY_PACK.md.
 TRP_MAGIC = 0xDCA24D00
+# Every pack read off a retail title is encrypted end to end; only the flag at
+# 0x18 distinguishes a pack whose payloads are in the clear. A pack that leaves
+# it zero claims to be the encrypted kind, and a reader that believes it decrypts
+# what is already plain. See docs/formats/TROPHY_PACK.md.
+TRP_DEV_FLAG = 1
 
 
 def trp_payloads(config, config_dir, conf_dir):
@@ -525,7 +530,7 @@ def emit_trp_index(config, config_dir, conf_dir, out_dir, magic=TRP_MAGIC):
         _write_bytes(os.path.join(payload_dir, name), blob)
 
     count = len(files)
-    header = (struct.pack(">IIQIII", magic, TRP_VERSION, 0, count, TRP_HEADER_SIZE, 0)
+    header = (struct.pack(">IIQIII", magic, TRP_VERSION, 0, count, TRP_HEADER_SIZE, TRP_DEV_FLAG)
               + b"\0" * 20 + b"\0" * 16)
     entries = b"".join(
         name.encode("ascii").ljust(TRP_NAME_SIZE, b"\0") + b"\0" * 28 for name, _ in files)
@@ -544,7 +549,29 @@ def pack_trp(trpwork, index_path):
     out = os.path.join(os.path.dirname(index_path), "TROPHY.TRP")
     if not os.path.exists(out):
         raise PackageError("TRPWork", "produced no container at {}: {}".format(out, output.strip()))
+    finalize_trp(out)
     return out
+
+
+def finalize_trp(path):
+    """Make sure the container still declares itself a development pack, and
+    carries a digest that matches.
+
+    The packer does not necessarily preserve the flag from the entry table it is
+    given, and the flag is what tells a reader the payloads are in the clear. The
+    digest covers the header, so setting the flag invalidates it; both are
+    computed here rather than left to be discovered on hardware.
+    """
+    with open(path, "rb") as fh:
+        data = bytearray(fh.read())
+
+    struct.pack_into(">I", data, 0x18, TRP_DEV_FLAG)
+    data[0x1C:0x30] = b"\0" * 20
+    data[0x1C:0x30] = hashlib.sha1(bytes(data)).digest()
+
+    with open(path, "wb") as fh:
+        fh.write(bytes(data))
+    return path
 
 def emit_ids(config, out_path):
     """A C++ header of trophy identifiers, generated from the same declaration
