@@ -164,6 +164,13 @@ bool VitaPlatform::VitaTrophies::RegisterSet()
     _sceCommonDialogSetMagicNumber(&param.commonParam);
     param.context = m_context;
 
+    SceCommonDialogConfigParam config;
+    sceCommonDialogConfigParamInit(&config);
+    const int configRc = sceCommonDialogSetConfigParam(&config);
+    if (configRc < 0)
+        Engine_LogError("%s: the common dialog service refused its configuration, code %08X", m_owner->GetName(),
+                        static_cast<unsigned>(configRc));
+
     Engine_LogInfo("%s: opening the trophy setup dialog", m_owner->GetName());
 
     const int rc = sceNpTrophySetupDialogInit(&param);
@@ -191,7 +198,8 @@ bool VitaPlatform::VitaTrophies::PumpStartup()
     if (status == SCE_COMMON_DIALOG_STATUS_RUNNING && ++m_registerFrames < kSetupFrameLimit)
     {
         if ((m_registerFrames % kSetupReportEvery) == 0)
-            Engine_LogInfo("%s: the trophy setup dialog is still running after %d frames", m_owner->GetName(), m_registerFrames);
+            Engine_LogInfo("%s: the trophy setup dialog is still running after %d frames; last hand-over returned %08X",
+                           m_owner->GetName(), m_registerFrames, static_cast<unsigned>(VitaCommonDialog_LastResult()));
         return true;
     }
 
@@ -202,8 +210,9 @@ bool VitaPlatform::VitaTrophies::PumpStartup()
 
     if (status == SCE_COMMON_DIALOG_STATUS_RUNNING)
     {
-        Engine_LogError("%s: the trophy setup dialog was still running after %d frames; status %d, result call %08X, result %d",
-                        m_owner->GetName(), kSetupFrameLimit, status, static_cast<unsigned>(resultRc), static_cast<int>(result.result));
+        Engine_LogError("%s: the trophy setup dialog was still running after %d frames; status %d, last hand-over %08X. "
+                        "A hand-over that never succeeds means the dialog is never being drawn, and it will wait forever.",
+                        m_owner->GetName(), kSetupFrameLimit, status, static_cast<unsigned>(VitaCommonDialog_LastResult()));
         sceNpTrophySetupDialogAbort();
     }
     else if (installed)

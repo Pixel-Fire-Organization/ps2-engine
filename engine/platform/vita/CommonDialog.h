@@ -13,3 +13,14 @@ void VitaCommonDialog_SetActive(bool active);
 
 /// @return Whether a dialog needs servicing this frame.
 bool VitaCommonDialog_IsActive();
+
+/// Record what handing this frame to the dialog service returned.
+///
+/// A dialog that is never serviced and one that is serviced and refuses look
+/// the same from outside: both sit running forever. This is the only thing that
+/// tells them apart, so it is kept rather than discarded.
+/// @param rc What the hand-over returned.
+void VitaCommonDialog_SetLastResult(int rc);
+
+/// @return What the last hand-over returned, or zero before there has been one.
+int VitaCommonDialog_LastResult();

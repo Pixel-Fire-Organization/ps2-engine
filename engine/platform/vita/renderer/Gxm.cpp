@@ -781,7 +781,7 @@ void GxmRenderer::EndFrame()
         dialogParam.renderTarget.height = GFX_SCREEN_HEIGHT;
         dialogParam.renderTarget.strideInPixels = kDisplayStride;
         dialogParam.displaySyncObject = back.sync;
-        sceCommonDialogUpdate(&dialogParam);
+        VitaCommonDialog_SetLastResult(sceCommonDialogUpdate(&dialogParam));
     }
 
     DisplayCallbackData callbackData;
