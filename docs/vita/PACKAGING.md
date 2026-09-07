@@ -129,17 +129,18 @@ the container identifier and is not normally needed; see
 [../formats/TROPHY_PACK.md](../formats/TROPHY_PACK.md).
 
 **A trophy set is registered when the title is installed, not when it runs.**
-There is no call to register one: the Vita API has `CreateContext`, `CreateHandle`
-and `UnlockTrophy`, but nothing corresponding to the PS3 `RegisterContext`. The
-system reads the pack out of the package at install time.
+There is no call to register one: the module exports fifteen functions and none
+of them registers a set, which both the firmware NID database and an independent
+reimplementation agree on. The system takes delivery of the pack out of the
+package.
 
-That has a consequence worth knowing before debugging anything: **installing an
-update over a title that was installed without trophies leaves the old, empty set
-registered.** Unlocks are then refused, and nothing about the running build
-explains why, because the build is correct. Delete the title from the console and
-install it again. The engine reports the mismatch -- how many trophies the console
-believes the set has against how many were packaged -- rather than leaving it to
-be guessed at.
+The console says so when it has not. Errors `0x80551610` and `0x80551611` are
+"not registered" and "already registered"; a code in that group coming back from
+reading trophy state means the console recognises the identifier and holds no set
+behind it. Every later call is refused against nothing. The remedy is to delete
+the title and install it again **with the trophy plugin already active**, because
+registration happens once, at install, and an unsigned title needs the plugin
+present at that moment.
 
 **A title that ships no trophy data declares none.** The count the engine
 reports is what was packaged, so it does not drop to zero merely because a

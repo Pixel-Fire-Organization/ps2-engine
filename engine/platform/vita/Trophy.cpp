@@ -50,6 +50,34 @@ int sceNpTrophyGetTrophyUnlockState(SceNpTrophyContext context, SceNpTrophyHandl
 namespace
 {
     const unsigned kTrophyInvalidArgument = 0x80551604u;
+    const unsigned kTrophyNotRegistered = 0x80551610u;
+    const unsigned kTrophyRegistrationLast = 0x80551612u;
+
+    /// Name a trophy error where the value is established, rather than leaving
+    /// a bare number the reader has to look up.
+    /// @param rc The value the service returned.
+    /// @return A short description, or null when the value is not known.
+    const char* TrophyErrorName(int rc)
+    {
+        switch (static_cast<unsigned>(rc))
+        {
+        case 0x80551601u:
+            return "NOT INITIALIZED";
+        case 0x80551604u:
+            return "INVALID ARGUMENT";
+        case 0x80551609u:
+            return "INVALID CONTEXT";
+        case 0x80551610u:
+            return "THE SET IS NOT REGISTERED";
+        case 0x80551611u:
+            return "THE SET IS ALREADY REGISTERED";
+        case 0x80551612u:
+            return "THE SET IS NOT REGISTERED ON THIS CONSOLE";
+        default:
+            break;
+        }
+        return nullptr;
+    }
 
 
 
@@ -179,9 +207,29 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
 
     if (!m_stateRead)
     {
-        Engine_LogError("%s: the console would not report trophy state, code %08X. It accepted the identifier but holds "
-                        "no data for this set, which is what an unlock is then refused against.",
-                        m_owner->GetName(), static_cast<unsigned>(stateRc));
+        const char* named = TrophyErrorName(stateRc);
+        Engine_LogError("%s: the console would not report trophy state, code %08X%s%s. It accepted the identifier but "
+                        "holds no data behind it, which is what an unlock is then refused against.",
+                        m_owner->GetName(), static_cast<unsigned>(stateRc), named ? " - " : "", named ? named : "");
+
+        // A registration error is the console answering, not us inferring: it
+        // holds no set, so nothing can be recorded and saying otherwise would
+        // offer the player buttons that cannot work.
+        const unsigned code = static_cast<unsigned>(stateRc);
+        if (code >= kTrophyNotRegistered && code <= kTrophyRegistrationLast)
+        {
+            SetReason("THE SET IS NOT REGISTERED ON THIS CONSOLE (%08X). A VITA REGISTERS A SET WHEN THE TITLE IS "
+                      "INSTALLED - THERE IS NO CALL TO DO IT LATER. DELETE THE TITLE AND INSTALL IT AGAIN WITH THE "
+                      "PLUGIN ALREADY ACTIVE. TROPHY PACK ON DISC: %s",
+                      code, PackPresent() ? "FOUND" : "MISSING");
+            sceNpTrophyDestroyHandle(m_handle);
+            m_handle = -1;
+            sceNpTrophyDestroyContext(m_context);
+            m_context = -1;
+            sceNpTrophyTerm();
+            sceSysmoduleUnloadModule(SCE_SYSMODULE_NP_TROPHY);
+            return false;
+        }
     }
     else
     {
