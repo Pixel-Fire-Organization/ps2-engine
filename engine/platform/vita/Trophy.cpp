@@ -241,7 +241,8 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
     memset(&firmware, 0, sizeof(firmware));
     firmware.size = sizeof(firmware);
     if (sceKernelGetSystemSwVersion(&firmware) >= 0)
-        Engine_LogInfo("%s: system software %s; an unsigned title needs a trophy plugin built for this exact version",
+        Engine_LogInfo("%s: system software reports %s, which is the spoofed version where one is set and not "
+                       "necessarily what is running",
                        m_owner->GetName(), firmware.versionString);
 
     if (sceNpTrophyInit(nullptr) < 0)

@@ -145,14 +145,21 @@ Attempting registration is not required to succeed. A set already installed
 needs nothing, so a refusal is recorded and the state read that follows stays
 the test of whether trophies can be recorded.
 
-**The plugin is firmware-specific, and says nothing when it is not.** It works by
-patching the system shell at fixed addresses, which are different in every
-firmware build, so a release supports an enumerated list of versions and does
-nothing useful outside it. A console outside that list looks exactly like a
-console without the plugin, or worse, and no message distinguishes the two.
-Start therefore logs the system software version next to the trophy bring-up, so
-the question is answered by the log rather than by asking someone to read a
-settings menu.
+**The plugin is firmware-specific, and identifies the firmware by the shell
+rather than by its version.** It patches the system shell at fixed addresses,
+which differ in every build, and works out which set to use from the identity of
+the shell module itself. That is deliberate and it matters here: the reported
+system software version can be spoofed, and on a console where it is, the
+version is not evidence about the plugin either way.
+
+It also means a plugin that does not recognise the shell **fails to load at
+all** rather than loading and misbehaving. So a title that gets as far as
+binding to its communication identifier has already proved the plugin is loaded
+and matched. Suspecting the firmware after that point is wasted effort.
+
+The version is logged at trophy bring-up anyway, because it belongs in a fault
+report, but it is logged as what the system reports rather than as what is
+running.
 
 The console says when nothing is registered. Errors `0x80551610` and `0x80551611`
 are "not registered" and "already registered"; a code in that group coming back
