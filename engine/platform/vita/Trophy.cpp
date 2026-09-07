@@ -78,7 +78,8 @@ int sceNpTrophySetupDialogTerm(void);
 namespace
 {
     const uint32_t kSetupPollMicros = 16000;
-    const int kSetupFrameLimit = 1800;
+    const int kSetupFrameLimit = 300;
+    const int kSetupReportEvery = 60;
 
     const unsigned kTrophyInvalidArgument = 0x80551604u;
     const unsigned kTrophyNotRegistered = 0x80551610u;
@@ -188,7 +189,11 @@ bool VitaPlatform::VitaTrophies::PumpStartup()
 
     const int status = sceNpTrophySetupDialogGetStatus();
     if (status == SCE_COMMON_DIALOG_STATUS_RUNNING && ++m_registerFrames < kSetupFrameLimit)
+    {
+        if ((m_registerFrames % kSetupReportEvery) == 0)
+            Engine_LogInfo("%s: the trophy setup dialog is still running after %d frames", m_owner->GetName(), m_registerFrames);
         return true;
+    }
 
     SceNpTrophySetupDialogResult result;
     memset(&result, 0, sizeof(result));
