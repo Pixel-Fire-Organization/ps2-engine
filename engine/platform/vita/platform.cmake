@@ -172,7 +172,7 @@ function(platform_configure PLATFORM)
         SceLibKernel_stub SceSysmem_stub SceKernelThreadMgr_stub
         SceIofilemgr_stub SceSysmodule_stub SceKernelDmacMgr_stub
         SceAppMgr_stub SceProcessmgr_stub ScePower_stub SceCommonDialog_stub
-        SceNpTrophy_stub
+        SceNpTrophy_stub SceNpManager_stub SceNet_stub SceNetCtl_stub
         m
         PARENT_SCOPE)
 endfunction()

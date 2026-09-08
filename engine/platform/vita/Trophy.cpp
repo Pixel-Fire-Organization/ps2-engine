@@ -18,6 +18,8 @@ extern "C" {
 #include <psp2/common_dialog.h>
 #include <psp2/kernel/modulemgr.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/net/net.h>
+#include <psp2/np/mgr.h>
 #include <psp2/np/common.h>
 #include <psp2/sysmodule.h>
 }
@@ -78,6 +80,12 @@ int sceNpTrophySetupDialogTerm(void);
 namespace
 {
     const uint32_t kSetupPollMicros = 16000;
+
+    // The trophy service is one face of the network platform, and a title that
+    // brings up only the trophy module has brought up half of it. Reserved once
+    // and never grown, like everything else this engine allocates.
+    char s_NetMemory[16 * 1024];
+
     const int kSetupFrameLimit = 300;
     const int kSetupReportEvery = 60;
 
@@ -104,7 +112,7 @@ namespace
         case 0x80551611u:
             return "THE SET IS ALREADY REGISTERED";
         case 0x80551612u:
-            return "THE SET IS NOT REGISTERED ON THIS CONSOLE";
+            return "NO SET IS REGISTERED FOR THIS TITLE";
         default:
             break;
         }
@@ -250,6 +258,62 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         return false;
     }
 
+    SceNpCommunicationId comm;
+    memset(&comm, 0, sizeof(comm));
+
+    const char* separator = strchr(id, '_');
+    const size_t idLength = separator ? static_cast<size_t>(separator - id) : strlen(id);
+    if (idLength != sizeof(comm.data))
+    {
+        SetReason("THE PACKAGED COMMUNICATION ID IS MALFORMED");
+        Engine_LogError("%s: communication id '%s' is not nine characters and a set number", m_owner->GetName(), id);
+        return false;
+    }
+
+    memcpy(comm.data, id, sizeof(comm.data));
+    comm.num = separator ? static_cast<uint8_t>(atoi(separator + 1)) : 0;
+
+    SceNpCommunicationSignature sign;
+    memset(&sign, 0, sizeof(sign));
+
+    SceNpCommunicationPassphrase pass;
+    memset(&pass, 0, sizeof(pass));
+
+    if (sceSysmoduleLoadModule(SCE_SYSMODULE_NET) >= 0)
+    {
+        SceNetInitParam netParam;
+        memset(&netParam, 0, sizeof(netParam));
+        netParam.memory = s_NetMemory;
+        netParam.size = static_cast<int>(sizeof(s_NetMemory));
+        netParam.flags = 0;
+        const int netRc = sceNetInit(&netParam);
+        Engine_LogInfo("%s: network for the trophy service returned %08X", m_owner->GetName(),
+                       static_cast<unsigned>(netRc));
+    }
+
+    if (sceSysmoduleLoadModule(SCE_SYSMODULE_NP_BASIC) < 0)
+        Engine_LogInfo("%s: the network platform base module would not load", m_owner->GetName());
+
+    // The trophy service consumes an identity the network platform holds; it does
+    // not establish one. A title that starts only the trophy module has a context
+    // that opens and an identity that means nothing behind it.
+    if (sceSysmoduleLoadModule(SCE_SYSMODULE_NP) < 0)
+    {
+        Engine_LogError("%s: the network platform manager would not load", m_owner->GetName());
+    }
+    else
+    {
+        SceNpCommunicationConfig config;
+        memset(&config, 0, sizeof(config));
+        config.npCommId = &comm;
+        config.npCommPass = &pass;
+        config.npCommSign = &sign;
+
+        const int npRc = sceNpInit(&config, nullptr);
+        Engine_LogInfo("%s: network platform identity for %s returned %08X", m_owner->GetName(), id,
+                       static_cast<unsigned>(npRc));
+    }
+
     if (sceSysmoduleLoadModule(SCE_SYSMODULE_NP_TROPHY) < 0)
     {
         SetReason("CONSOLE TROPHY MODULE UNAVAILABLE");
@@ -271,25 +335,6 @@ bool VitaPlatform::VitaTrophies::Init(const char* commId)
         Engine_LogInfo("%s: sceNpTrophyInit failed; trophies are off", m_owner->GetName());
         return false;
     }
-
-    SceNpCommunicationId comm;
-    memset(&comm, 0, sizeof(comm));
-
-    const char* separator = strchr(id, '_');
-    const size_t idLength = separator ? static_cast<size_t>(separator - id) : strlen(id);
-    if (idLength != sizeof(comm.data))
-    {
-        SetReason("THE PACKAGED COMMUNICATION ID IS MALFORMED");
-        Engine_LogError("%s: communication id '%s' is not nine characters and a set number", m_owner->GetName(), id);
-        sceNpTrophyTerm();
-        return false;
-    }
-
-    memcpy(comm.data, id, sizeof(comm.data));
-    comm.num = separator ? static_cast<uint8_t>(atoi(separator + 1)) : 0;
-
-    SceNpCommunicationSignature sign;
-    memset(&sign, 0, sizeof(sign));
 
     const int rc = sceNpTrophyCreateContext(&m_context, &comm, &sign, 0);
     if (rc < 0)
@@ -339,8 +384,9 @@ void VitaPlatform::VitaTrophies::FinishInit()
     if (!m_stateRead)
     {
         const char* named = TrophyErrorName(stateRc);
-        Engine_LogError("%s: the console would not report trophy state, code %08X%s%s. It accepted the identifier but "
-                        "holds no data behind it, which is what an unlock is then refused against.",
+        Engine_LogError("%s: the console would not report trophy state, code %08X%s%s. Registration is per title, so "
+                        "this says nothing about whether the set exists on the console - a set another title registered "
+                        "is still unreadable here.",
                         m_owner->GetName(), static_cast<unsigned>(stateRc), named ? " - " : "", named ? named : "");
 
         // A registration error is the console answering, not us inferring: it
@@ -349,8 +395,8 @@ void VitaPlatform::VitaTrophies::FinishInit()
         const unsigned code = static_cast<unsigned>(stateRc);
         if (code >= kTrophyNotRegistered && code <= kTrophyRegistrationLast)
         {
-            SetReason("THE SET IS NOT REGISTERED ON THIS CONSOLE (%08X). THE GAME ASKED THE CONSOLE TO INSTALL IT "
-                      "AND IT DID NOT. TROPHY PACK ON DISC: %s",
+            SetReason("THIS TITLE HAS NO REGISTERED TROPHY SET (%08X). IT ASKED THE CONSOLE TO INSTALL ONE AND THE "
+                      "CONSOLE REFUSED. TROPHY PACK ON DISC: %s",
                       code, PackPresent() ? "FOUND" : "MISSING");
             sceNpTrophyDestroyHandle(m_handle);
             m_handle = -1;
