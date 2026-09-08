@@ -161,6 +161,13 @@ The version is logged at trophy bring-up anyway, because it belongs in a fault
 report, but it is logged as what the system reports rather than as what is
 running.
 
+**No set produced by this build has ever registered on hardware.** What was
+tried, and what each attempt ruled out, is in
+[../formats/TROPHY_PACK.md](../formats/TROPHY_PACK.md). The engine treats this as
+a platform that answers "no" — the game runs, unlocks are refused, and the player
+is told once. That path is exercised on every platform without achievements, so
+it is not a special case.
+
 The console says when nothing is registered. Errors `0x80551610` and `0x80551611`
 are "not registered" and "already registered"; a code in that group coming back
 from reading trophy state means the console recognises the identifier and holds

@@ -389,6 +389,12 @@ def _xml_escape(text):
 # contributes to a platinum. A set that has one links to it instead, and what
 # that link looks like has not been seen, so it is not written.
 TROPHY_NO_PLATINUM = -1
+# A registered configuration carries a signature as a comment ahead of the root
+# element, 320 hex characters. Nothing here can produce a real one, and a console
+# that checks it refuses the pack either way; what its absence changes is that the
+# file does not parse at all. A placeholder of the right shape is written so the
+# structure is right and only the authenticity is missing.
+TROPHY_SIGNATURE_DIGITS = 320
 
 
 def trophy_pack_path(comm):
@@ -425,8 +431,10 @@ def emit_trophy_conf(config, out_dir):
     name = _xml_escape(config["title"]["name"])
     detail = _xml_escape(trophies.get("detail") or config["title"]["name"])
 
+    signature = "0" * TROPHY_SIGNATURE_DIGITS
+
     def head():
-        return ['<?xml version="1.0" encoding="utf-8"?>',
+        return [f'<!--Sce-Np-Trophy-Signature: {signature}-->',
                 '<trophyconf version="1.1" platform="psp2">',
                 f' <npcommid>{comm}</npcommid>',
                 ' <trophyset-version>01.00</trophyset-version>',
@@ -436,10 +444,14 @@ def emit_trophy_conf(config, out_dir):
 
     conf = head()
     strings = head()
+    platinum = next((e["id"] for e in entries if e["grade"] == "platinum"), None)
+
     for entry in entries:
         hidden = "yes" if entry.get("hidden") else "no"
         ttype = entry["grade"][0].upper()
-        attrs = f'id="{entry["id"]:03d}" hidden="{hidden}" ttype="{ttype}" pid="{TROPHY_NO_PLATINUM}"'
+        contributes = platinum is not None and entry["id"] != platinum
+        pid = f"{platinum:03d}" if contributes else str(TROPHY_NO_PLATINUM)
+        attrs = f'id="{entry["id"]:03d}" hidden="{hidden}" ttype="{ttype}" pid="{pid}"'
         conf.append(f' <trophy {attrs}/>')
         strings.append(f' <trophy {attrs}>')
         strings.append(f'  <name>{_xml_escape(entry["name"])}</name>')
@@ -452,7 +464,6 @@ def emit_trophy_conf(config, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     _write(os.path.join(out_dir, "TROPCONF.SFM"), "\n".join(conf) + "\n")
     _write(os.path.join(out_dir, "TROP.SFM"), "\n".join(strings) + "\n")
-    _write_crlf(os.path.join(out_dir, "TRPPARAM.INI"), TRPPARAM_INI.format(comm=comm))
     return out_dir
 
 
@@ -464,11 +475,13 @@ TRP_VERSION = 2
 # Established by a reader that rejects anything else (TTEMMA/TRPWork) and by the
 # PS3/PS4 developer wikis. See docs/formats/TROPHY_PACK.md.
 TRP_MAGIC = 0xDCA24D00
-# Every pack read off a retail title is encrypted end to end; only the flag at
-# 0x18 distinguishes a pack whose payloads are in the clear. A pack that leaves
-# it zero claims to be the encrypted kind, and a reader that believes it decrypts
-# what is already plain. See docs/formats/TROPHY_PACK.md.
-TRP_DEV_FLAG = 1
+# Left clear, as the reference builder for unencrypted packs leaves it. Setting
+# it was an inference from the field's name and changed nothing on hardware.
+TRP_DEV_FLAG = 0
+# The entry field at 0x30 is a four-byte type tag, 1 for the configuration files
+# and 0 for the icons. Read off a pack the reference builder produced.
+TRP_TYPE_SFM = 1
+TRP_TYPE_ICON = 0
 
 
 def trp_payloads(config, config_dir, conf_dir):
@@ -481,7 +494,7 @@ def trp_payloads(config, config_dir, conf_dir):
     """
     trophies = config["trophies"]
     files = []
-    for name in ("TROPCONF.SFM", "TROP.SFM", "TRPPARAM.INI"):
+    for name in ("TROPCONF.SFM", "TROP.SFM"):
         with open(os.path.join(conf_dir, name), "rb") as fh:
             files.append((name, fh.read()))
 
@@ -566,6 +579,13 @@ def finalize_trp(path):
         data = bytearray(fh.read())
 
     struct.pack_into(">I", data, 0x18, TRP_DEV_FLAG)
+
+    count, entry_size = struct.unpack_from(">I", data, 0x10)[0], struct.unpack_from(">I", data, 0x14)[0]
+    for index in range(count):
+        base = TRP_HEADER_SIZE + index * entry_size
+        name = bytes(data[base:base + 32]).rstrip(b"\0").decode("ascii", "replace")
+        struct.pack_into(">I", data, base + 0x30, TRP_TYPE_SFM if name.endswith(".SFM") else TRP_TYPE_ICON)
+
     data[0x1C:0x30] = b"\0" * 20
     data[0x1C:0x30] = hashlib.sha1(bytes(data)).digest()
 

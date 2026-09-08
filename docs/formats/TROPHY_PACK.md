@@ -44,7 +44,7 @@ and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 | 0x08 | `fileSize` | 8 | Total size of the container, 64-bit |
 | 0x10 | `entryCount` | 4 | Number of entries |
 | 0x14 | `entrySize` | 4 | Size of one entry, `0x40`, which is also where the table starts |
-| 0x18 | `devFlag` | 4 | Non-zero marks a pack whose payloads are in the clear |
+| 0x18 | `devFlag` | 4 | Zero in every pack observed, produced or retail |
 | 0x1C | `sha1` | 20 | Digest over the container, this field zeroed |
 | 0x30 | padding | 16 | Zero, to `0x40` |
 
@@ -55,7 +55,8 @@ and installed is in [vita/PACKAGING.md](../vita/PACKAGING.md).
 | 0x00 | `name` | 0x20 | NUL-padded file name, no directory component |
 | 0x20 | `offset` | 8 | Payload start, from the beginning of the container |
 | 0x28 | `size` | 8 | Payload length in bytes |
-| 0x30 | `type` | 8 | Zero in observed packs |
+| 0x30 | `type` | 4 | `1` for the configuration files, `0` for the icons |
+| 0x34 | reserved | 12 | Zero |
 | 0x38 | reserved | 8 | Zero |
 
 `entrySize` is `0x40`, and the header is also `0x40`, so the entry table begins
@@ -84,7 +85,6 @@ and have nothing to do with each other, so this is the first thing to check.
 |---|---|---|
 | `TROPCONF.SFM` | Yes | The trophy set: identifiers, grades, hidden flags |
 | `TROP.SFM` | Yes | Localised names and descriptions |
-| `TRPPARAM.INI` | Yes | Set parameters; see below |
 | `ICON0.PNG` | Yes | The trophy-set icon |
 | `TROP000.PNG` … | One per trophy | Per-trophy icons, numbered to match identifiers |
 
@@ -112,19 +112,28 @@ answer.
 
 The root element carries a version and the platforms the set is valid for, the
 parental level names the licence area it applies to, and every trophy declares
-the platinum it contributes to. A set with no platinum uses `-1` throughout. What
-a set *with* a platinum puts there has not been observed and is therefore not
-written; the platinum in a generated set is presently unlinked.
+the platinum it contributes to. **A trophy that contributes names the platinum's
+identifier; the platinum itself uses `-1`**, as does every trophy in a set that
+has no platinum.
 
-A registered configuration also carries a signature, as an XML comment ahead of
-the root element. Nothing here can produce one. An unsigned title needs the
-signature check disabled regardless, which is what the plugin described in
-[../vita/PACKAGING.md](../vita/PACKAGING.md) does.
+A configuration carries a signature as an XML comment ahead of the root element,
+**320 hexadecimal characters**, before any XML declaration — there is none.
+Nothing here can produce a genuine one, and a placeholder of the right length and
+alphabet is written instead.
 
-### `TRPPARAM.INI`
+Its shape matters separately from its authenticity. A pack with no signature
+element at all, one with a placeholder of the right length in the wrong alphabet,
+and one with well-formed hexadecimal are each refused *differently*, which is how
+the field's length and encoding were established.
 
-Four keys, **CRLF line endings and a byte order mark**, both of which are part of
-the format rather than incidental:
+### `TRPPARAM.INI` is not part of the pack
+
+A **registered** set carries one, alongside the extracted configuration and
+icons. A pack does not: the console writes it when it installs the set. It is
+recorded here because finding it on a console and putting it in the container is
+an easy mistake, and it was made here first.
+
+Four keys, CRLF line endings and a byte order mark:
 
 ```
 TROPSYSVER=1.0
@@ -132,9 +141,6 @@ NPCOMMID=<the communication identifier>
 TROPAPPVER=1.0
 LANG=1
 ```
-
-The identifier appears here as well as in both configuration files. Read off a
-registered set and reproduced byte for byte.
 
 ## Encrypted and unencrypted packs
 
@@ -227,6 +233,44 @@ An independent reimplementation of the platform was the source for both, which i
 worth recording as a method: where a vendor SDK ships no header, an emulator that
 runs retail software is a better authority than a search result, because it is
 checked against software that works.
+
+## What a console does with a pack this build produces
+
+**It refuses it, and the refusal is not about the pack.** This is recorded so the
+next attempt starts from what was established rather than repeating it.
+
+Tested on retail firmware 3.65 with the signature-check plugin loaded and
+verified working:
+
+| pack | outcome |
+|---|---|
+| this build's, no signature element | refused |
+| the reference builder's, placeholder in the wrong alphabet | refused as corrupt |
+| the reference builder's, well-formed hexadecimal | refused as corrupt |
+| the same, marked as a development pack | refused as corrupt |
+| **a genuine encrypted retail pack, under its own identifier** | **refused** |
+
+A genuine pack failing is what settles it: no pack this build could author would
+have worked, and the difference is the **title**, not the container.
+
+What was ruled out, each by its own evidence:
+
+- **The plugin.** With it removed, binding to the set fails earlier and
+  differently. It is loaded and doing its job.
+- **The engine.** A minimal standalone program reproduces the same three
+  successes and the same refusal, with none of this engine present.
+- **The network platform.** Bringing up the network, the platform base module and
+  the platform *identity* — which neither implementation had done — all succeed,
+  and change nothing.
+- **Leftovers.** No trace of the set exists in either configuration store, the
+  data store, the trophy database or the title's own directory.
+- **The registration dialog.** It is drawn and serviced correctly, every frame,
+  and refuses. Skipping it entirely produces the same refusal.
+
+What remains is that a set must be **registered to the running title**, only the
+system dialog registers one, and it accepts nothing this build can produce. The
+error a title sees afterwards says only that *it* has no set — never whether one
+exists on the console.
 
 ## Still unverified
 
