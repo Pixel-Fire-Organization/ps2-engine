@@ -51,6 +51,36 @@ add_custom_target(ecs-generate
     DEPENDS "${ECS_GEN_DIR}/EcsComponents.h" "${ECS_GEN_DIR}/EcsSpawn.cpp"
 )
 
+# --- Achievement code generation (shared by every platform) -----------------
+# game/achievements.json is the single source of truth for the set. The enum is
+# what game code names an achievement by; the table is what the engine reads to
+# show one. Generating at build time is what keeps the declaration, the engine
+# and every platform's packaging describing one set.
+set(ACHV_GEN_DIR "${CMAKE_BINARY_DIR}/generated/achievements" CACHE INTERNAL "")
+set(ACHV_JSON   "${CMAKE_CURRENT_SOURCE_DIR}/achievements.json")
+set(ACHV_GEN_PY "${CMAKE_SOURCE_DIR}/tools/achievements.py")
+
+add_custom_command(
+    OUTPUT  "${ACHV_GEN_DIR}/AchievementIds.h"
+            "${ACHV_GEN_DIR}/AchievementTable.cpp"
+    COMMAND ${PYTHON3_BIN} "${ACHV_GEN_PY}"
+            --declaration "${ACHV_JSON}"
+            --emit-ids   "${ACHV_GEN_DIR}/AchievementIds.h"
+            --emit-table "${ACHV_GEN_DIR}/AchievementTable.cpp"
+    DEPENDS "${ACHV_JSON}" "${ACHV_GEN_PY}"
+    COMMENT "Generating achievements (AchievementIds.h, AchievementTable.cpp) from achievements.json"
+    VERBATIM
+)
+set_source_files_properties(
+    "${ACHV_GEN_DIR}/AchievementIds.h"
+    "${ACHV_GEN_DIR}/AchievementTable.cpp"
+    PROPERTIES GENERATED TRUE
+)
+
+add_custom_target(achievements-generate
+    DEPENDS "${ACHV_GEN_DIR}/AchievementIds.h" "${ACHV_GEN_DIR}/AchievementTable.cpp"
+)
+
 # --- Stage 3: cook (per platform) -------------------------------------------
 # Cooking is NOT shared: the right encoding is a hardware question, so each
 # platform bakes from its own cook list into its own tree. See docs/PIPELINE.md.
@@ -113,8 +143,11 @@ function(game_add_executable PLATFORM ENGINE_TARGET OUT_TARGET OUT_DIST_DIR)
     # GENERATED is a directory-scoped property, so re-assert it here: this
     # function runs in the root scope, which has not seen the custom command.
     set_source_files_properties("${ECS_GEN_DIR}/EcsSpawn.cpp" PROPERTIES GENERATED TRUE)
+    set_source_files_properties("${ACHV_GEN_DIR}/AchievementTable.cpp" PROPERTIES GENERATED TRUE)
 
-    add_executable(${_target} EXCLUDE_FROM_ALL ${GAME_SOURCES} "${ECS_GEN_DIR}/EcsSpawn.cpp")
+    add_executable(${_target} EXCLUDE_FROM_ALL ${GAME_SOURCES}
+        "${ECS_GEN_DIR}/EcsSpawn.cpp"
+        "${ACHV_GEN_DIR}/AchievementTable.cpp")
 
     # SUFFIX "" because PLATFORM_<P>_EXE is the complete filename: CMake would
     # otherwise append its own platform suffix and produce game.exe.exe.
@@ -124,10 +157,10 @@ function(game_add_executable PLATFORM ENGINE_TARGET OUT_TARGET OUT_DIST_DIR)
         SUFFIX ""
         RUNTIME_OUTPUT_DIRECTORY "${_dist}"
     )
-    target_include_directories(${_target} PRIVATE "${ECS_GEN_DIR}")
+    target_include_directories(${_target} PRIVATE "${ECS_GEN_DIR}" "${ACHV_GEN_DIR}")
     target_link_libraries(${_target} PRIVATE ${ENGINE_TARGET})
     target_compile_options(${_target} PRIVATE -Wall -Wextra -Werror)
-    add_dependencies(${_target} ecs-generate stage-assets package-${_lower})
+    add_dependencies(${_target} ecs-generate achievements-generate stage-assets package-${_lower})
 
     set(${OUT_TARGET} "${_target}" PARENT_SCOPE)
     set(${OUT_DIST_DIR} "${_dist}" PARENT_SCOPE)

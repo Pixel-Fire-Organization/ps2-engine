@@ -119,6 +119,30 @@ else()
 endif()
 
 
+find_program(PYTHON3_BIN python3 REQUIRED)
+
+# --- Title identity ---------------------------------------------------------
+# game/title.json is the single source of who made the title and what each
+# platform files it under. A platform builds its writable-storage location from
+# this, so the identity a console shows and the identity a save is filed under
+# cannot disagree.
+set(TITLE_GEN_DIR "${CMAKE_BINARY_DIR}/generated/title" CACHE INTERNAL "")
+set(TITLE_JSON   "${CMAKE_SOURCE_DIR}/game/title.json")
+set(TITLE_GEN_PY "${CMAKE_SOURCE_DIR}/tools/title.py")
+
+add_custom_command(
+    OUTPUT  "${TITLE_GEN_DIR}/TitleInfo.h"
+    COMMAND ${PYTHON3_BIN} "${TITLE_GEN_PY}"
+            --declaration "${TITLE_JSON}"
+            --emit-header "${TITLE_GEN_DIR}/TitleInfo.h"
+    DEPENDS "${TITLE_JSON}" "${TITLE_GEN_PY}"
+    COMMENT "Generating TitleInfo.h from title.json"
+    VERBATIM
+)
+set_source_files_properties("${TITLE_GEN_DIR}/TitleInfo.h" PROPERTIES GENERATED TRUE)
+add_custom_target(title-generate DEPENDS "${TITLE_GEN_DIR}/TitleInfo.h")
+
+
 # Build the engine library for one platform. That platform.cmake fragment has
 # already run and set ENGINE_PLATFORM_<P>_SOURCES / _LIBS / _DEFINES / _INCLUDES.
 function(engine_add_library PLATFORM OUT_TARGET)
@@ -140,8 +164,10 @@ function(engine_add_library PLATFORM OUT_TARGET)
     target_include_directories(${_target} PUBLIC
         "${ENGINE_INCLUDE_DIR}"
         "${ENGINE_DEBUG_INCLUDE_DIR}"
+        "${TITLE_GEN_DIR}"
         "${_variantDir}"
     )
+    add_dependencies(${_target} title-generate)
     if(_baseDir)
         target_include_directories(${_target} PUBLIC "${_baseDir}")
     endif()

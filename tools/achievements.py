@@ -16,8 +16,6 @@ import json
 import os
 import sys
 
-# The identifier is one byte and the record is a fixed bitfield, so the ceiling
-# is a format constant rather than a preference. It must match the engine's.
 ACHV_MAX_ENTRIES = 128
 
 GRADES = ("platinum", "gold", "silver", "bronze")
