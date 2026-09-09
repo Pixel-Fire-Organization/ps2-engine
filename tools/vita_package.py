@@ -32,9 +32,13 @@ import struct
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import title as title_declaration
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "game", "platform", "vita", "package.json")
 DEFAULT_SCHEMA = os.path.join(PROJECT_ROOT, "game", "platform", "package.schema.json")
+DEFAULT_TITLE = os.path.join(PROJECT_ROOT, "game", "title.json")
 
 ACHV_MAX_ENTRIES = 128
 
@@ -59,14 +63,33 @@ class PackageError(Exception):
         self.message = message
 
 
-def load_config(path):
+def load_config(path, title_path=None):
+    """Read the package config and fold in the title's identity.
+
+    @param path The platform package config.
+    @param title_path The shared title declaration; defaults to the game's.
+    @return The config, with a 'title' block taken from the shared declaration.
+    """
     if not os.path.exists(path):
         raise PackageError(os.path.basename(path), f"no package config at {path}")
     with open(path, "r", encoding="utf-8") as fh:
         try:
-            return json.load(fh)
+            config = json.load(fh)
         except json.JSONDecodeError as exc:
             raise PackageError(os.path.basename(path), f"invalid JSON: {exc}") from exc
+
+    declaration_path = title_path or DEFAULT_TITLE
+    try:
+        declaration = title_declaration.load(declaration_path)
+        config["title"] = {
+            "id": title_declaration.platform_id(declaration, "vita", declaration_path),
+            "name": declaration["name"],
+            "version": declaration["version"],
+        }
+    except title_declaration.TitleError as exc:
+        raise PackageError(os.path.basename(declaration_path), str(exc)) from exc
+
+    return config
 
 
 def deep_merge(base, override):

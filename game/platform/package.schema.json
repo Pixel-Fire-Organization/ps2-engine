@@ -21,7 +21,7 @@
         "id": {
           "type": "string",
           "pattern": "^[A-Z]{4}[0-9]{5}$",
-          "description": "Nine characters: four author characters then five digits. Also names the writable data directory."
+          "description": "Nine characters: four author characters then five digits. Also names the writable data directory. Supplied by the shared title declaration, not written here; a variant may still override the name."
         },
         "name": {
           "type": "string",

@@ -3,12 +3,6 @@
   "platform": "vita",
   "description": "Title identity, store-front presentation and achievements for the Vita family. Describes the game, not the hardware - the cook list in engine/platform/vita/ is the hardware half. See docs/vita/PACKAGING.md.",
 
-  "title": {
-    "id": "PSEN00001",
-    "name": "PS2 Engine",
-    "version": "01.00"
-  },
-
   "self": {
     "safe": true,
     "compress": true,
