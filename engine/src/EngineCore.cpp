@@ -7,6 +7,7 @@
 #include <cstring>
 #include <ctime>
 #include "EngineAchievement.h"
+#include "EngineAchievementUi.h"
 #include "EngineInput.h"
 #include "EngineTestbed.h"
 #include "EngineUi.h"
@@ -215,6 +216,7 @@ void Engine_Close()
 void Engine_ResetRuntimeState()
 {
     Engine_Game_ResetState();
+    Engine_AchievementUi_Reset();
 
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Io))
         Engine_IO_Drain();

@@ -114,16 +114,25 @@ namespace game
     bool HasInputDevice(const char* device);
 
     /// Record an achievement as earned. Idempotent, and safe on every platform.
-    /// @param id Identifier from the generated trophy header.
-    /// @return Whether the platform accepted it.
+    /// @param id Identifier from the generated achievement header.
+    /// @return Whether it was recorded.
     bool UnlockAchievement(int id);
 
-    /// @param id Identifier from the generated trophy header.
+    /// @param id Identifier from the generated achievement header.
     /// @return False when not unlocked, or unavailable.
     bool IsAchievementUnlocked(int id);
 
     /// @return Whether achievements can actually be recorded here.
     bool HasAchievements();
+
+    /// Show the achievements screen. The game decides when and from where; the
+    /// engine binds no button to it, so none is taken away from the game.
+    void StartAchievementsUI();
+
+    void StopAchievementsUI();
+
+    /// @return Whether the screen is currently being drawn.
+    bool IsAchievementsUIOpen();
 
     // --- Resources (async streaming; poll IsResourceReady) ----------------------
     // type: "TEXTURE","MODEL","SOUND","FONT". Returns a handle >= 0, or -1.

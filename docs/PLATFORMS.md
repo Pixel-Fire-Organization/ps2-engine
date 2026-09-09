@@ -46,12 +46,13 @@ Read the guideline **before** starting, not while reviewing.
 
 ## Formats
 
-On-disc layouts. The first three are identical on every platform; the last is a
+On-disc layouts. The first four are identical on every platform; the last is a
 console format one platform is obliged to produce.
 
 - [ASSET_FORMAT.md](formats/ASSET_FORMAT.md) — one cooked asset
 - [ARCHIVE_FORMAT.md](formats/ARCHIVE_FORMAT.md) — the container, and the canonical key rule
 - [LEVEL_FORMAT.md](formats/LEVEL_FORMAT.md) — compiled worlds
+- [ACHIEVEMENT_RECORD.md](formats/ACHIEVEMENT_RECORD.md) — what a player has earned
 - [TROPHY_PACK.md](formats/TROPHY_PACK.md) — Vita trophy container
 
 ## Platforms

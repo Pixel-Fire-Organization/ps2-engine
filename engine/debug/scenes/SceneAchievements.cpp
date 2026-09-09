@@ -41,9 +41,11 @@ void Scene_Achievements_Update(float dt)
 
     const bool available = Engine_Achievement_IsAvailable();
     const uint32_t count = Engine_Achievement_GetCount();
-    const char* reason = Engine_Achievement_GetUnavailableReason();
+    const char* reason = Engine_Achievement_GetMirrorReason();
 
     Ui_LabelValue("RECORDING", available ? "YES" : "NO");
+    Ui_LabelValue("SAVED TO DISC", Engine_Achievement_IsPersistent() ? "YES" : "NO");
+    Ui_LabelValue("MIRRORED", Engine_Achievement_IsMirrored() ? "YES" : "NO");
 
     char text[48];
     snprintf(text, sizeof(text), "%u", static_cast<unsigned>(count));
@@ -59,13 +61,17 @@ void Scene_Achievements_Update(float dt)
         Ui_LabelValue("CONSOLE HAS", text);
     }
 
-    if (!available)
+    if (reason)
     {
         Ui_Separator();
-        Ui_LabelColored("CANNOT RECORD BECAUSE", UiColor::TextWarn);
-        Testbed_DrawWrapped(reason ? reason : "REASON NOT REPORTED", UiColor::TextDim);
+        Ui_LabelColored("NOT MIRRORED BECAUSE", UiColor::TextWarn);
+        Testbed_DrawWrapped(reason, UiColor::TextDim);
     }
 
+    Ui_Separator();
+
+    if (Ui_Button("SHOW ACHIEVEMENTS SCREEN"))
+        Engine_Achievement_OpenScreen();
     Ui_Separator();
 
     const uint32_t shown = (count < IDS_SHOWN) ? count : IDS_SHOWN;
@@ -73,10 +79,7 @@ void Scene_Achievements_Update(float dt)
     {
         const bool unlocked = Engine_Achievement_IsUnlocked(id);
 
-        char label[32];
-        snprintf(label, sizeof(label), "TROPHY %u", static_cast<unsigned>(id));
-
-        if (Ui_SelectableValue(label, unlocked ? "DONE" : (available ? "UNLOCK" : "DECLARED"), unlocked) && available)
+        if (Ui_SelectableValue(Engine_Achievement_GetName(id), unlocked ? "EARNED" : "UNLOCK", unlocked) && available)
         {
             s_LastId = static_cast<int>(id);
             s_LastOk = Engine_Achievement_Unlock(id);
@@ -88,13 +91,11 @@ void Scene_Achievements_Update(float dt)
     if (s_LastId >= 0)
     {
         char outcome[48];
-        snprintf(outcome, sizeof(outcome), "TROPHY %d", s_LastId);
+        snprintf(outcome, sizeof(outcome), "ACHIEVEMENT %d", s_LastId);
         Ui_Separator();
-        Ui_LabelValue(outcome, s_LastOk ? "ACCEPTED" : "REFUSED");
+        Ui_LabelValue(outcome, s_LastOk ? "RECORDED" : "REFUSED");
         if (!s_LastOk)
-            Testbed_DrawWrapped("REFUSED IS REPORTED, NOT SILENT. THE LOG CARRIES THE CODE. A PLATINUM CANNOT BE "
-                                "UNLOCKED DIRECTLY - THE CONSOLE AWARDS IT WHEN EVERY OTHER TROPHY IS UNLOCKED.",
-                                UiColor::TextDim);
+            Testbed_DrawWrapped("REFUSED IS REPORTED, NOT SILENT. THE LOG CARRIES THE REASON.", UiColor::TextDim);
     }
     Ui_EndPanel();
 
@@ -103,14 +104,14 @@ void Scene_Achievements_Update(float dt)
     Ui_Separator();
     Ui_Label("DECLARED IS WHAT THIS");
     Ui_Label("TITLE PACKAGED.");
-    Ui_Label("RECORDING IS WHETHER THE");
-    Ui_Label("CONSOLE WILL ACCEPT ONE.");
+    Ui_Label("RECORDING IS THE ENGINE.");
+    Ui_Label("MIRRORED IS THE CONSOLE.");
     Ui_Label("THEY FAIL SEPARATELY AND");
     Ui_Label("NEED OPPOSITE FIXES.");
     Ui_Separator();
     Ui_Label("UNLOCKING IS ONE WAY");
     Ui_Label("AND IDEMPOTENT.");
     Ui_Label("NO PROGRESS, NO TIERS,");
-    Ui_Label("NO METADATA.");
+    Ui_Label("NO TIMESTAMPS.");
     Ui_EndPanel();
 }

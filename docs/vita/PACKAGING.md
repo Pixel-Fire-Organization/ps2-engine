@@ -49,11 +49,16 @@ that is correct.
 
 ## `package.json`
 
+The title's identity is **not** written here. It is declared once for every
+platform and folded into this config when it is read, so the identity the console
+shows and the identity a save is filed under cannot disagree. A variant may still
+override the display name, which is how the television variant is named.
+
 | Field | Meaning |
 |---|---|
-| `title.id` | Nine characters, `XXXXYYYYY`. Four author characters, five digits. Also names the writable data directory |
-| `title.name` | The display name under the bubble |
-| `title.version` | `##.##` |
+| `title.id` | *Declared centrally.* Nine characters, `XXXXYYYYY`. Also names the writable data directory |
+| `title.name` | *Declared centrally.* The display name under the bubble |
+| `title.version` | *Declared centrally.* `##.##` |
 | `self.safe` | Restricts the executable to the ordinary user API. Clear it only if the title genuinely needs more |
 | `self.compress` | Compress the executable inside the package |
 | `self.extended_memory` | Request the larger main-memory allowance. Off by default |

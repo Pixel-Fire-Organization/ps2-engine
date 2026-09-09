@@ -64,15 +64,36 @@ record could not be read, and those need opposite fixes.
 and survives the engine clearing its runtime state between scenes — it is not
 engine state, it is the player's.
 
+**The record is a fixed-size binary file in a location the platform supplies.**
+Its layout is a format, specified in
+[../formats/ACHIEVEMENT_RECORD.md](../formats/ACHIEVEMENT_RECORD.md), and is
+identical on every platform. *Where* it lives is a platform question — a console
+answers it differently from a desktop, and one of them may not have anywhere to
+put it at all — and each platform's spec states its own answer.
+
+The description of the set is text and the record of what was earned is binary.
+That split is deliberate: the description is authored, diffed and reviewed by
+people and is read once at build time, while the record is written by the engine
+on a console during play and never read by anything else.
+
 **The engine presents the unlock where the platform will not.** A player who
 earns something is told, by the engine, through its own interface. Presentation
 is not a platform courtesy that may or may not arrive.
+
+**The game asks for the achievements screen; the engine does not bind it to an
+input.** A browsable list of the set — earned and unearned, with names,
+descriptions and tiers — is opened on request and closed when the player leaves
+it. The engine binds no chord and reserves no button for it, because where that
+screen belongs is a question about a game's menus, and a key the engine claimed
+would be one the game could not use. The debug testbed reaches it the same way
+any game does.
 
 ## Depends on
 
 - **Filesystem** — the title's writable location, for the record. This is a new
   dependency and the reason the subsystem is no longer free-standing.
-- **UI** — *optional*. Used to show an unlock. Absent, unlocks are still recorded.
+- **UI** — *optional*. Used to show an unlock and to draw the achievements
+  screen. Absent, unlocks are still recorded and the screen cannot be opened.
 - **Platform** — *optional*. The achievement contract, which a platform supplies
   only if it has one. A platform without achievements offers nothing at all
   rather than an implementation that always fails; the difference is what lets
@@ -139,6 +160,12 @@ headless or automated host wants.
 - **Notification is bounded and lossy.** A fixed number of unlocks can be queued
   for display; beyond that they are recorded and not shown. Unlocking a hundred
   achievements in one frame is a test case, not a design target.
+- **The achievements screen is a screen, not a system overlay.** It is drawn
+  where the game asks for it, in the game's frame, and it does not suspend the
+  game beneath it or capture input the game did not give it.
+- **No timestamps.** The record stores whether an achievement was earned, not
+  when. Ordering a list by recency would cost more storage than the entire record
+  currently occupies.
 
 ## Off-the-shelf evaluation
 

@@ -84,17 +84,16 @@ void Engine_Notice_Evaluate()
 
     if (!Engine_Subsystem_IsEnabled(EngineSubsystem::Achievement))
         return;
-    if (Engine_Achievement_IsAvailable())
-        return;
-
-    // A title that packaged none is not missing anything; only one that ships
-    // achievements it cannot record has something to tell the player.
     if (Engine_Achievement_GetCount() == 0)
         return;
     if (!Engine_Ui_IsActive())
         return;
 
-    Raise("TROPHIES UNAVAILABLE", Engine_Achievement_GetUnavailableReason());
+    if (!Engine_Achievement_IsPersistent())
+    {
+        Raise("ACHIEVEMENTS WILL NOT BE SAVED", "THIS SYSTEM HAS NOWHERE TO WRITE THEM. YOU CAN STILL EARN THEM, "
+                                                "BUT THEY WILL BE FORGOTTEN WHEN THE SYSTEM IS TURNED OFF.");
+    }
 }
 
 bool Engine_Notice_IsPending() { return s_Pending; }
@@ -124,8 +123,6 @@ bool Engine_Notice_Update(float dt)
     DrawWrapped(s_Reason);
     Ui_Separator();
     Ui_Label("THE GAME PLAYS NORMALLY.");
-    Ui_Label("NOTHING WILL BE RECORDED");
-    Ui_Label("UNTIL THIS IS RESOLVED.");
     Ui_Spacing(Ui_TextHeight(Ui_GetStyle().textScale));
 
     if (Ui_Button("CONTINUE"))

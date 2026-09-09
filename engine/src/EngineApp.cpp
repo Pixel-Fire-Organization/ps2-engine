@@ -68,6 +68,7 @@ void EngineUpdate()
         Engine_Testbed_Update(dt);
         if (!Engine_Testbed_IsOpen())
             GameUpdate(dt);
+        Engine_Achievement_Update(dt);
     }
     Ui_EndFrame();
     gameLogicEndTime = platform->GetTimeSeconds();

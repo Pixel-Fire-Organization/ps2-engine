@@ -398,6 +398,12 @@ namespace game
 
     bool HasAchievements() { return Engine_Achievement_IsAvailable(); }
 
+    void StartAchievementsUI() { Engine_Achievement_OpenScreen(); }
+
+    void StopAchievementsUI() { Engine_Achievement_CloseScreen(); }
+
+    bool IsAchievementsUIOpen() { return Engine_Achievement_IsScreenOpen(); }
+
     // --- Resources --------------------------------------------------------------
     int LoadResource(const char* type, const char* path)
     {
