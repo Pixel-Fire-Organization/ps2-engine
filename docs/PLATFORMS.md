@@ -64,7 +64,8 @@ console format one platform is obliged to produce.
 | Default renderer | [giftag](ps2/renderers/GIFTAG.md) | [webgpu](win32/renderers/WEBGPU.md) | [gxm](vita/renderers/GXM.md) |
 | Fallback | [ps2gl](ps2/renderers/PS2GL.md), then null | [opengl](win32/renderers/OPENGL.md), then null | [vitagl](vita/renderers/VITAGL.md), then null |
 
-PS2 extras: [TEXTURE_BUDGET.md](ps2/TEXTURE_BUDGET.md),
+PS2 extras: [MASP.md](ps2/MASP.md),
+[TEXTURE_BUDGET.md](ps2/TEXTURE_BUDGET.md),
 [PS2SDK_SETUP.md](ps2/PS2SDK_SETUP.md),
 [ISO_GENERATION.md](ps2/ISO_GENERATION.md),
 [PCSX2_DEBUGGING.md](ps2/PCSX2_DEBUGGING.md),

@@ -131,6 +131,11 @@ new platform boot and be validated before any graphics code exists.
 - **Cross-Compilation**: `toolchains/ps2dev.cmake` targets `mips64r5900el-ps2-elf`; `toolchains/vitasdk.cmake` targets
   `arm-vita-eabi` and **appends** its flags rather than forcing them, because the SDK adds the linker flag that keeps
   the relocation table and the executable conversion fails without it.
+- **`tools/ps2/masp` overrides the toolchain's own**: the PS2 toolchain ships a `masp` whose bundled `memmove`
+  compiles into infinite self-recursion, so it segfaults on every input including an empty file and no PS2 binary can
+  be linked. The repo carries a working rebuild and `external/CMakeLists.txt` points ps2gl at it; without that file
+  present the build falls back to the toolchain's and fails. Do not "fix" this by editing ps2gl. See
+  `docs/ps2/MASP.md`.
 - **Toolchain identity**: every toolchain file sets `ENGINE_TOOLCHAIN_ID`, and `cmake/Platforms.cmake` filters
   platforms on that rather than on `CMAKE_SYSTEM_NAME` — both console toolchains report `Generic`, so the system name
   alone cannot tell them apart and a Vita configure would try to build PS2 with an ARM compiler.
