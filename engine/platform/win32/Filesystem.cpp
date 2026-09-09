@@ -4,7 +4,9 @@
 #include "EngineDebug.h"
 #include "EngineIO.h" // IO_FILE_MAX_PATH
 #include "Platform.h"
+#include "TitleInfo.h"
 
+#include <shlobj.h>
 #include <windows.h>
 
 // ---------------------------------------------------------------------------
@@ -71,6 +73,42 @@ bool Win32Platform::BuildPath(const char* relativePath, char* outBuf, size_t buf
     return true;
 }
 
+bool Win32Platform::BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const
+{
+    if (!relativePath || !outBuf || bufSize == 0)
+        return false;
+
+    while (*relativePath == '/' || *relativePath == '\\')
+        ++relativePath;
+
+    char local[IO_FILE_MAX_PATH];
+    if (!SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local)))
+    {
+        Engine_LogError("%s: no local application data directory", GetName());
+        return false;
+    }
+
+    char root[IO_FILE_MAX_PATH];
+    if (snprintf(root, sizeof(root), "%s/%s", local, TITLE_DEVELOPER) >= static_cast<int>(sizeof(root)))
+        return false;
+    CreateDirectoryA(root, nullptr);
+
+    if (snprintf(root, sizeof(root), "%s/%s/%s", local, TITLE_DEVELOPER, TITLE_NAME) >= static_cast<int>(sizeof(root)))
+        return false;
+    CreateDirectoryA(root, nullptr);
+
+    const int written = snprintf(outBuf, bufSize, "%s/%s", root, relativePath);
+    if (written < 0 || static_cast<size_t>(written) >= bufSize)
+        return false;
+
+    for (int i = 0; i < written; ++i)
+    {
+        if (outBuf[i] == '\\')
+            outBuf[i] = '/';
+    }
+    return true;
+}
+
 FileHandle Win32Platform::FileOpen(const char* path, FileMode mode)
 {
     if (!path)
@@ -86,6 +124,13 @@ bool Win32Platform::FileSeek(FileHandle file, uint64_t offset)
     // _fseeki64: assets can exceed 2 GB on a desktop target, where the PS2 long
     // offset would silently truncate.
     return _fseeki64(reinterpret_cast<FILE*>(file), static_cast<long long>(offset), SEEK_SET) == 0;
+}
+
+size_t Win32Platform::FileWrite(FileHandle file, const void* src, size_t bytes)
+{
+    if (!file || !src)
+        return 0;
+    return fwrite(src, 1, bytes, reinterpret_cast<FILE*>(file));
 }
 
 size_t Win32Platform::FileRead(FileHandle file, void* dst, size_t bytes)

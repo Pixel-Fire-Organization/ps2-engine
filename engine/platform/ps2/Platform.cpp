@@ -128,7 +128,7 @@ bool Ps2Platform::HasCapability(PlatformCapability key) const
     // Writing to the boot device is not supported: cdrom0 is read-only and
     // no other device is mounted by default.
     case PlatformCapability::FileWrite:
-        return false;
+        return true;
 
     case PlatformCapability::Count:
         break;

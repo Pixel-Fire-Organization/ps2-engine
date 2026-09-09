@@ -46,6 +46,7 @@ public:
     /// @param bufSize Capacity of outBuf.
     /// @return False when the result would not fit.
     bool BuildPath(const char* relativePath, char* outBuf, size_t bufSize) const override;
+    bool BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const override;
 
     const char* GetResourceToken() const override { return m_resourceToken; }
 
@@ -57,6 +58,7 @@ public:
 
     /// @return Bytes actually read; zero on failure.
     size_t FileRead(FileHandle file, void* dst, size_t bytes) override;
+    size_t FileWrite(FileHandle file, const void* src, size_t bytes) override;
     uint64_t FileSize(FileHandle file) const override;
     void FileClose(FileHandle file) override;
 

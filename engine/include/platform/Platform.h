@@ -64,9 +64,19 @@ public:
     // Assets are addressed relative to it; the resource manager reports it.
     virtual const char* GetResourceToken() const = 0;
 
+    // Turn a relative path into one inside the title's own writable location,
+    // creating that location if it does not exist. Answers false where the
+    // platform has nowhere to write, which is an ordinary state on a console
+    // whose storage is removable — not a fault to recover from.
+    virtual bool BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const = 0;
+
     virtual FileHandle FileOpen(const char* path, FileMode mode) = 0;
     virtual bool FileSeek(FileHandle file, uint64_t offset) = 0;
     virtual size_t FileRead(FileHandle file, void* dst, size_t bytes) = 0;
+
+    // Returns short of the requested count on failure. Platforms reporting no
+    // FileWrite capability write nothing and answer zero.
+    virtual size_t FileWrite(FileHandle file, const void* src, size_t bytes) = 0;
     virtual uint64_t FileSize(FileHandle file) const = 0;
     virtual void FileClose(FileHandle file) = 0;
 

@@ -38,9 +38,11 @@ public:
 
     // --- Filesystem.cpp -----------------------------------------------------
     bool BuildPath(const char* relativePath, char* outBuf, size_t bufSize) const override;
+    bool BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const override;
     FileHandle FileOpen(const char* path, FileMode mode) override;
     bool FileSeek(FileHandle file, uint64_t offset) override;
     size_t FileRead(FileHandle file, void* dst, size_t bytes) override;
+    size_t FileWrite(FileHandle file, const void* src, size_t bytes) override;
     uint64_t FileSize(FileHandle file) const override;
     void FileClose(FileHandle file) override;
 

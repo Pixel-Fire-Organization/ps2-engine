@@ -6,7 +6,9 @@
 #include "Platform.h"
 
 extern "C" {
+#include <psp2/io/dirent.h>
 #include <psp2/io/fcntl.h>
+#include <psp2/io/stat.h>
 }
 
 namespace
@@ -27,6 +29,28 @@ bool VitaPlatform::BuildPath(const char* relativePath, char* outBuf, size_t bufS
     const size_t tokenLength = strlen(m_resourceToken);
     const char* separator = (tokenLength && m_resourceToken[tokenLength - 1] == ':') ? "" : "/";
     const int written = snprintf(outBuf, bufSize, "%s%s%s", m_resourceToken, separator, relativePath);
+    if (written < 0 || static_cast<size_t>(written) >= bufSize)
+        return false;
+
+    for (int i = 0; i < written; ++i)
+    {
+        if (outBuf[i] == '\\')
+            outBuf[i] = '/';
+    }
+    return true;
+}
+
+bool VitaPlatform::BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const
+{
+    if (!relativePath || !outBuf || bufSize == 0 || !m_writableRoot[0])
+        return false;
+
+    while (*relativePath == '/' || *relativePath == '\\')
+        ++relativePath;
+
+    sceIoMkdir(m_writableRoot, 0777);
+
+    const int written = snprintf(outBuf, bufSize, "%s%s", m_writableRoot, relativePath);
     if (written < 0 || static_cast<size_t>(written) >= bufSize)
         return false;
 
@@ -71,6 +95,14 @@ size_t VitaPlatform::FileRead(FileHandle file, void* dst, size_t bytes)
         return 0;
     const SceSSize read = sceIoRead(ToFd(file), dst, static_cast<SceSize>(bytes));
     return (read < 0) ? 0u : static_cast<size_t>(read);
+}
+
+size_t VitaPlatform::FileWrite(FileHandle file, const void* src, size_t bytes)
+{
+    if (!file || !src)
+        return 0;
+    const SceSSize written = sceIoWrite(ToFd(file), src, static_cast<SceSize>(bytes));
+    return (written < 0) ? 0u : static_cast<size_t>(written);
 }
 
 uint64_t VitaPlatform::FileSize(FileHandle file) const

@@ -40,7 +40,7 @@ differently per region.
 | Analog triggers | No | The pad reports shoulder pressure; the engine does not surface it |
 | Resizable window | No | Framebuffer is fixed at build time |
 | Async IO | Yes | |
-| File write | No | The boot device is read-only and no writable device is mounted |
+| File write | Yes | To a memory card. The boot device is read-only |
 
 ## Memory
 
@@ -78,6 +78,21 @@ Device paths carry a device token and a version suffix; the canonical key rule i
 [ARCHIVE_FORMAT.md](../formats/ARCHIVE_FORMAT.md) strips both. The active device
 is taken from the launch arguments, so the same binary runs from disc, from a
 host filesystem during development, and from mass storage.
+
+**Writes go to a memory card, and there may not be one.** The per-title location
+is a directory named for the title on the first card that has one, checked in
+slot order. The card library is brought up on first use rather than at startup,
+so a title that never writes never loads the modules.
+
+This is the only platform here where writable storage is **removable, absent on a
+perfectly healthy console, and full at sizes a desktop would call empty**. A
+console with no card is therefore a normal state and not a fault: anything the
+engine would have persisted is kept for the session and lost at power-off, and
+the subsystem that wanted it says so once. Treating a missing card as an error
+would make one a requirement for playing rather than for saving.
+
+An unformatted card counts as no card. The engine does not offer to format one:
+that is a decision about the player's other saves, not ours to take.
 
 ## Input
 

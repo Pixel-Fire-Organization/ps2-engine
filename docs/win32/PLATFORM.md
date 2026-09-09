@@ -68,6 +68,12 @@ coverage window to stay inside.
 Paths resolve relative to the executable, so a distribution directory is
 self-contained and can be copied anywhere and run.
 
+**Writes do not.** The per-title save location is the user's own local
+application data, under the developer's name and then the title's. A
+distribution directory is expected to sit somewhere a normal user account cannot
+write to, and a directory that can be copied anywhere is one whose copies would
+otherwise each carry their own divergent save.
+
 ## Input
 
 Gamepads through XInput, up to four. Sticks are converted to the same convention

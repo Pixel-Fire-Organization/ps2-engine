@@ -1,8 +1,13 @@
 #include <cstdio>
 #include <cstring>
 
+#include "EngineDebug.h"
 #include "EngineIO.h" // IO_FILE_MAX_PATH
 #include "Platform.h"
+#include "TitleInfo.h"
+
+#include <libmc.h>
+#include <loadfile.h>
 
 // ---------------------------------------------------------------------------
 // PS2 storage. Files are plain stdio; what is platform-specific is the device
@@ -12,6 +17,74 @@
 
 namespace
 {
+    const int MC_PORTS = 2;
+    const int MC_SLOT = 0;
+    const int MC_SAME_CARD = 0;
+    const int MC_FORMATTED_CARD_INSERTED = -1;
+
+    bool s_CardChecked = false;
+    int s_CardPort = -1;
+
+    bool CardUsable(int port)
+    {
+        int type = 0;
+        int freeClusters = 0;
+        int formatted = 0;
+        if (mcGetInfo(port, MC_SLOT, &type, &freeClusters, &formatted) < 0)
+            return false;
+
+        int result = 0;
+        mcSync(0, nullptr, &result);
+        if (result != MC_SAME_CARD && result != MC_FORMATTED_CARD_INSERTED)
+        {
+            Engine_LogInfo("PS2 storage: no usable card in slot %d (status %d)", port, result);
+            return false;
+        }
+
+        Engine_LogInfo("PS2 storage: card in slot %d, %d free clusters", port, freeClusters);
+        return true;
+    }
+
+    int FindCard()
+    {
+        if (s_CardChecked)
+            return s_CardPort;
+        s_CardChecked = true;
+
+        if (SifLoadModule("rom0:SIO2MAN", 0, nullptr) < 0)
+        {
+            Engine_LogError("PS2 storage: SIO2MAN failed to load; no card access");
+            return -1;
+        }
+        if (SifLoadModule("rom0:MCMAN", 0, nullptr) < 0)
+        {
+            Engine_LogError("PS2 storage: MCMAN failed to load; no card access");
+            return -1;
+        }
+        if (SifLoadModule("rom0:MCSERV", 0, nullptr) < 0)
+        {
+            Engine_LogError("PS2 storage: MCSERV failed to load; no card access");
+            return -1;
+        }
+        if (mcInit(MC_TYPE_MC) < 0)
+        {
+            Engine_LogError("PS2 storage: the card library would not start; no card access");
+            return -1;
+        }
+
+        for (int port = 0; port < MC_PORTS; ++port)
+        {
+            if (CardUsable(port))
+            {
+                s_CardPort = port;
+                return port;
+            }
+        }
+
+        Engine_LogInfo("PS2 storage: no memory card; nothing will be saved this session");
+        return -1;
+    }
+
     const char* const kTokenCdrom = "cdrom0:";
     const char* const kTokenMass = "mass0:";
     const char* const kTokenHdd = "hdd0:";
@@ -97,6 +170,30 @@ bool Ps2Platform::BuildPath(const char* relativePath, char* outBuf, size_t bufSi
     return true;
 }
 
+bool Ps2Platform::BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const
+{
+    if (!relativePath || !outBuf || bufSize == 0)
+        return false;
+
+    const int port = FindCard();
+    if (port < 0)
+        return false;
+
+    while (*relativePath == '/' || *relativePath == 0x5C)
+        ++relativePath;
+
+    char directory[IO_FILE_MAX_PATH];
+    if (snprintf(directory, sizeof(directory), "/%sA", TITLE_ID_PS2) >= static_cast<int>(sizeof(directory)))
+        return false;
+
+    mcMkDir(port, MC_SLOT, directory);
+    int result = 0;
+    mcSync(0, nullptr, &result);
+
+    const int written = snprintf(outBuf, bufSize, "mc%d:%s/%s", port, directory, relativePath);
+    return written >= 0 && static_cast<size_t>(written) < bufSize;
+}
+
 FileHandle Ps2Platform::FileOpen(const char* path, FileMode mode)
 {
     if (!path)
@@ -117,6 +214,13 @@ size_t Ps2Platform::FileRead(FileHandle file, void* dst, size_t bytes)
     if (!file || !dst)
         return 0;
     return fread(dst, 1, bytes, reinterpret_cast<FILE*>(file));
+}
+
+size_t Ps2Platform::FileWrite(FileHandle file, const void* src, size_t bytes)
+{
+    if (!file || !src)
+        return 0;
+    return fwrite(src, 1, bytes, reinterpret_cast<FILE*>(file));
 }
 
 uint64_t Ps2Platform::FileSize(FileHandle file) const
