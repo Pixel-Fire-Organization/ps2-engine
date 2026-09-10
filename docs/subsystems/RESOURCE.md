@@ -40,7 +40,8 @@ lose its texture.
 that does not — a level's required-resource list, which may hold anything — lets
 the header decide. Both paths converge before decoding.
 
-**Texture budget is accounted in bytes, and the platform defines the cost.** What
+**Texture budget is accounted in bytes; the platform defines the cost and the
+renderer defines the ceiling.** What
 a texture occupies is hardware-specific: one platform rounds to page granularity
 in a fixed video memory region, another simply consumes heap. The subsystem asks
 the platform what a given texture costs and compares the total against a

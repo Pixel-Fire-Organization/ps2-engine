@@ -1,9 +1,10 @@
 #pragma once
 
 #include "DrawList.h"
-#include "UI.h"
 #include "EngineGraphics.h"
 #include "EngineLevel.h"
+#include "UI.h"
+#include "platform/Platform.h"
 
 class Renderer
 {
@@ -115,6 +116,11 @@ public:
     // Pixel pointers must be 16-byte aligned.
     virtual uint32_t UploadTexture(const TextureUpload& upload) = 0;
     virtual void ReleaseTexture(uint32_t handle) = 0;
+
+    /// How many bytes of texture memory this backend can hold at once.
+    /// @return The platform ceiling, unless a backend is left with less by its
+    ///         own frame and depth buffers, in which case it reports that.
+    virtual uint32_t GetTextureBudgetBytes() const { return Engine_GetPlatform()->GetConstant(PlatformConstant::TextureBudgetBytes); }
 
     virtual bool IsInitialized() const = 0;
     virtual void Shutdown() = 0;

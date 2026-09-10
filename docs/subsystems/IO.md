@@ -86,6 +86,15 @@ for a game whose content is entirely generated in memory.
   resolved path is nearly useless.
 - **Request queue full** — enqueue fails and returns false; the caller retries on
   a later frame.
+- **The worker is never scheduled** — reads still complete, but at the rate the
+  main thread happens to yield, which can be orders of magnitude slower than the
+  medium. Nothing fails and nothing is logged: assets simply arrive late, and the
+  symptom is a world that renders untextured for several seconds and then
+  corrects itself. A platform whose scheduler does not time-slice between
+  priorities must place the worker **above** the main thread, because a frame
+  loop that spins on display hardware may not yield at all. This has happened,
+  and the read rate it produced was one disc sector per second — set by how often
+  the main thread paused to log.
 - **Callback never returns** — deadlocks all IO, since the buffer semaphore is
   held. Callbacks must not block, and must not enqueue a read of their own and
   wait for it.

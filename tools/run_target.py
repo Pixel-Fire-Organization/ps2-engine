@@ -29,15 +29,28 @@ ENV_OVERRIDE = {
     VITA3K: "VITA3K_PATH",
 }
 
+# Git Bash and WSL both present Windows drives under a POSIX root, and neither
+# mount prefix is guaranteed, so both spellings are listed for both hosts.
+WINDOWS_UNDER_POSIX = {
+    PCSX2: [
+        "/mnt/c/PCSX2/pcsx2-qt.exe",
+        "/c/PCSX2/pcsx2-qt.exe",
+        "/mnt/c/Program Files/PCSX2/pcsx2-qt.exe",
+        "/c/Program Files/PCSX2/pcsx2-qt.exe",
+    ],
+    VITA3K: [
+        "/mnt/c/Vita3K/Vita3K.exe",
+        "/c/Vita3K/Vita3K.exe",
+        "/mnt/c/Program Files/Vita3K/Vita3K.exe",
+        "/c/Program Files/Vita3K/Vita3K.exe",
+    ],
+}
+
 SEARCH_PATHS = {
     PCSX2: {
         "darwin": ["/Applications/PCSX2.app/Contents/MacOS/PCSX2"],
-        "wsl": [
-            "/mnt/c/PCSX2/pcsx2-qt.exe",
-            "/c/PCSX2/pcsx2-qt.exe",
-            "/mnt/c/Program Files/PCSX2/pcsx2-qt.exe",
-            "/c/Program Files/PCSX2/pcsx2-qt.exe",
-        ],
+        "wsl": WINDOWS_UNDER_POSIX[PCSX2],
+        "cygwin": WINDOWS_UNDER_POSIX[PCSX2],
         "win32": [
             "C:\\PCSX2\\pcsx2-qt.exe",
             "C:\\Program Files\\PCSX2\\pcsx2-qt.exe",
@@ -46,12 +59,8 @@ SEARCH_PATHS = {
     },
     VITA3K: {
         "darwin": ["/Applications/Vita3K.app/Contents/MacOS/Vita3K"],
-        "wsl": [
-            "/mnt/c/Vita3K/Vita3K.exe",
-            "/c/Vita3K/Vita3K.exe",
-            "/mnt/c/Program Files/Vita3K/Vita3K.exe",
-            "/c/Program Files/Vita3K/Vita3K.exe",
-        ],
+        "wsl": WINDOWS_UNDER_POSIX[VITA3K],
+        "cygwin": WINDOWS_UNDER_POSIX[VITA3K],
         "win32": [
             "C:\\Vita3K\\Vita3K.exe",
             "C:\\Program Files\\Vita3K\\Vita3K.exe",
@@ -83,11 +92,13 @@ def is_wsl():
 
 
 def host_kind():
-    """@return One of "darwin", "win32", "wsl" or "posix"."""
+    """@return One of "darwin", "win32", "cygwin", "wsl" or "posix"."""
     if sys.platform == "darwin":
         return "darwin"
     if sys.platform == "win32":
         return "win32"
+    if sys.platform in ("cygwin", "msys"):
+        return "cygwin"
     return "wsl" if is_wsl() else "posix"
 
 
@@ -152,18 +163,27 @@ def resolve_launcher(launcher, explicit=None, host=None):
     )
 
 
+# Hosts that hand a Windows program its arguments, but describe paths in POSIX
+# form, and the tool each uses to translate between the two.
+PATH_TRANSLATOR = {
+    "wsl": "wslpath",
+    "cygwin": "cygpath",
+}
+
+
 def host_path(path, host=None):
     """Translate a path into the form the launcher will understand.
 
     @param path Absolute path on this host.
     @param host Host kind; defaults to the running host.
-    @return A Windows-form path under WSL, otherwise the path unchanged.
+    @return A Windows-form path where the host needs one, else path unchanged.
     """
     host = host or host_kind()
-    if host != "wsl":
+    translator = PATH_TRANSLATOR.get(host)
+    if not translator:
         return path
     try:
-        return subprocess.check_output(["wslpath", "-w", path], text=True).strip()
+        return subprocess.check_output([translator, "-w", path], text=True).strip()
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return path
 

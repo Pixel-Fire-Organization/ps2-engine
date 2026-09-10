@@ -164,3 +164,38 @@ def test_host_path_falls_back_when_wslpath_is_absent(monkeypatch):
         raise FileNotFoundError
     monkeypatch.setattr(rt.subprocess, "check_output", boom)
     assert rt.host_path("/mnt/q/x.iso", host="wsl") == "/mnt/q/x.iso"
+
+
+# --- Git Bash ---------------------------------------------------------------
+# It reports "cygwin", which fell through to the bare-POSIX branch: no search
+# paths, so no emulator was ever found on a shell the build documents as
+# supported.
+
+@pytest.mark.parametrize("platform", ["cygwin", "msys"])
+def test_git_bash_is_recognised_as_its_own_host(platform, monkeypatch):
+    monkeypatch.setattr(rt.sys, "platform", platform)
+    assert rt.host_kind() == "cygwin"
+
+
+def test_git_bash_searches_the_windows_locations(monkeypatch, tmp_path):
+    fake = tmp_path / "pcsx2-qt.exe"
+    fake.write_text("")
+    monkeypatch.setitem(rt.SEARCH_PATHS[rt.PCSX2], "cygwin", [str(fake)])
+    assert rt.resolve_launcher(rt.PCSX2, host="cygwin") == str(fake)
+
+
+def test_git_bash_and_wsl_look_in_the_same_places():
+    assert rt.SEARCH_PATHS[rt.PCSX2]["cygwin"] == rt.SEARCH_PATHS[rt.PCSX2]["wsl"]
+    assert rt.SEARCH_PATHS[rt.VITA3K]["cygwin"] == rt.SEARCH_PATHS[rt.VITA3K]["wsl"]
+
+
+def test_host_path_translates_with_cygpath_under_git_bash(monkeypatch):
+    seen = {}
+
+    def fake_check_output(cmd, *_args, **_kwargs):
+        seen["tool"] = cmd[0]
+        return "WINDOWS-FORM\n"
+
+    monkeypatch.setattr(rt.subprocess, "check_output", fake_check_output)
+    assert rt.host_path("/q/dist/engine.iso", host="cygwin") == "WINDOWS-FORM"
+    assert seen["tool"] == "cygpath"

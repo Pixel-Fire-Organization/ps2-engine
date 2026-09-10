@@ -45,6 +45,11 @@ The engine targets multiple platforms through one abstract interface — the sam
   `game/**` supplies only `GameInit()` / `GameUpdate(dt)`.
 - **Startup flags**: `engine/include/CommandLine.h` parses argv into a fixed static table (no heap, no STL) and is the
   reusable place for engine and game launch flags alike.
+- **Worker threads run above the main thread, not below.** A platform whose kernel does not time-slice between
+  priorities (the PS2's does not) will only run a lower-priority worker when the main thread blocks — and a frame
+  loop that spins on display hardware may not block for a whole second. The failure is silent: IO still completes,
+  just orders of magnitude slower than the medium, which reads as a stall somewhere else entirely. PS2 sets
+  `PLATFORM_MAIN_THREAD_PRIORITY` / `PLATFORM_WORKER_THREAD_PRIORITY`; see `docs/ps2/PLATFORM.md`.
 
 **Current state**: PS2, Win32 and Vita are all live. The engine runs entirely through `Platform` - memory map, clock,
 threads/semaphores, file access, input, console/panic and renderer construction - and `engine/src/` contains no OS
@@ -52,8 +57,19 @@ calls. `dist/win32/game.exe` opens a real window and boots into the game through
 same unmodified `game/**` sources the PS2 build uses. `dist/vita/` and `dist/vitatv/` produce installable `.vpk`
 packages carrying the executable, assets, worlds and store-front metadata.
 
-Remaining: the skybox and far-field paths in both desktop backends, and `TagRenderer::RenderLevel()` before the
-PS2 default can move to giftag.
+Remaining: the skybox and far-field paths in both desktop backends. The giftag backend now renders the same scene
+as ps2gl — primitives, models, sky, interface and streamed world sectors, textured — verified by capture under
+emulation, not yet on hardware. See `docs/ps2/renderers/GIFTAG.md`.
+
+**On the PS2, a batch names its primitive in a register write, never in the transfer tag.** The tag's primitive
+field is not honoured, so a batch relying on it silently inherits the previous primitive and its attributes — which
+draws the scene as screen-aligned rectangles that still cover roughly the right pixels, and never textures. Compare
+backends with `tools/ps2/emu_capture.py` rather than by eye.
+
+**The texture ceiling is a renderer question, the texture cost is a platform one.** `Renderer::GetTextureBudgetBytes()`
+defaults to the platform constant; a backend left with less by its own frame and depth buffers overrides it, and
+`EngineResource` enforces what the backend reports. The PS2 page budget is ps2gl's layout; giftag renders full-height
+32-bit and has roughly an eighth of it.
 
 **Known bug, pre-existing**: `EngineInput.h`'s `GamePadButton` has all four shoulder masks transposed relative to
 ps2sdk's `libpad.h` (`R1=0x0800 L1=0x0400 R2=0x0200 L2=0x0100`). `PlatformKeys.h` carries the correct values; the
@@ -221,6 +237,11 @@ new platform boot and be validated before any graphics code exists.
 - **Packaging is gated on validation**: `tools/validate_cooked.py` checks a cooked tree against the cook list that
   produced it, so a bad cook cannot reach a container. `tools/inspect_asset.py` and `tools/inspect_archive.py` dump
   cooked assets and containers without running the engine.
+- **Looking at what a PS2 build actually drew**: `tools/ps2/emu_capture.py` boots a disc image under the emulator and
+  captures a frame and the console log, including running the same scene through both backends for comparison. It
+  locates the emulator through `tools/run_target.py`, so `$PCSX2_PATH` works the same way. Read the capture notes in
+  `docs/ps2/BUILD.md` before driving the emulator by hand — a launch argument silently loses its first token, and a
+  fullscreen surface captures as a black frame that looks exactly like a renderer bug.
 - **Vita prerequisites beyond the SDK**: `vdpm install vitaShaRK taihen libmathneon` for the fallback renderer, and
   an offline shader compiler (`psp2cgc`) for the default one. The compiler is **required, not optional** — a silent
   fallback would swap a self-contained title for one needing a player-installed component — and is **gitignored**

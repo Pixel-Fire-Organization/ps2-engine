@@ -35,6 +35,15 @@
 
 #define IO_ASYNC_MAX_REQUESTS 16
 #define IO_THREAD_SLEEP_USEC 1000
+
+// Thread priorities, lowest number scheduled first. The kernel does not
+// time-slice between different priorities, so a worker below the main thread
+// only runs when the main thread happens to block - which a frame loop that
+// spins on the display hardware almost never does. Workers therefore sit ABOVE
+// the main thread: they are blocked on a semaphore or asleep nearly always, and
+// preempt only to service work that has actually arrived.
+#define PLATFORM_MAIN_THREAD_PRIORITY 48
+#define PLATFORM_WORKER_THREAD_PRIORITY 24
 #define IO_DRAIN_MAX_SPINS 10000
 #define IO_THREAD_STACK_SIZE (32 * 1024)
 
@@ -191,6 +200,38 @@
 #define GFX_GIFTAG_MAX_VERTS 40000 // per-frame transformed-vertex cap (scratch bound)
 #define GFX_GIFTAG_XFORM_BATCH 1024 // verts per VU0 batch transform
 #define GFX_GIFTAG_PACKET_MARGIN_QW 64 // headroom left free per packet
+
+// Centre of the GS primitive coordinate space. Vertex coordinates are written
+// relative to this origin and the GS subtracts XYOFFSET from them to reach
+// window coordinates, so centring here is what gives off-screen geometry a
+// symmetric guard band instead of wrapping a 12.4 unsigned field.
+#define GFX_GIFTAG_GS_ORIGIN 2048.0f
+
+// Widest representable GS coordinate (12.4 fixed point, 4096 - 1/16).
+#define GFX_GIFTAG_GS_COORD_MAX 4095.9375f
+
+// Capacity of the texture-transfer packet. A GIF image transfer carries at most
+// GIF_BLOCK_SIZE (0x7FFF) qwords per block, so the largest supported texture
+// (GFX_MAX_TEXTURE_WIDTH x GFX_MAX_TEXTURE_HEIGHT at 4 bytes) needs three
+// blocks: six qwords of setup plus three per block, plus the cache flush.
+#define GFX_GIFTAG_ENV_PACKET_QWORDS 64
+
+// Register writes a texture binding may add to the geometry packet: sampling,
+// texture buffer + colour table, and the mipmap addresses. Counted against
+// packet capacity before an object is emitted.
+#define GFX_GIFTAG_TEXBIND_QW 12
+
+// Packet cost of one screen-space quad (a textured sprite: GIF tag plus three
+// registers per corner), and the fixed allowance for the pass around them -
+// its texture bindings and the pixel-test bracket. The interface's cost is
+// reserved before world geometry is built, so a heavy world yields to it
+// instead of consuming the packet and leaving the interface undrawable.
+// Every batch names its primitive in its own register write rather than in the
+// transfer tag, which costs one tag plus one register per batch.
+#define GFX_GIFTAG_PRIM_QW 2
+
+#define GFX_GIFTAG_QUAD2D_QW 4
+#define GFX_GIFTAG_2D_RESERVE_QW 64
 
 // glDrawElements is a hard mError() in ps2gl; indexed meshes are skipped.
 #define GFX_MAX_MODEL_MESH_COUNT 8 // max meshes per model in DList cache

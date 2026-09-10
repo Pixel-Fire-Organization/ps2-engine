@@ -53,7 +53,7 @@ PlatformThread* Ps2Platform::ThreadCreate(ThreadEntry entry, void* userData, siz
     param.stack = thread->stack;
     param.stack_size = static_cast<int>(stackSize);
     param.gp_reg = &_gp;
-    param.initial_priority = 0x18;
+    param.initial_priority = PLATFORM_WORKER_THREAD_PRIORITY;
 
     thread->id = CreateThread(&param);
     if (thread->id < 0)

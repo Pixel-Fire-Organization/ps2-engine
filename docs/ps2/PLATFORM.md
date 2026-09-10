@@ -171,12 +171,30 @@ is a library implementing a subset of a graphics API on top of vector microcode;
 the other writes hardware display packets directly. They share no code and no
 base class beyond the renderer contract, and their limits differ — see each spec.
 
+## Threads
+
+The kernel schedules strictly by priority and does **not** time-slice between
+different ones: a thread only yields when it blocks, sleeps, or is preempted by
+something more urgent. A worker placed below the main thread therefore runs only
+when the main thread happens to block, and this platform's frame loop waits on
+the display hardware by spinning, so it can go a whole second without blocking at
+all.
+
+Workers consequently run **above** the main thread, which is lowered from the
+priority the loader gives it during platform start-up. This is safe because the
+engine's workers are blocked or asleep almost always and preempt only to service
+work that has arrived; it is not an invitation to add a worker that spins.
+
+Getting this wrong does not fail, it only goes slow, and the slowness looks like
+a defect somewhere else entirely — an asset path that appears to stall, or a
+renderer that appears not to sample its textures.
+
 ## Known limitations
 
-- **The default backend cannot draw level geometry.** Level rendering is
-  implemented only in the ps2gl backend. A build using the default renders
-  primitives, models and UI, and shows no world. Selecting ps2gl at launch
-  restores it. This is outstanding work, not a design decision.
+- **Texture memory differs per backend.** The page budget below is what the
+  ps2gl buffer layout leaves. The default backend renders at full height in 32
+  bits and has far less, so it reports its own ceiling and the resource manager
+  enforces that instead.
 - **Far-field geometry is not drawn by any backend.** The level format
   describes it and budgets for it; nothing renders it yet.
 - Sound and font assets are unimplemented, as on every platform.

@@ -7,42 +7,75 @@
 
 extern "C" {
 #include <dma.h>
+#include <gif_tags.h>
+#include <gs_gp.h>
 #include <gs_psm.h>
+#include <kernel.h>
 #include <math3d.h>
 #include <packet2_utils.h>
 }
 
-#include "../include/graphics/Frustum.h"
-#include "../include/graphics/PrimitiveGeometry.h"
 #include "EngineDebug.h"
+#include "EngineLevel.h"
 #include "EngineMemory.h"
 #include "EngineResource.h"
+#include "EngineSector.h"
 #include "Macros.h"
+#include "graphics/Frustum.h"
+#include "graphics/PrimitiveGeometry.h"
 
 namespace
 {
     constexpr float TAG_DEG_TO_RAD = 0.017453292519943295f;
-    constexpr float TAG_W_EPS = 0.001f; // near-plane reject threshold on clip.w
-    // Sign selecting which screen-space winding is a back face. +1 culls positive
-    // signed area (front faces are CCW-in-NDC, negative area after the viewport
-    // Y-flip). Flip to -1 if a validated scene renders inside-out.
+    constexpr float TAG_W_EPS = 0.001f;
     constexpr float TAG_BACKFACE_SIGN = 1.0f;
-    constexpr float TAG_Z_MAX = 16777215.0f; // 24-bit usable Z range (GS_ZBUF_32)
+    constexpr float TAG_Z_MAX = 16777215.0f;
 
-    // GS register indices (for GIF REGLIST descriptors).
+    constexpr float TAG_GS_OFFSET_X = GFX_GIFTAG_GS_ORIGIN - GFX_SCREEN_WIDTH * 0.5f;
+    constexpr float TAG_GS_OFFSET_Y = GFX_GIFTAG_GS_ORIGIN - GFX_SCREEN_HEIGHT * 0.5f;
+
+    inline bool GsCoordVisible(float x, float y) { return x >= 0.0f && x <= GFX_GIFTAG_GS_COORD_MAX && y >= 0.0f && y <= GFX_GIFTAG_GS_COORD_MAX; }
+
+    inline uint16_t GsFix4(float v)
+    {
+        if (v <= 0.0f)
+            return 0u;
+        if (v >= GFX_GIFTAG_GS_COORD_MAX)
+            return static_cast<uint16_t>(GFX_GIFTAG_GS_COORD_MAX * 16.0f);
+        return static_cast<uint16_t>(v * 16.0f);
+    }
+
+    inline uint32_t GsDepth(float ndcZ)
+    {
+        const float z = (1.0f - ndcZ) * TAG_Z_MAX;
+        if (z <= 0.0f)
+            return 0u;
+        if (z >= TAG_Z_MAX)
+            return static_cast<uint32_t>(TAG_Z_MAX);
+        return static_cast<uint32_t>(z);
+    }
+
     constexpr uint64_t GSREG_RGBAQ = 0x01;
     constexpr uint64_t GSREG_ST = 0x02;
     constexpr uint64_t GSREG_UV = 0x03;
     constexpr uint64_t GSREG_XYZ2 = 0x05;
 
-    // Build a GIFtag low word (see tGifTag in ps2s/gs.h for the field layout).
-    inline uint64_t GifTagLo(uint32_t nloop, uint32_t prim, uint32_t nreg, bool pre)
+    constexpr uint64_t GIFTAG_NLOOP_MASK = 0x7FFFull;
+    constexpr uint64_t GIFTAG_EOP = 1ull << 15;
+    constexpr uint64_t GIFTAG_FLG_REGLIST = 1ull << 58;
+    constexpr int GIFTAG_NREG_SHIFT = 60;
+    constexpr uint64_t GIFTAG_NREG_MASK = 0xFull;
+
+    constexpr uint32_t PRIM_BIT_IIP = 1u << 3;
+    constexpr uint32_t PRIM_BIT_TME = 1u << 4;
+    constexpr uint32_t PRIM_BIT_ABE = 1u << 6;
+    constexpr uint32_t PRIM_BIT_FST = 1u << 8;
+
+    inline uint64_t GifTagAd(uint32_t nloop) { return (static_cast<uint64_t>(nloop) & GIFTAG_NLOOP_MASK) | GIFTAG_EOP | (1ull << GIFTAG_NREG_SHIFT); }
+
+    inline uint64_t GifTagLo(uint32_t nloop, uint32_t nreg)
     {
-        return (static_cast<uint64_t>(nloop) & 0x7FFF) | (1ull << 15) /* EOP */
-            | (pre ? (1ull << 46) : 0ull) /* PRE */
-            | (static_cast<uint64_t>(prim) << 47) /* PRIM */
-            | (1ull << 58) /* FLG = REGLIST */
-            | (static_cast<uint64_t>(nreg & 0xF) << 60);
+        return (static_cast<uint64_t>(nloop) & GIFTAG_NLOOP_MASK) | GIFTAG_EOP | GIFTAG_FLG_REGLIST | ((static_cast<uint64_t>(nreg) & GIFTAG_NREG_MASK) << GIFTAG_NREG_SHIFT);
     }
 
     inline uint64_t FloatBits(float f)
@@ -53,15 +86,8 @@ namespace
     }
 } // namespace
 
-// ---------------------------------------------------------------------------
-// Matrix helpers. View / projection / multiply come from the shared Frustum
-// helpers (column-major, OpenGL convention) so the CPU cull frustum matches
-// the rasterized geometry. Only the model matrix (with rotation/scale) is local.
-// ---------------------------------------------------------------------------
 namespace
 {
-    // Compose the view-projection matrix for a camera. Single source of truth for
-    // Render / RenderModels / RenderSkybox.
     void BuildViewProj(const Camera3D& camera, float vp[16])
     {
         float view[16], proj[16];
@@ -81,7 +107,6 @@ void GifTagRenderer::BuildModelMatrix(float out[16], const Vector3& pos, const V
     const float cy = std::cos(ry), sy = std::sin(ry);
     const float cz = std::cos(rz), sz = std::sin(rz);
 
-    // R = Rz * Ry * Rx (column-major); then apply scale (columns) and translation.
     const float r00 = cy * cz;
     const float r01 = cy * sz;
     const float r02 = -sy;
@@ -110,9 +135,6 @@ void GifTagRenderer::BuildModelMatrix(float out[16], const Vector3& pos, const V
     out[15] = 1.0f;
 }
 
-// ---------------------------------------------------------------------------
-// Construction / GS setup
-// ---------------------------------------------------------------------------
 static void AddPrimitive(DrawLists& lists, Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale, Color3 color, int32_t textureId)
 {
     PrimitiveDrawEntry entry;
@@ -130,34 +152,43 @@ GifTagRenderer::GifTagRenderer(const EngineConfig& config)
 
     const bool pal = (GFX_SCREEN_HEIGHT == GFX_SCREEN_PAL_HEIGHT);
 
-    // --- GS buffers ---
     for (int i = 0; i < 2; ++i)
     {
         m_frame[i].width = GFX_SCREEN_WIDTH;
         m_frame[i].height = GFX_SCREEN_HEIGHT;
         m_frame[i].mask = 0;
         m_frame[i].psm = GS_PSM_32;
-        m_frame[i].address = graph_vram_allocate(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_PSM_32, GRAPH_ALIGN_PAGE);
+        const int frameAddr = graph_vram_allocate(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_PSM_32, GRAPH_ALIGN_PAGE);
+        if (frameAddr < 0)
+        {
+            Engine_LogError("GifTagRenderer: no GS VRAM for frame buffer %d (%dx%d).", i, GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT);
+            return;
+        }
+        m_frame[i].address = frameAddr;
     }
 
     m_z.enable = DRAW_ENABLE;
-    m_z.method = ZTEST_METHOD_GREATER_EQUAL; // inverted depth: nearer = larger Z
+    m_z.method = ZTEST_METHOD_GREATER_EQUAL;
     m_z.zsm = GS_ZBUF_32;
     m_z.mask = 0;
-    m_z.address = graph_vram_allocate(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_ZBUF_32, GRAPH_ALIGN_PAGE);
+    const int depthAddr = graph_vram_allocate(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_ZBUF_32, GRAPH_ALIGN_PAGE);
+    if (depthAddr < 0)
+    {
+        Engine_LogError("GifTagRenderer: no GS VRAM for the depth buffer (%dx%d).", GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT);
+        return;
+    }
+    m_z.address = depthAddr;
 
-    // Claim the rest of GS VRAM as a texture heap managed by our own first-fit
-    // free-list. graph returns a valid page-aligned base; we sub-allocate within.
     {
         const int fbWords = graph_vram_size(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_PSM_32, GRAPH_ALIGN_PAGE);
         const int zWords = graph_vram_size(GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, GS_ZBUF_32, GRAPH_ALIGN_PAGE);
-        int remaining = GRAPH_VRAM_MAX_WORDS - (2 * fbWords + zWords) - GRAPH_ALIGN_PAGE; // page of slack
+        int remaining = GRAPH_VRAM_MAX_WORDS - (2 * fbWords + zWords) - GRAPH_ALIGN_PAGE;
         if (remaining < 0)
             remaining = 0;
-        // Request the block as PSMCT32 (1 word/texel), 64 texels wide.
         const int heapH = remaining / 64;
-        m_texHeapBase = (heapH > 0) ? static_cast<uint32_t>(graph_vram_allocate(64, heapH, GS_PSM_32, GRAPH_ALIGN_PAGE)) : 0u;
-        m_texHeapWords = (m_texHeapBase != 0u) ? static_cast<uint32_t>(heapH * 64) : 0u;
+        const int heapBase = (heapH > 0) ? graph_vram_allocate(64, heapH, GS_PSM_32, GRAPH_ALIGN_PAGE) : -1;
+        m_texHeapBase = (heapBase >= 0) ? static_cast<uint32_t>(heapBase) : 0u;
+        m_texHeapWords = (heapBase >= 0) ? static_cast<uint32_t>(heapH * 64) : 0u;
         if (m_texHeapWords > 0)
         {
             m_vramExtents[0] = VramExtent{m_texHeapBase, m_texHeapWords, false};
@@ -170,36 +201,28 @@ GifTagRenderer::GifTagRenderer(const EngineConfig& config)
         }
     }
 
-    // --- video mode + initial display buffer ---
     graph_set_mode(GRAPH_MODE_INTERLACED, pal ? GRAPH_MODE_PAL : GRAPH_MODE_NTSC, GRAPH_MODE_FIELD, GRAPH_DISABLE);
-    // Display buffer 1 initially so the first frame (which draws into buffer 0)
-    // is never shown mid-render; EndFrame flips to it once the GS finishes.
+    graph_set_screen(0, 0, GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT);
+    graph_set_bgcolor(0, 0, 0);
     graph_set_framebuffer_filtered(m_frame[1].address, m_frame[1].width, m_frame[1].psm, 0, 0);
     graph_enable_output();
     m_drawBuffer = 0;
     m_displayBuffer = 1;
 
-    // --- DMA + packets ---
     dma_channel_initialize(DMA_CHANNEL_GIF, nullptr, 0);
     dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
-    // P2_MODE_NORMAL: packets are flat GIFtag+data content (no embedded DMA
-    // chain tags), sent as a single contiguous transfer to the GIF channel.
-    // P2_MODE_CHAIN would require each block to start with a dma_tag_t, which
-    // we do not write. Two geometry packets are double-buffered so the EE can
-    // build frame N+1 while the GS drains frame N.
     for (int i = 0; i < GFX_GIFTAG_PACKET_BUFFERS; ++i)
         m_geomBuf[i] = packet2_create(GFX_GIFTAG_PACKET_QWORDS, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
     m_geomIndex = 0;
     m_geom = m_geomBuf[0];
-    m_env = packet2_create(64, P2_TYPE_NORMAL, P2_MODE_NORMAL, 0);
+    m_env = packet2_create(GFX_GIFTAG_ENV_PACKET_QWORDS, P2_TYPE_NORMAL, P2_MODE_CHAIN, 0);
     if (!m_geomBuf[0] || !m_geomBuf[1] || !m_env)
     {
         Engine_LogError("GifTagRenderer: failed to create packets.");
         return;
     }
 
-    // --- transform scratch ---
     m_xyz = static_cast<xyz_t*>(memalign(16, sizeof(xyz_t) * GFX_GIFTAG_MAX_VERTS));
     m_srcIdx = static_cast<uint32_t*>(memalign(16, sizeof(uint32_t) * GFX_GIFTAG_MAX_VERTS));
     m_q = static_cast<float*>(memalign(16, sizeof(float) * GFX_GIFTAG_MAX_VERTS));
@@ -210,11 +233,8 @@ GifTagRenderer::GifTagRenderer(const EngineConfig& config)
         Engine_Panic("GifTagRenderer: out of memory for transform scratch");
     }
 
-    // Decide whether the VU0 batch transform matches our column-major convention.
     SelfTestVu0Transform();
 
-    // Separated primitive geometry lives in the renderer arena; reserve it, then
-    // let DrawLists de-interleave the MODEL_* tables into it.
     float* megaBatch = static_cast<float*>(Engine_GetSlot(ARENA_RENDERER, 0));
     if (!megaBatch)
     {
@@ -229,7 +249,6 @@ GifTagRenderer::GifTagRenderer(const EngineConfig& config)
 
 void GifTagRenderer::Shutdown()
 {
-    // Drain any frame still owned by the GS before freeing its packet.
     if (m_framePending)
     {
         dma_channel_wait(DMA_CHANNEL_GIF, 0);
@@ -262,9 +281,6 @@ void GifTagRenderer::Shutdown()
 
 RendererType GifTagRenderer::GetRendererType() const { return RendererType::GifTag; }
 
-// ---------------------------------------------------------------------------
-// Draw-list submission (identical bookkeeping to the PS2GL renderer)
-// ---------------------------------------------------------------------------
 void GifTagRenderer::AddPrimitiveToDrawList(Primitive3D primitive, const Vector3& position, const Vector3& rotation, const Vector3& scale)
 {
     AddPrimitive(m_drawLists, primitive, position, rotation, scale, {1.0f, 1.0f, 1.0f}, -1);
@@ -292,9 +308,6 @@ void GifTagRenderer::AddModelToDrawList(int32_t modelId, const Vector3& position
 void GifTagRenderer::AddSkyToDrawList(int32_t resourceId) { m_drawLists.SetSkyboxTexture(resourceId); }
 void GifTagRenderer::ClearDrawLists() { m_drawLists.Reset(false); }
 
-// ---------------------------------------------------------------------------
-// Frame lifecycle
-// ---------------------------------------------------------------------------
 void GifTagRenderer::BeginFrame()
 {
     m_inFrame = true;
@@ -305,9 +318,8 @@ void GifTagRenderer::BeginFrame()
 
     packet2_reset(m_geom, 0);
 
-    // Draw environment for the current back buffer + clear.
     packet2_update(m_geom, draw_setup_environment(m_geom->next, 0, &m_frame[m_drawBuffer], &m_z));
-    packet2_update(m_geom, draw_primitive_xyoffset(m_geom->next, 0, 2048 - (GFX_SCREEN_WIDTH / 2), 2048 - (GFX_SCREEN_HEIGHT / 2)));
+    packet2_update(m_geom, draw_primitive_xyoffset(m_geom->next, 0, TAG_GS_OFFSET_X, TAG_GS_OFFSET_Y));
 
     blend_t blend;
     blend.color1 = BLEND_COLOR_SOURCE;
@@ -317,10 +329,31 @@ void GifTagRenderer::BeginFrame()
     blend.fixed_alpha = 0x80;
     packet2_update(m_geom, draw_alpha_blending(m_geom->next, 0, &blend));
 
-    const int cr = static_cast<int>(m_clearColor.r * 255.0f);
-    const int cg = static_cast<int>(m_clearColor.g * 255.0f);
-    const int cb = static_cast<int>(m_clearColor.b * 255.0f);
-    packet2_update(m_geom, draw_clear(m_geom->next, 0, 2048.0f - (GFX_SCREEN_WIDTH / 2), 2048.0f - (GFX_SCREEN_HEIGHT / 2), GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, cr, cg, cb));
+    EmitClear(m_clearColor);
+
+    packet2_add_u64(m_geom, GifTagAd(1));
+    packet2_add_u64(m_geom, GIF_REG_AD);
+    packet2_add_u64(m_geom, GS_SET_PRMODECONT(1));
+    packet2_add_u64(m_geom, GS_REG_PRMODECONT);
+}
+
+void GifTagRenderer::EmitPrim(uint32_t prim)
+{
+    packet2_add_u64(m_geom, GifTagAd(1));
+    packet2_add_u64(m_geom, GIF_REG_AD);
+    packet2_add_u64(m_geom, prim);
+    packet2_add_u64(m_geom, GS_REG_PRIM);
+}
+
+void GifTagRenderer::EmitClear(const Color3& color)
+{
+    const int cr = static_cast<int>(color.r * 255.0f);
+    const int cg = static_cast<int>(color.g * 255.0f);
+    const int cb = static_cast<int>(color.b * 255.0f);
+
+    packet2_update(m_geom, draw_disable_tests(m_geom->next, 0, &m_z));
+    packet2_update(m_geom, draw_clear(m_geom->next, 0, TAG_GS_OFFSET_X, TAG_GS_OFFSET_Y, GFX_SCREEN_WIDTH, GFX_SCREEN_HEIGHT, cr, cg, cb));
+    packet2_update(m_geom, draw_enable_tests(m_geom->next, 0, &m_z));
 }
 
 void GifTagRenderer::EndFrame()
@@ -330,45 +363,37 @@ void GifTagRenderer::EndFrame()
     if (m_frameDroppedObjects > 0)
         Engine_LogError("GifTagRenderer: dropped %u object(s) this frame (geometry budget exceeded).", m_frameDroppedObjects);
 
-    // Finish this frame's chain (GS FINISH signal at the end).
     packet2_update(m_geom, draw_finish(m_geom->next));
     m_frameStats.submitBufferCapacityBytes = GFX_GIFTAG_PACKET_QWORDS * 16u;
     m_frameStats.submitBufferUsedBytes = static_cast<uint32_t>(m_geom->next - m_geom->base) * 16u;
 
-    // Retire the previously kicked frame before touching the display. Building
-    // this frame (script + EE transform) already overlapped the GS drawing it,
-    // so this wait is only whatever GS time did not fit under that work.
     const double waitStart = static_cast<double>(clock()) / CLOCKS_PER_SEC;
     if (m_framePending)
     {
-        dma_channel_wait(DMA_CHANNEL_GIF, 0); // previous packet fully transferred
-        draw_wait_finish(); // GS finished drawing the previous frame
+        dma_channel_wait(DMA_CHANNEL_GIF, 0);
+        draw_wait_finish();
         graph_wait_vsync();
-        // Show the previous frame (its buffer is no longer being drawn).
         graph_set_framebuffer_filtered(m_frame[m_displayBuffer].address, m_frame[m_displayBuffer].width, m_frame[m_displayBuffer].psm, 0, 0);
     }
     m_frameStats.presentWaitMs = static_cast<float>((static_cast<double>(clock()) / CLOCKS_PER_SEC - waitStart) * 1000.0);
 
-    // Kick this frame's chain WITHOUT waiting — the GS draws it while the EE
-    // builds the next frame into the other packet.
+    FlushCache(0);
     dma_channel_send_packet2(m_geom, DMA_CHANNEL_GIF, 1);
     m_framePending = true;
-    m_displayBuffer = m_drawBuffer; // shown at the next EndFrame, once GS finishes
-    m_drawBuffer ^= 1; // next frame draws into the other buffer
-    m_geomIndex ^= 1; // and builds into the other packet (its DMA is complete)
+    m_displayBuffer = m_drawBuffer;
+    m_drawBuffer ^= 1;
+    m_geomIndex ^= 1;
     m_geom = m_geomBuf[m_geomIndex];
 
     m_drawLists.SetLastStats(m_frameStats);
     m_inFrame = false;
 }
 
-
 void GifTagRenderer::ClearFrame(const Color3& color)
 {
-    // Stashed for BeginFrame() (which emits the actual GS clear). Unlike the
-    // PS2GL path there is no in-frame immediate clear — the panic loop's clear
-    // is picked up by the next BeginFrame().
     m_clearColor = color;
+    if (m_inFrame)
+        EmitClear(color);
 }
 
 void GifTagRenderer::DrawQuad2D(const Quad2D& quad)
@@ -389,20 +414,21 @@ void GifTagRenderer::FlushQuads2D()
         m_droppedQuads2D = 0;
     }
 
+    m_reserved2DQw = 0;
+
     if (m_quad2DCount == 0)
         return;
 
     packet2_update(m_geom, draw_disable_tests(m_geom->next, 0, &m_z));
 
-    // Sprite primitives in screen space. XYOFFSET is already set to
-    // (2048 - W/2, 2048 - H/2), so screen pixels map through 12.4 window coords.
     uint16_t dropped = 0;
     for (uint16_t i = 0; i < m_quad2DCount; ++i)
     {
         const Quad2D& q = m_quads2D[i];
         const bool textured = (q.texture != 0) && (q.texture <= TAG_MAX_TEXTURES) && m_textures[q.texture - 1].inUse;
 
-        if (!PacketHasSpace(textured ? 4u : 3u))
+        const uint32_t quadQw = (textured ? 4u : 3u) + GFX_GIFTAG_PRIM_QW + (textured ? BindCostQwords(q.texture) : 0u);
+        if (!PacketHasSpace(quadQw))
         {
             dropped = static_cast<uint16_t>(m_quad2DCount - i);
             break;
@@ -411,21 +437,24 @@ void GifTagRenderer::FlushQuads2D()
         if (textured)
             BindTexture(q.texture);
 
-        const uint16_t x0 = static_cast<uint16_t>(q.x * 16);
-        const uint16_t y0 = static_cast<uint16_t>(q.y * 16);
-        const uint16_t x1 = static_cast<uint16_t>((q.x + q.w) * 16);
-        const uint16_t y1 = static_cast<uint16_t>((q.y + q.h) * 16);
+        const uint16_t x0 = GsFix4(q.x + TAG_GS_OFFSET_X);
+        const uint16_t y0 = GsFix4(q.y + TAG_GS_OFFSET_Y);
+        const uint16_t x1 = GsFix4(q.x + q.w + TAG_GS_OFFSET_X);
+        const uint16_t y1 = GsFix4(q.y + q.h + TAG_GS_OFFSET_Y);
 
         const uint64_t alpha = (static_cast<uint64_t>(q.a) * 0x80u) / 255u;
-        const uint64_t rgbaq = static_cast<uint64_t>(q.r) | (static_cast<uint64_t>(q.g) << 8) | (static_cast<uint64_t>(q.b) << 16) | (alpha << 24) | (FloatBits(1.0f) << 32);
+        const uint32_t colorScale = textured ? 0x80u : 0xFFu;
+        const uint64_t cr = (static_cast<uint64_t>(q.r) * colorScale) / 255u;
+        const uint64_t cg = (static_cast<uint64_t>(q.g) * colorScale) / 255u;
+        const uint64_t cb = (static_cast<uint64_t>(q.b) * colorScale) / 255u;
+        const uint64_t rgbaq = cr | (cg << 8) | (cb << 16) | (alpha << 24) | (FloatBits(1.0f) << 32);
 
-        // PRIM: sprite(6), TME bit4 and FST bit8 when textured, ABE bit6 when
-        // the quad is not fully opaque.
-        uint32_t prim = 6u;
+        uint32_t prim = PRIM_SPRITE;
         if (textured)
-            prim |= (1u << 4) | (1u << 8);
+            prim |= PRIM_BIT_TME | PRIM_BIT_FST;
         if (q.a < 255)
-            prim |= (1u << 6);
+            prim |= PRIM_BIT_ABE;
+
 
         if (textured)
         {
@@ -435,7 +464,8 @@ void GifTagRenderer::FlushQuads2D()
             const uint32_t tu1 = (static_cast<uint32_t>(q.u1) * static_cast<uint32_t>(t.width) * 16u) / 65535u;
             const uint32_t tv1 = (static_cast<uint32_t>(q.v1) * static_cast<uint32_t>(t.height) * 16u) / 65535u;
 
-            packet2_add_u64(m_geom, GifTagLo(2, prim, 3, true));
+            EmitPrim(prim);
+            packet2_add_u64(m_geom, GifTagLo(2, 3));
             packet2_add_u64(m_geom, GSREG_RGBAQ | (GSREG_UV << 4) | (GSREG_XYZ2 << 8));
             packet2_add_u64(m_geom, rgbaq);
             packet2_add_u64(m_geom, static_cast<uint64_t>(tu0) | (static_cast<uint64_t>(tv0) << 16));
@@ -446,7 +476,8 @@ void GifTagRenderer::FlushQuads2D()
         }
         else
         {
-            packet2_add_u64(m_geom, GifTagLo(2, prim, 2, true));
+            EmitPrim(prim);
+            packet2_add_u64(m_geom, GifTagLo(2, 2));
             packet2_add_u64(m_geom, GSREG_RGBAQ | (GSREG_XYZ2 << 4));
             packet2_add_u64(m_geom, rgbaq);
             packet2_add_u64(m_geom, static_cast<uint64_t>(x0) | (static_cast<uint64_t>(y0) << 16));
@@ -471,17 +502,18 @@ void GifTagRenderer::DrawGrid(int32_t slices, float spacing)
 
 void GifTagRenderer::Render()
 {
+    m_reserved2DQw = static_cast<uint32_t>(m_quad2DCount) * GFX_GIFTAG_QUAD2D_QW + GFX_GIFTAG_2D_RESERVE_QW;
+
     m_drawLists.SortForSubmission();
 
     const Camera3D& camera = m_drawLists.GetCamera3D();
     float vp[16];
-    BuildViewProj(camera, vp); // clip = P * V * (M * v)
+    BuildViewProj(camera, vp);
     FrustumPlanes frustum;
     Frustum_FromViewProj(&frustum, vp);
 
     RenderSkybox(m_drawLists);
 
-    // Primitives (inlined here because it needs the composed view-projection).
     {
         DrawLists& lists = m_drawLists;
         const uint16_t uCount = lists.GetUntexturedCount();
@@ -491,7 +523,6 @@ void GifTagRenderer::Render()
 
         auto drawPrim = [&](const PrimitiveDrawEntry& e, uint32_t texId)
         {
-            // Frustum cull against the shape's object-space bounding sphere.
             Vector3 wc;
             float wr;
             Frustum_WorldSphere(e.transform.GetPosition(), e.transform.GetScale(), Vector3{0.0f, 0.0f, 0.0f}, lists.GetPrimitiveBaseRadius(e.type), &wc, &wr);
@@ -523,28 +554,92 @@ void GifTagRenderer::Render()
     }
 
     RenderModels(m_drawLists);
+    RenderLevel(vp, frustum);
     m_drawLists.Reset(false);
 }
 
-// Worst-case qwords to emit `vertexCount` textured verts: 1 qw for the
-// GIFtag+reglist header plus 3 regs/vert = 1.5 qw/vert, rounded up.
-static inline uint32_t WorstCaseQwords(uint32_t vertexCount) { return 2u + (vertexCount * 3u + 1u) / 2u; }
+void GifTagRenderer::RenderLevel(const float vp[16], const FrustumPlanes& frustum)
+{
+    if (!Engine_Level_Current())
+        return;
+
+    uint32_t count = 0;
+    const SectorResident* residents = Engine_Sector_GetResidents(&count);
+    if (!residents)
+        return;
+
+    const bool savedCull = m_backfaceCull;
+    m_backfaceCull = false;
+
+    uint32_t renderable = 0, visible = 0, drawnMeshes = 0;
+
+    for (uint32_t s = 0; s < count; ++s)
+    {
+        const SectorResident& sector = residents[s];
+        if (sector.state != SECTOR_READY || sector.meshCount == 0)
+            continue;
+        ++renderable;
+        if (!Frustum_AabbVisible(&frustum, sector.bounds))
+        {
+            ++m_frameStats.entriesCulled;
+            continue;
+        }
+        ++visible;
+
+        for (uint32_t m = 0; m < sector.meshCount && m < LEVEL_MAX_MESHES_PER_SECTOR; ++m)
+        {
+            const Mesh& mesh = sector.meshes[m];
+            if (!mesh.vertices || mesh.vertexCount == 0)
+                continue;
+
+            uint32_t texId = 0;
+            const int32_t texResId = sector.meshTexture[m];
+            if (texResId >= 0)
+            {
+                const auto* tex = static_cast<const Texture2D*>(Engine_Resource_Get(texResId));
+                if (tex)
+                    texId = tex->id;
+            }
+
+            ++drawnMeshes;
+
+            const int components = (mesh.vertexComponents == 4) ? 4 : 3;
+            const float* uv = texId ? mesh.texcoords : nullptr;
+            if (mesh.topology == MESH_TOPOLOGY_STRIP)
+                DrawStrip(vp, mesh.vertices, components, uv, static_cast<uint32_t>(mesh.vertexCount), Color3{1.0f, 1.0f, 1.0f}, texId);
+            else
+                DrawTriangles(vp, mesh.vertices, components, uv, static_cast<uint32_t>(mesh.vertexCount), Color3{1.0f, 1.0f, 1.0f}, texId);
+        }
+    }
+
+    m_backfaceCull = savedCull;
+
+    static bool s_LoggedLevelStats = false;
+    if (!s_LoggedLevelStats)
+    {
+        s_LoggedLevelStats = true;
+        Engine_LogInfo("RenderLevel: residents=%u renderable=%u visible=%u drawnMeshes=%u", count, renderable, visible, drawnMeshes);
+    }
+}
+
+static inline uint32_t WorstCaseQwords(uint32_t vertexCount) { return 2u + GFX_GIFTAG_PRIM_QW + (vertexCount * 3u + 1u) / 2u; }
 
 bool GifTagRenderer::PacketHasSpace(uint32_t qwNeeded) const
 {
     const uint32_t used = static_cast<uint32_t>(m_geom->next - m_geom->base);
-    return used + qwNeeded + GFX_GIFTAG_PACKET_MARGIN_QW <= static_cast<uint32_t>(GFX_GIFTAG_PACKET_QWORDS);
+    return used + qwNeeded + m_reserved2DQw + GFX_GIFTAG_PACKET_MARGIN_QW <= static_cast<uint32_t>(GFX_GIFTAG_PACKET_QWORDS);
 }
 
-// Transform + emit one unindexed triangle list.
+uint32_t GifTagRenderer::BindCostQwords(uint32_t textureId) const { return (textureId != 0u && textureId != m_lastBoundTex) ? static_cast<uint32_t>(GFX_GIFTAG_TEXBIND_QW) : 0u; }
+
 void GifTagRenderer::DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId)
 {
     if (!verts || vertexCount < 3)
         return;
 
-    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS) || !PacketHasSpace(WorstCaseQwords(vertexCount)))
+    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS) || !PacketHasSpace(WorstCaseQwords(vertexCount) + BindCostQwords(textureId)))
     {
-        ++m_frameDroppedObjects; // logged once per frame in EndFrame, not per object
+        ++m_frameDroppedObjects;
         m_frameStats.trisCulled += vertexCount / 3;
         return;
     }
@@ -571,19 +666,19 @@ void GifTagRenderer::DrawTriangles(const float mvp[16], const float* verts, int 
                 break;
             }
             const float inv = 1.0f / clipW;
-            sx[j] = (clipX * inv * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
-            sy[j] = (1.0f - (clipY * inv * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
-            const float ndcZ = clipZ * inv * 0.5f + 0.5f; // 0 near .. 1 far
-            zc[j] = static_cast<uint32_t>((1.0f - ndcZ) * TAG_Z_MAX); // invert for GEQUAL
+            sx[j] = clipX * inv * (GFX_SCREEN_WIDTH * 0.5f) + GFX_GIFTAG_GS_ORIGIN;
+            sy[j] = -clipY * inv * (GFX_SCREEN_HEIGHT * 0.5f) + GFX_GIFTAG_GS_ORIGIN;
+            if (!GsCoordVisible(sx[j], sy[j]))
+            {
+                ok = false;
+                break;
+            }
+            zc[j] = GsDepth(clipZ * inv * 0.5f + 0.5f);
             inv3[j] = inv;
         }
         if (!ok)
-            continue; // crude whole-triangle near-plane cull (no clipping yet)
+            continue;
 
-        // Backface cull in screen space (list path only). Front faces are CCW in
-        // NDC (the PS2GL backend renders this same geometry with GL_CULL_FACE +
-        // GL_CCW); the viewport Y-flip negates the signed area, so front faces
-        // have area < 0 here. Cull the rest.
         if (m_backfaceCull)
         {
             const float area = (sx[1] - sx[0]) * (sy[2] - sy[0]) - (sx[2] - sx[0]) * (sy[1] - sy[0]);
@@ -593,11 +688,11 @@ void GifTagRenderer::DrawTriangles(const float mvp[16], const float* verts, int 
 
         for (int j = 0; j < 3; ++j)
         {
-            m_xyz[emitted].x = static_cast<uint16_t>(sx[j] * 16.0f);
-            m_xyz[emitted].y = static_cast<uint16_t>(sy[j] * 16.0f);
+            m_xyz[emitted].x = GsFix4(sx[j]);
+            m_xyz[emitted].y = GsFix4(sy[j]);
             m_xyz[emitted].z = zc[j];
             m_srcIdx[emitted] = tri + j;
-            m_q[emitted] = inv3[j]; // 1/clip.w — reused for perspective-correct ST below
+            m_q[emitted] = inv3[j];
             ++emitted;
         }
     }
@@ -615,18 +710,18 @@ void GifTagRenderer::DrawTriangles(const float mvp[16], const float* verts, int 
     if (textured)
         BindTexture(textureId);
 
-    const uint8_t r = static_cast<uint8_t>(color.r * 255.0f);
-    const uint8_t g = static_cast<uint8_t>(color.g * 255.0f);
-    const uint8_t b = static_cast<uint8_t>(color.b * 255.0f);
-    // RGB+A packed once; Q (bits 32-63) varies per vertex below.
+    const float colorScale = textured ? 128.0f : 255.0f;
+    const uint8_t r = static_cast<uint8_t>(color.r * colorScale);
+    const uint8_t g = static_cast<uint8_t>(color.g * colorScale);
+    const uint8_t b = static_cast<uint8_t>(color.b * colorScale);
     const uint64_t rgbaLo = static_cast<uint64_t>(r) | (static_cast<uint64_t>(g) << 8) | (static_cast<uint64_t>(b) << 16) | (static_cast<uint64_t>(0x80) << 24);
 
-    // PRIM: triangle(3), gouraud(IIP bit3), texture(TME bit4 if textured).
-    const uint32_t prim = 3u | (1u << 3) | (textured ? (1u << 4) : 0u);
+    const uint32_t prim = PRIM_TRIANGLE | PRIM_BIT_IIP | (textured ? PRIM_BIT_TME : 0u);
     const uint32_t nreg = textured ? 3u : 2u;
     const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8)) : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
 
-    packet2_add_u64(m_geom, GifTagLo(emitted, prim, nreg, true));
+    EmitPrim(prim);
+    packet2_add_u64(m_geom, GifTagLo(emitted, nreg));
     packet2_add_u64(m_geom, reglist);
 
     for (uint32_t k = 0; k < emitted; ++k)
@@ -634,9 +729,6 @@ void GifTagRenderer::DrawTriangles(const float mvp[16], const float* verts, int 
         const float q = m_q[k];
         if (textured)
         {
-            // GS ST mode expects S=u/w, T=v/w (i.e. pre-divided by the same Q used
-            // for the RGBAQ below); the rasterizer multiplies back by 1/Q per pixel
-            // to recover perspective-correct texture coordinates.
             const float* uv = uvs + m_srcIdx[k] * 2;
             packet2_add_u64(m_geom, FloatBits(uv[0] * q) | (FloatBits(uv[1] * q) << 32));
         }
@@ -646,14 +738,10 @@ void GifTagRenderer::DrawTriangles(const float mvp[16], const float* verts, int 
         packet2_add_u64(m_geom, xyzWord);
     }
 
-    // REGLIST data must end on a qword boundary.
     if (((emitted * nreg) & 1u) != 0u)
         packet2_add_u64(m_geom, 0);
 }
 
-// Init-time check: does math3d's VU0 calculate_vertices reproduce the exact
-// clip coordinates our scalar path computes (same column-major convention)?
-// Only then is the batch path safe to enable; otherwise we keep the scalar path.
 void GifTagRenderer::SelfTestVu0Transform()
 {
     m_useVu0 = false;
@@ -706,9 +794,6 @@ void GifTagRenderer::SelfTestVu0Transform()
     Engine_LogInfo("GifTagRenderer: VU0 batch transform %s (self-test %s).", match ? "ENABLED" : "disabled", match ? "passed" : "failed");
 }
 
-// Transform `count` strip vertices to GS fixed-point screen space, writing
-// m_xyz[i] and m_q[i] (m_q<=0 marks a vertex behind the near plane). Uses the
-// VU0 batch path when the self-test enabled it, else scalar.
 void GifTagRenderer::TransformStrip(const float mvp[16], const float* verts, int components, uint32_t count)
 {
     if (m_useVu0)
@@ -724,7 +809,6 @@ void GifTagRenderer::TransformStrip(const float mvp[16], const float* verts, int
             VECTOR* input;
             if (components == 4)
             {
-                // Baked vec4 arrays are 16-byte aligned — feed VU0 in place.
                 input = reinterpret_cast<VECTOR*>(const_cast<float*>(verts + static_cast<size_t>(base) * 4));
             }
             else
@@ -751,19 +835,22 @@ void GifTagRenderer::TransformStrip(const float mvp[16], const float* verts, int
                     continue;
                 }
                 const float inv = 1.0f / clipW;
-                const float sx = (clip[j][0] * inv * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
-                const float sy = (1.0f - (clip[j][1] * inv * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
-                const float zc = clip[j][2] * inv * 0.5f + 0.5f;
-                m_xyz[base + j].x = static_cast<uint16_t>(sx * 16.0f);
-                m_xyz[base + j].y = static_cast<uint16_t>(sy * 16.0f);
-                m_xyz[base + j].z = static_cast<uint32_t>((1.0f - zc) * TAG_Z_MAX);
+                const float sx = clip[j][0] * inv * (GFX_SCREEN_WIDTH * 0.5f) + GFX_GIFTAG_GS_ORIGIN;
+                const float sy = -clip[j][1] * inv * (GFX_SCREEN_HEIGHT * 0.5f) + GFX_GIFTAG_GS_ORIGIN;
+                if (!GsCoordVisible(sx, sy))
+                {
+                    m_q[base + j] = 0.0f;
+                    continue;
+                }
+                m_xyz[base + j].x = GsFix4(sx);
+                m_xyz[base + j].y = GsFix4(sy);
+                m_xyz[base + j].z = GsDepth(clip[j][2] * inv * 0.5f + 0.5f);
                 m_q[base + j] = inv;
             }
         }
         return;
     }
 
-    // Scalar fallback.
     for (uint32_t i = 0; i < count; ++i)
     {
         const float* v = verts + static_cast<size_t>(i) * components;
@@ -778,50 +865,47 @@ void GifTagRenderer::TransformStrip(const float mvp[16], const float* verts, int
             continue;
         }
         const float inv = 1.0f / clipW;
-        const float sx = (clipX * inv * 0.5f + 0.5f) * GFX_SCREEN_WIDTH;
-        const float sy = (1.0f - (clipY * inv * 0.5f + 0.5f)) * GFX_SCREEN_HEIGHT;
-        const float zc = clipZ * inv * 0.5f + 0.5f;
-        m_xyz[i].x = static_cast<uint16_t>(sx * 16.0f);
-        m_xyz[i].y = static_cast<uint16_t>(sy * 16.0f);
-        m_xyz[i].z = static_cast<uint32_t>((1.0f - zc) * TAG_Z_MAX);
+        const float sx = clipX * inv * (GFX_SCREEN_WIDTH * 0.5f) + GFX_GIFTAG_GS_ORIGIN;
+        const float sy = -clipY * inv * (GFX_SCREEN_HEIGHT * 0.5f) + GFX_GIFTAG_GS_ORIGIN;
+        if (!GsCoordVisible(sx, sy))
+        {
+            m_q[i] = 0.0f;
+            continue;
+        }
+        m_xyz[i].x = GsFix4(sx);
+        m_xyz[i].y = GsFix4(sy);
+        m_xyz[i].z = GsDepth(clipZ * inv * 0.5f + 0.5f);
         m_q[i] = inv;
     }
 }
 
-// Transform + emit one triangle strip. Vertices are transformed once; the strip
-// is split into maximal runs of >= 3 consecutive near-plane-visible vertices,
-// one GIF REGLIST (PRIM strip) per run. Winding parity is irrelevant on the GS
-// (no backface hardware), so runs need no parity fixup.
 void GifTagRenderer::DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId)
 {
     if (!verts || vertexCount < 3)
         return;
 
-    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS) || !PacketHasSpace(WorstCaseQwords(vertexCount)))
+    if (static_cast<uint32_t>(m_frameVertsUsed) + vertexCount > static_cast<uint32_t>(GFX_GIFTAG_MAX_VERTS) || !PacketHasSpace(WorstCaseQwords(vertexCount) + BindCostQwords(textureId)))
     {
-        ++m_frameDroppedObjects; // logged once per frame in EndFrame, not per object
+        ++m_frameDroppedObjects;
         m_frameStats.trisCulled += vertexCount - 2;
         return;
     }
 
     const bool textured = (uvs != nullptr && textureId != 0);
 
-    // Transform every vertex to GS fixed-point screen space once (VU0 batch when
-    // available, else scalar). m_q holds 1/clip.w and doubles as the visibility
-    // flag (> 0 == in front of the near plane; 0 breaks the strip run there).
     TransformStrip(mvp, verts, components, vertexCount);
     m_frameStats.vertsTransformed += vertexCount;
 
     if (textured)
         BindTexture(textureId);
 
-    const uint8_t r = static_cast<uint8_t>(color.r * 255.0f);
-    const uint8_t g = static_cast<uint8_t>(color.g * 255.0f);
-    const uint8_t b = static_cast<uint8_t>(color.b * 255.0f);
+    const float colorScale = textured ? 128.0f : 255.0f;
+    const uint8_t r = static_cast<uint8_t>(color.r * colorScale);
+    const uint8_t g = static_cast<uint8_t>(color.g * colorScale);
+    const uint8_t b = static_cast<uint8_t>(color.b * colorScale);
     const uint64_t rgbaLo = static_cast<uint64_t>(r) | (static_cast<uint64_t>(g) << 8) | (static_cast<uint64_t>(b) << 16) | (static_cast<uint64_t>(0x80) << 24);
 
-    // PRIM: triangle strip(4), gouraud(IIP bit3), texture(TME bit4 if textured).
-    const uint32_t prim = 4u | (1u << 3) | (textured ? (1u << 4) : 0u);
+    const uint32_t prim = PRIM_TRIANGLE_STRIP | PRIM_BIT_IIP | (textured ? PRIM_BIT_TME : 0u);
     const uint32_t nreg = textured ? 3u : 2u;
     const uint64_t reglist = textured ? (GSREG_ST | (GSREG_RGBAQ << 4) | (GSREG_XYZ2 << 8)) : (GSREG_RGBAQ | (GSREG_XYZ2 << 4));
 
@@ -839,7 +923,14 @@ void GifTagRenderer::DrawStrip(const float mvp[16], const float* verts, int comp
         if (runLen < 3)
             continue;
 
-        packet2_add_u64(m_geom, GifTagLo(runLen, prim, nreg, true));
+        if (!PacketHasSpace(1u + GFX_GIFTAG_PRIM_QW + (runLen * nreg + 1u) / 2u))
+        {
+            ++m_frameDroppedObjects;
+            break;
+        }
+
+        EmitPrim(prim);
+        packet2_add_u64(m_geom, GifTagLo(runLen, nreg));
         packet2_add_u64(m_geom, reglist);
         for (uint32_t k = start; k < i; ++k)
         {
@@ -863,7 +954,6 @@ void GifTagRenderer::DrawStrip(const float mvp[16], const float* verts, int comp
 
     m_frameVertsUsed += emittedTotal;
     m_frameStats.trisSubmitted += submittedTris;
-    // A full strip has (vertexCount - 2) triangles; the shortfall was near-plane culled.
     m_frameStats.trisCulled += (vertexCount - 2) - submittedTris;
 }
 
@@ -875,8 +965,6 @@ void GifTagRenderer::BindTexture(uint32_t textureId)
     if (!t.inUse)
         return;
 
-    // Draws are texture-sorted, so a run of same-texture draws needs only one
-    // TEX0/TEX1 write.
     if (textureId == m_lastBoundTex)
         return;
     m_lastBoundTex = textureId;
@@ -885,14 +973,13 @@ void GifTagRenderer::BindTexture(uint32_t textureId)
 
     texbuffer_t tb;
     tb.address = t.gsAddr;
-    tb.width = (t.width < 64) ? 64 : t.width; // TBW min 64
+    tb.width = (t.width < 64) ? 64 : t.width;
     tb.psm = t.psm;
     tb.info.width = draw_log2(t.width);
     tb.info.height = draw_log2(t.height);
     tb.info.components = TEXTURE_COMPONENTS_RGBA;
     tb.info.function = TEXTURE_FUNCTION_MODULATE;
 
-    // draw_mipmap1 covers levels 1..3; clamp the sampled range to what it sets.
     const uint8_t maxLevel = (t.mipCount > 4) ? 3 : ((t.mipCount > 0) ? t.mipCount - 1 : 0);
     const bool mipped = (maxLevel > 0);
 
@@ -908,9 +995,15 @@ void GifTagRenderer::BindTexture(uint32_t textureId)
 
     packet2_update(m_geom, draw_texture_sampling(m_geom->next, 0, &lod));
 
-    // Only a palettised texture loads a colour table, but the register writer
-    // reads the struct either way, so the inert case is a zeroed one rather
-    // than a null pointer.
+    texwrap_t wrap;
+    wrap.horizontal = WRAP_REPEAT;
+    wrap.vertical = WRAP_REPEAT;
+    wrap.minu = 0;
+    wrap.maxu = 0;
+    wrap.minv = 0;
+    wrap.maxv = 0;
+    packet2_update(m_geom, draw_texture_wrapping(m_geom->next, 0, &wrap));
+
     clutbuffer_t clut;
     clut.address = 0;
     clut.psm = 0;
@@ -925,13 +1018,17 @@ void GifTagRenderer::BindTexture(uint32_t textureId)
     }
     packet2_update(m_geom, draw_texturebuffer(m_geom->next, 0, &tb, &clut));
 
+    packet2_add_u64(m_geom, GifTagAd(1));
+    packet2_add_u64(m_geom, GIF_REG_AD);
+    packet2_add_u64(m_geom, 0);
+    packet2_add_u64(m_geom, GS_REG_TEXFLUSH);
+
     if (mipped)
     {
         mipmap_t mm;
         mm.address1 = static_cast<int>(t.mipAddr[1]);
         mm.address2 = static_cast<int>((maxLevel >= 2) ? t.mipAddr[2] : t.mipAddr[1]);
         mm.address3 = static_cast<int>((maxLevel >= 3) ? t.mipAddr[3] : t.mipAddr[1]);
-        // Per-level TBW in 64-texel units (GS MIPTBP convention).
         mm.width1 = static_cast<char>(((t.width >> 1) + 63) / 64);
         mm.width2 = static_cast<char>(((t.width >> 2) + 63) / 64);
         mm.width3 = static_cast<char>(((t.width >> 3) + 63) / 64);
@@ -948,16 +1045,12 @@ void GifTagRenderer::RenderSkybox(const DrawLists& lists)
     if (!tex || tex->id == 0)
         return;
 
-    // Camera-centered cube. Uses the shared cube geometry; drawn first so the
-    // scene overwrites it. (Depth handling for the skybox is a verification TODO.)
     const Camera3D& camera = lists.GetCamera3D();
     float vp[16], model[16], mvp[16];
     BuildViewProj(camera, vp);
     BuildModelMatrix(model, camera.position, Vector3{0, 0, 0}, Vector3{500.0f, 500.0f, 500.0f});
     Frustum_Mult4x4(mvp, vp, model);
 
-    // The skybox cube is viewed from the inside, so its faces are all
-    // back-facing — disable backface culling for this draw.
     const bool savedCull = m_backfaceCull;
     m_backfaceCull = false;
     const PrimitiveArrays cube = lists.GetPrimitiveArrays(Primitive3D::Cube);
@@ -965,12 +1058,7 @@ void GifTagRenderer::RenderSkybox(const DrawLists& lists)
     m_backfaceCull = savedCull;
 }
 
-void GifTagRenderer::RenderPrimitives(DrawLists& lists)
-{
-    // Primitive submission is inlined in Render() (it needs the view-projection
-    // matrix already composed there); nothing to do here.
-    UNUSED_VAR(lists);
-}
+void GifTagRenderer::RenderPrimitives(DrawLists& lists) { UNUSED_VAR(lists); }
 
 void GifTagRenderer::RenderModels(const DrawLists& lists)
 {
@@ -993,7 +1081,6 @@ void GifTagRenderer::RenderModels(const DrawLists& lists)
         if (!model)
             continue;
 
-        // Frustum cull against the model's merged bounding sphere.
         Vector3 wc;
         float wr;
         Frustum_WorldSphere(entry.transform.GetPosition(), entry.transform.GetScale(), model->boundsCenter, model->boundsRadius, &wc, &wr);
@@ -1017,7 +1104,6 @@ void GifTagRenderer::RenderModels(const DrawLists& lists)
             const int matIdx = (model->meshMaterial) ? model->meshMaterial[meshIdx] : 0;
             if (model->materials)
             {
-                // Resolve the diffuse texture from its resource handle at draw time.
                 const int32_t texResId = model->materials[matIdx].maps[MATERIAL_MAP_DIFFUSE].textureResourceId;
                 if (texResId >= 0)
                 {
@@ -1040,12 +1126,6 @@ void GifTagRenderer::RenderModels(const DrawLists& lists)
     m_frameStats.modelCount = meshDraws;
 }
 
-
-// ---------------------------------------------------------------------------
-// GS-VRAM first-fit free-list (64-word aligned). graph_vram_free is FIFO-only,
-// so textures evicted out of order would corrupt it; this manages the heap block
-// claimed at construction instead.
-// ---------------------------------------------------------------------------
 namespace
 {
     inline uint32_t Align64(uint32_t words) { return (words + 63u) & ~63u; }
@@ -1069,9 +1149,8 @@ uint32_t GifTagRenderer::VramAlloc(uint32_t words)
             e.used = true;
             return addr;
         }
-        // Split: shrink this extent to the remainder, add a used extent in front.
         if (m_vramExtentCount >= TAG_MAX_VRAM_EXTENTS)
-            return 0; // no room to track the split
+            return 0;
         e.addr += words;
         e.words -= words;
         VramExtent& used = m_vramExtents[m_vramExtentCount++];
@@ -1095,7 +1174,6 @@ void GifTagRenderer::VramFree(uint32_t addr)
             break;
         }
     }
-    // Coalesce any adjacent free extents (O(n^2), n small).
     bool merged = true;
     while (merged)
     {
@@ -1122,10 +1200,6 @@ void GifTagRenderer::VramFree(uint32_t addr)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Textures — upload all mip levels (+ CLUT for PAL8) into one contiguous heap
-// extent so release reclaims the VRAM in any order.
-// ---------------------------------------------------------------------------
 uint32_t GifTagRenderer::UploadTexture(const TextureUpload& upload)
 {
     int slot = -1;
@@ -1159,10 +1233,21 @@ uint32_t GifTagRenderer::UploadTexture(const TextureUpload& upload)
         break;
     }
 
-    const uint8_t mipCount = (upload.mipCount == 0) ? 1 : upload.mipCount;
+    uint8_t mipCount = (upload.mipCount == 0) ? 1 : upload.mipCount;
+    if (mipCount > TEX_MAX_MIP_LEVELS)
+    {
+        Engine_LogError("GifTagRenderer: texture declares %u mip levels, capped at %u.", upload.mipCount, TEX_MAX_MIP_LEVELS);
+        mipCount = TEX_MAX_MIP_LEVELS;
+    }
+    while (mipCount > 1 && upload.levelPtr[mipCount - 1] == nullptr)
+        --mipCount;
+    if (upload.levelPtr[0] == nullptr)
+    {
+        Engine_LogError("GifTagRenderer: texture upload has no level 0 pixel data.");
+        return 0;
+    }
     const bool hasClut = (upload.format == PixelFormat::PAL8 && upload.clut != nullptr);
 
-    // Size the extent: every mip level (64-word aligned) plus the CLUT.
     uint32_t totalWords = 0;
     uint32_t levelWords[TEX_MAX_MIP_LEVELS] = {0};
     for (uint8_t lvl = 0; lvl < mipCount; ++lvl)
@@ -1186,11 +1271,8 @@ uint32_t GifTagRenderer::UploadTexture(const TextureUpload& upload)
     te = TexEntry{};
     te.vramBase = base;
 
-    // A geometry packet may be DMA'ing during the async resource-load phase; the
-    // env packet shares the GIF channel, so wait for any in-flight transfer.
     dma_channel_wait(DMA_CHANNEL_GIF, 0);
 
-    // Transfer each mip level to its slice of the extent.
     uint32_t offset = 0;
     for (uint8_t lvl = 0; lvl < mipCount; ++lvl)
     {
@@ -1207,19 +1289,18 @@ uint32_t GifTagRenderer::UploadTexture(const TextureUpload& upload)
         dma_channel_wait(DMA_CHANNEL_GIF, 0);
     }
 
-    // PAL8: swizzle the 256-entry CLUT into GS CSM1 block order, upload as 16x16 PSMCT32.
     if (hasClut)
     {
         const uint32_t clutAddr = base + offset;
         const uint32_t* src = static_cast<const uint32_t*>(upload.clut);
-        uint32_t swz[256];
+        uint32_t swz[256] __attribute__((aligned(16)));
         for (int i = 0; i < 256; ++i)
         {
             const int j = (i & 0xE7) | ((i & 0x10) >> 1) | ((i & 0x08) << 1);
             swz[j] = src[i];
         }
         packet2_reset(m_env, 0);
-        packet2_update(m_env, draw_texture_transfer(m_env->next, swz, 16, 16, GS_PSM_32, static_cast<int>(clutAddr), 16));
+        packet2_update(m_env, draw_texture_transfer(m_env->next, swz, 16, 16, GS_PSM_32, static_cast<int>(clutAddr), 64));
         packet2_update(m_env, draw_texture_flush(m_env->next));
         dma_channel_send_packet2(m_env, DMA_CHANNEL_GIF, 1);
         dma_channel_wait(DMA_CHANNEL_GIF, 0);
@@ -1243,7 +1324,7 @@ void GifTagRenderer::ReleaseTexture(uint32_t handle)
         return;
     TexEntry& te = m_textures[handle - 1];
     if (te.inUse)
-        VramFree(te.vramBase); // reclaim the whole extent (mips + CLUT)
+        VramFree(te.vramBase);
     te.inUse = false;
     if (m_lastBoundTex == handle)
         m_lastBoundTex = 0;
@@ -1252,6 +1333,8 @@ void GifTagRenderer::ReleaseTexture(uint32_t handle)
 void GifTagRenderer::SetCamera3D(CameraID id, const Camera3D& camera) { m_drawLists.SetCamera3D(id, camera); }
 void GifTagRenderer::SetActiveCamera3D(CameraID id) { m_drawLists.SetActiveCamera3D(id); }
 void GifTagRenderer::SetActiveCamera2D(const Camera2D& camera) { m_drawLists.SetActiveCamera2D(camera); }
+
+uint32_t GifTagRenderer::GetTextureBudgetBytes() const { return m_texHeapWords * 4u; }
 
 bool GifTagRenderer::IsInitialized() const { return m_initialized; }
 DrawStats GifTagRenderer::GetLastStats() const { return m_drawLists.GetLastStats(); }

@@ -2,8 +2,8 @@
 
 #include "EngineCore.h"
 #include "graphics/DrawList.h"
+#include "graphics/Frustum.h"
 #include "graphics/Renderer.h"
-
 
 extern "C" {
 #include <draw.h>
@@ -18,71 +18,67 @@ class GifTagRenderer final : public Renderer
 
     Color3 m_clearColor{0.0f, 0.0f, 0.0f};
 
-    // Double-buffered frame buffers + a shared depth buffer.
     framebuffer_t m_frame[2];
     zbuffer_t m_z;
-    int m_drawBuffer = 0; // framebuffer index the current frame draws into
-    int m_displayBuffer = 0; // framebuffer index of the frame kicked but not yet shown
+    int m_drawBuffer = 0;
+    int m_displayBuffer = 0;
 
-    // Double-buffered geometry packets: the current one (m_geom) is being built
-    // while the other may still be DMA'ing to the GS. m_env is a small packet
-    // for texture-upload / environment transfers.
     packet2_t* m_geomBuf[GFX_GIFTAG_PACKET_BUFFERS] = {nullptr, nullptr};
-    packet2_t* m_geom = nullptr; // == m_geomBuf[m_geomIndex]
+    packet2_t* m_geom = nullptr;
     packet2_t* m_env = nullptr;
-    uint8_t m_geomIndex = 0; // which geometry packet is current
-    bool m_framePending = false; // a kicked frame is still owned by the GS
+    uint8_t m_geomIndex = 0;
+    bool m_framePending = false;
 
-    // EE transform scratch (sized to the per-frame vertex cap).
-    xyz_t* m_xyz = nullptr; // GS fixed-point xyz per emitted vertex
-    uint32_t* m_srcIdx = nullptr; // source vertex index per emitted vertex (for UVs)
-    float* m_q = nullptr; // 1/clip.w per emitted vertex — GS perspective-correct factor
+    xyz_t* m_xyz = nullptr;
+    uint32_t* m_srcIdx = nullptr;
+    float* m_q = nullptr;
 
-    // VU0 macro-mode batch transform (math3d calculate_vertices) for the strip
-    // path. Enabled only if an init-time self-test confirms VU0 reproduces the
-    // scalar clip coords; otherwise the proven scalar path is used. m_vu0Xform
-    // buffers hold one batch of clip-space / vec4 input verts (16-byte aligned).
     bool m_useVu0 = false;
-    void* m_clipBatch = nullptr; // VECTOR[GFX_GIFTAG_XFORM_BATCH] clip output
-    void* m_vecBatch = nullptr; // VECTOR[GFX_GIFTAG_XFORM_BATCH] vec4 input (repack)
+    void* m_clipBatch = nullptr;
+    void* m_vecBatch = nullptr;
+
+    /// Decide whether the coprocessor batch transform reproduces the scalar
+    /// one, and enable it only if it does.
     void SelfTestVu0Transform();
-    // Fill m_xyz[0..count) / m_q[0..count) with screen-space verts for a strip.
+    /// Transform one strip into the vertex scratch, in GS coordinates.
+    /// @param mvp The combined model-to-clip matrix.
+    /// @param components Floats per position: 3, or 4 for baked geometry.
+    /// @param count Vertices to transform.
     void TransformStrip(const float mvp[16], const float* verts, int components, uint32_t count);
 
-    // GS-VRAM first-fit free-list for textures. A single heap block is claimed
-    // from graph (after the frame/z buffers) and sub-allocated here, so releasing
-    // a texture reclaims its VRAM in any order — graph_vram_free is FIFO-only and
-    // cannot. One extent per texture (its mips + CLUT are packed contiguously).
-    uint32_t m_texHeapBase = 0; // GS word address of the texture heap
-    uint32_t m_texHeapWords = 0; // heap size in GS words
+    uint32_t m_texHeapBase = 0;
+    uint32_t m_texHeapWords = 0;
     static constexpr int TAG_MAX_VRAM_EXTENTS = 128;
     struct VramExtent
     {
-        uint32_t addr; // GS word address
-        uint32_t words; // size in GS words
+        uint32_t addr;
+        uint32_t words;
         bool used;
     };
     VramExtent m_vramExtents[TAG_MAX_VRAM_EXTENTS]{};
     int m_vramExtentCount = 0;
 
-    // First-fit allocate `words` (64-word aligned) from the texture heap; 0 on
-    // failure. Free returns the extent to the pool and coalesces neighbours.
+    /// Claim an extent of the texture heap.
+    /// @param words Size in GS words, rounded up to the hardware alignment.
+    /// @return Its GS word address, or zero when the heap cannot satisfy it.
     uint32_t VramAlloc(uint32_t words);
+
+    /// Return an extent to the heap and coalesce it with free neighbours.
+    /// @param addr An address previously returned by VramAlloc.
     void VramFree(uint32_t addr);
 
-    // Texture registry — Texture2D.id is (index + 1); 0 means "invalid".
     static constexpr uint16_t TAG_MAX_TEXTURES = 64;
     struct TexEntry
     {
         bool inUse;
-        uint32_t gsAddr; // GS word address of mip level 0
-        uint32_t mipAddr[TEX_MAX_MIP_LEVELS]; // GS word address per mip level
-        uint8_t mipCount; // 1..TEX_MAX_MIP_LEVELS
-        uint32_t clutAddr; // GS word address of the CLUT (0 = none / not PAL8)
-        uint32_t vramBase; // heap extent base to free on release
+        uint32_t gsAddr;
+        uint32_t mipAddr[TEX_MAX_MIP_LEVELS];
+        uint8_t mipCount;
+        uint32_t clutAddr;
+        uint32_t vramBase;
         int width;
         int height;
-        int psm; // GS pixel storage mode
+        int psm;
         TextureFilter filter;
     };
     TexEntry m_textures[TAG_MAX_TEXTURES]{};
@@ -91,43 +87,56 @@ class GifTagRenderer final : public Renderer
     Quad2D m_quads2D[TAG_MAX_2D_QUADS];
     uint16_t m_quad2DCount = 0;
     uint16_t m_droppedQuads2D = 0;
+    uint32_t m_reserved2DQw = 0;
 
     uint16_t m_frameVertsUsed = 0;
-    uint16_t m_frameDroppedObjects = 0; // objects dropped this frame (budget); logged once/frame
+    uint16_t m_frameDroppedObjects = 0;
 
-    // EE backface culling for the triangle-list path (primitives + list-topology
-    // models). Strips are left uncull ed — the GS Z-rejects their backfaces.
     bool m_backfaceCull = true;
 
-    // Texture id bound into the geometry packet most recently this frame; skips
-    // redundant TEX0/TEX1 writes when consecutive draws share a texture (draws
-    // are texture-sorted in Render). 0 = nothing bound yet this frame.
     uint32_t m_lastBoundTex = 0;
 
-    // Per-frame throughput counters; snapshotted into DrawLists at EndFrame so
-    // the PerfLogger reads a complete frame (Render() resets the draw lists
-    // before the packet is dispatched).
     DrawStats m_frameStats{};
 
-    // Model matrix (rotation + scale + translation). View / projection /
-    // matrix-multiply come from the shared Frustum helpers so the CPU frustum
-    // used for culling matches what the GS rasterizes.
+    /// Compose a model matrix from a position, an Euler rotation and a scale.
+    /// @param out Receives the column-major result.
     static void BuildModelMatrix(float out[16], const Vector3& pos, const Vector3& rot, const Vector3& scl);
 
-    // Transform + emit one unindexed triangle list. `components` is the position
-    // stride in floats (3 for primitives / legacy models, 4 for baked v2). uvs
-    // is 2 floats/vertex or null. mvp is the combined model→clip matrix.
+    /// Transform and emit one unindexed triangle list.
+    /// @param mvp The combined model-to-clip matrix.
+    /// @param components Floats per position: 3, or 4 for baked geometry.
+    /// @param uvs Two floats per vertex, or null when untextured.
+    /// @param textureId A backend texture handle, or zero when untextured.
     void DrawTriangles(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId);
-    // Transform + emit one triangle strip (PRIM type 4). Near-plane rejection
-    // splits the strip into maximal runs of visible vertices, one GIF REGLIST
-    // per run (the common all-visible case is a single tag).
-    void DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId);
-    void BindTexture(uint32_t textureId);
-    void FlushQuads2D();
 
-    // True if the current geometry packet has room for `qwNeeded` more qwords
-    // (leaving GFX_GIFTAG_PACKET_MARGIN_QW free). Worst-case guard against a
-    // DMA overrun before emitting an object.
+    /// Transform and emit one triangle strip, split into runs of visible
+    /// vertices.
+    /// @param mvp The combined model-to-clip matrix.
+    /// @param components Floats per position: 3, or 4 for baked geometry.
+    /// @param uvs Two floats per vertex, or null when untextured.
+    /// @param textureId A backend texture handle, or zero when untextured.
+    void DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId);
+    /// Write the sampling and buffer registers for a texture, unless that same
+    /// texture is already bound this frame.
+    void BindTexture(uint32_t textureId);
+
+    /// Emit the queued screen-space quads and empty the queue.
+    void FlushQuads2D();
+    /// Name the primitive the following batch draws, and its attributes.
+    void EmitPrim(uint32_t prim);
+
+    /// Emit the framebuffer and depth clear for the current back buffer.
+    void EmitClear(const Color3& color);
+    /// Draw the resident level sectors, culled whole against the view frustum.
+    /// @param vp The composed view-projection; sector geometry is world-space.
+    /// @param frustum The same frustum the rest of the frame culled against.
+    void RenderLevel(const float vp[16], const FrustumPlanes& frustum);
+    /// @return Packet cost of binding `textureId`, or zero if already bound.
+    uint32_t BindCostQwords(uint32_t textureId) const;
+
+    /// @param qwNeeded Quadwords the caller is about to write.
+    /// @return True when they fit alongside the reserved screen-space work and
+    ///         the packet termination headroom.
     bool PacketHasSpace(uint32_t qwNeeded) const;
 
 public:
@@ -165,6 +174,7 @@ public:
 
     uint32_t UploadTexture(const TextureUpload& upload) override;
     void ReleaseTexture(uint32_t handle) override;
+    uint32_t GetTextureBudgetBytes() const override;
 
     bool IsInitialized() const override;
     void Shutdown() override;

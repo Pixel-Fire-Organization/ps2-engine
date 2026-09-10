@@ -61,17 +61,15 @@ On hardware and in emulators, arguments come from whatever launched the
 executable. A plain disc boot passes none, so every option falls back to its
 default and behaves as a shipped build would.
 
-## Known blocker
+## The vector-microcode assembler
 
-**The vector-microcode assembler shipped with the standard toolchain faults on
-the ps2gl sources.** Where that happens, the third-party library cannot build, so
-a full executable cannot be linked and neither a disc image nor an on-hardware
-run is reachable. Building the engine library itself still works and still checks
-everything except the final link.
-
-A working assembler exists in the repository tools directory, but the standard
-toolchain directory precedes it on the search path during the external build.
-This is environmental and predates the multi-platform work.
+**The assembler shipped with the standard toolchain faults on every input**,
+including an empty file, so the third-party microcode library cannot build with
+it and no executable can be linked. The repository carries a working rebuild and
+the external build is pointed at it explicitly rather than relying on search
+order. Without that file present the build falls back to the toolchain's own and
+fails at the same place. Do not work around this by editing the third-party
+library.
 
 ## Verification
 
@@ -100,6 +98,48 @@ anywhere else:
   one-second pulse should still run at the same real speed in both. If they do
   not, something is counting frames where it should be counting time.
 
-Also compare the two backends on the same scene. The default one draws no level
-geometry, so the level-streaming scene is expected to show residency figures
-with nothing drawn until `--renderer ps2gl` is selected.
+Also compare the two backends on the same scene — the two should be equivalent,
+so **any** difference between them is a defect in one of them. Do this with a
+capture rather than by eye: a defect on this platform can leave a scene that
+still reads as plausible, and the one that cost the most to find rendered every
+triangle as a screen-aligned rectangle while keeping the horizon in the right
+place. See "Capturing a run" below.
+
+## Capturing a run
+
+Rendering defects here are found by looking at a frame and at the console log,
+and by putting one scene through both backends and comparing. `emu_capture`
+(`tools/ps2/emu_capture.py`) does that without anyone driving the emulator by
+hand, and it is where the awkward parts of doing so are recorded:
+
+    python3 tools/ps2/emu_capture.py dist/ps2pal/engine.iso --log run.log
+    python3 tools/ps2/emu_capture.py dist/ps2pal/engine.iso --shot giftag.png --native-shot
+    python3 tools/ps2/emu_capture.py dist/ps2pal/engine.iso --shot ps2gl.png --native-shot --renderer ps2gl
+
+It finds the emulator the same way the run target does, including the
+environment override, so there is one answer to where the emulator is. A log
+capture works on any host; a frame capture and sending input need the Windows
+desktop, and are refused elsewhere with that reason rather than a black image.
+
+Three things about capturing are worth knowing before trusting a frame:
+
+- **A launch argument needs a placeholder in front of it.** The emulator hands
+  the executable its arguments without prepending the path it booted, so the
+  first token is taken as the program name and the first real option is eaten
+  silently — the engine then runs with defaults and the capture quietly shows
+  the wrong backend. The tool adds the placeholder; anyone driving the emulator
+  by hand must too.
+- **Never capture a fullscreen surface.** An exclusively-fullscreen window reads
+  back as a black rectangle, which looks exactly like a backend that drew
+  nothing. This has already cost one wrong diagnosis. The tool never requests
+  fullscreen.
+- **`--native-shot` asks the emulator for the frame** rather than reading the
+  window, which yields the display output at its own size with no window border
+  and no overlay across it. That is what makes two captures comparable. It costs
+  a dependency on the emulator's screenshot key and on where it files snapshots,
+  so the tool reads the location out of the log rather than assuming it. Without
+  the flag the window is captured instead, which always works.
+
+Give a capture long enough to settle (`--settle`, twenty seconds by default):
+a frame taken during boot shows a loading screen, and content that streams in —
+level materials among it — may not have arrived yet.

@@ -4,7 +4,12 @@
 
 #include <cstring>
 
+extern "C" {
+#include <kernel.h>
+}
+
 #include "EngineDebug.h"
+#include "PlatformConstants.h"
 #include "graphics/NullRenderer.h"
 #include "renderer/GifTag.h"
 #include "renderer/Ps2Gl.h"
@@ -29,6 +34,8 @@ bool Ps2Platform::Init(const StartupArgs& args)
     m_deviceToken = ResolveDeviceToken(bootPath);
 
     Engine_LogInfo("%s: device token '%s' (from '%s')", GetName(), m_deviceToken, bootPath ? bootPath : "<none>");
+
+    ChangeThreadPriority(GetThreadId(), PLATFORM_MAIN_THREAD_PRIORITY);
 
     m_initialised = true;
     return true;

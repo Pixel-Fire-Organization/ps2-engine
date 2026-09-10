@@ -82,8 +82,16 @@ resort, world geometry yields and the interface is kept.
 
 **Textures are uploaded, then referenced by handle.** A backend accepts a decoded
 texture and returns a handle; the invalid handle is a fixed value every backend
-agrees on. The engine asks the platform, not the backend, what a texture costs in
-bytes — see [Resource](RESOURCE.md).
+agrees on. The engine asks the platform, not the backend, what a texture *costs*
+in bytes — that is a hardware question. It asks the **backend** how much it can
+hold, because two backends on one platform can be left with very different
+amounts after their own frame and depth buffers, and a ceiling derived from one
+of them is simply wrong for the other. A backend that has no opinion answers with
+the platform figure, so this costs nothing where it does not apply. Getting it
+wrong is not a rounding error: it let a resource manager accept roughly eight
+times the textures a backend could actually store, and turned an up-front,
+actionable rejection into a stream of failures inside the backend. See
+[Resource](RESOURCE.md).
 
 **Cameras are addressed by slot.** Several three-dimensional cameras may be
 configured; one is active. Two-dimensional rendering uses a separate camera.

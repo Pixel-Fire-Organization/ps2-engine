@@ -307,7 +307,10 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             // depends on the pixel format), a desktop GPU does not.
             Platform* platform = Engine_GetPlatform();
             const uint32_t footprint = platform->GetTextureFootprintBytes(static_cast<uint32_t>(img.width), static_cast<uint32_t>(img.height), img.format, img.mipCount);
-            const uint32_t budgetBytes = platform->GetConstant(PlatformConstant::TextureBudgetBytes);
+            // The ceiling is the backend's: two backends on one platform can be
+            // left with different amounts after their own frame and depth buffers.
+            Renderer* renderer = Engine_GetRenderer();
+            const uint32_t budgetBytes = renderer ? renderer->GetTextureBudgetBytes() : platform->GetConstant(PlatformConstant::TextureBudgetBytes);
             const uint32_t maxTextureBytes = platform->GetConstant(PlatformConstant::MaxTextureBytes);
             const uint32_t maxWidth = platform->GetConstant(PlatformConstant::MaxTextureWidth);
             const uint32_t maxHeight = platform->GetConstant(PlatformConstant::MaxTextureHeight);
@@ -345,7 +348,6 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             upload.filter = img.filter;
             upload.clut = img.clut;
 
-            Renderer* renderer = Engine_GetRenderer();
             const uint32_t texId = renderer ? renderer->UploadTexture(upload) : 0u;
             if (texId == 0)
             {

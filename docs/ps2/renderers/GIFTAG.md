@@ -35,11 +35,40 @@ configuration.
 
 ## Quirks and limits
 
-- **Level geometry is not implemented.** This backend draws primitives, models,
-  interface elements and the sky, but not streamed world sectors. Since it is the
-  default, a stock build shows no world. Selecting [ps2gl](PS2GL.md) at launch
-  restores level rendering. This is the single largest outstanding gap on this
-  platform and is tracked as work, not as a design choice.
+- **Each batch names its primitive in a register write, not in its transfer
+  tag.** The tag format has a field for the primitive and a flag saying to use
+  it, and that field is *not* honoured here: a batch that relies on it draws with
+  whatever primitive and attributes were last set, so geometry appears but is
+  silently the wrong shape and never textured. The symptom is vicious, because
+  the leftover primitive is a screen-aligned rectangle: a scene rendered entirely
+  as rectangles covers roughly the same pixels as the triangles it replaced, so
+  the horizon lands where it should and the image reads as plausible until it is
+  compared against [ps2gl](PS2GL.md) side by side. Writing the primitive register
+  explicitly costs one tag and one register per batch and removes the ambiguity.
+- **A textured draw's vertex colour is on a different scale from an untextured
+  one's.** Modulation treats 128, not 255, as unity, so a colour passed straight
+  through doubles the texture's brightness and everything above half intensity
+  saturates. It does not look obviously broken — it looks like a slightly
+  blown-out texture, and faint detail simply disappears. Untextured geometry uses
+  the full range, because there its colour is the result rather than a multiplier.
+- **World geometry is drawn without back-face rejection.** Compiled level faces
+  are not reliably wound after the map-to-engine coordinate transform, so the
+  pass draws both sides, exactly as the [ps2gl](PS2GL.md) backend does. It costs
+  fill rate on a platform that has little to spare, and it is a content problem
+  rather than a renderer one.
+- **Primitive coordinates are centred, not screen-relative.** Vertices are
+  written around the middle of the hardware's coordinate space and the display
+  offset is subtracted again on the way to the window, which is what gives
+  off-screen geometry a symmetric guard band. Writing screen-relative
+  coordinates instead puts the whole scene outside the visible rectangle and
+  nothing is drawn at all — a defect that hid completely until the platform was
+  run, because it produces a correctly-paced frame loop over an empty screen.
+- **Geometry leaving the guard band is rejected whole.** There is no clipping.
+  A triangle or a strip run with any vertex outside the representable coordinate
+  range is discarded entirely and counted as culled, rather than being clamped:
+  clamping would silently deform the primitive, and the coordinate field wraps
+  rather than saturating, so an unchecked value lands somewhere arbitrary on
+  screen.
 - **Excess geometry is dropped loudly, never silently.** Exceeding the vertex cap
   or packet capacity logs and discards the overflow. Silently overrunning a
   display packet corrupts the hardware transfer, which presents as a hang or
@@ -79,6 +108,20 @@ configuration.
   do, and drops the remainder of the batch with one report if the packet is
   exhausted. A textured quad costs four qwords against an untextured quad's
   three, so a full interface is a larger share of the packet than it used to be.
+- **The interface's share of the packet is reserved before world geometry is
+  built.** Its cost is already known by then, because it was submitted during the
+  game update. Every world draw is measured against capacity minus that
+  reservation, so a heavy world yields and the interface survives, rather than
+  the interface vanishing exactly when a player needs it. Texture bindings are
+  counted against the same reservation, and a strip is measured per emitted run
+  rather than once for the whole strip — a run carries its own header, so a
+  single up-front estimate understates a strip that the near plane has split.
+- **Texture memory is what the frame and depth buffers leave.** This backend
+  reports its own ceiling rather than the platform's, because that figure was
+  derived from the other backend's buffer layout and is around eight times what
+  this one actually has. Loads are then refused up front, with the usual
+  actionable message, instead of being accepted by the resource manager and
+  failing one at a time inside the backend.
 - Reserved headroom exists so packet termination always fits. Filling a packet
   exactly to capacity leaves no room to close it.
 - Transform batching is fixed. It is sized to the coprocessor's local memory, not
@@ -87,15 +130,25 @@ configuration.
 - **Far-field geometry is not implemented.** The level format carries a
   far-field description and a per-frame budget for it, but no backend on any
   platform draws it. Distant impostors simply do not appear.
-- **Its display-register and packet details are not yet verified on hardware.**
-  The path is structurally complete and builds, but the toolchain blocker in
-  [BUILD.md](../BUILD.md) has prevented a run on a console or emulator. Treat
-  rendering differences against [ps2gl](PS2GL.md) as unproven rather than
-  intended.
+- **Verified under emulation, not on hardware.** The frame loop, the display
+  registers, the clear, the packet path, primitives, models, textures and world
+  geometry have all been observed running, and the scene produced is equivalent
+  to [ps2gl](PS2GL.md) rendering the same content. Nothing here has been run on a
+  console, so anything an emulator forgives — transfer cache coherency, and
+  behaviour at the scissor and guard-band edges — remains unproven.
+- **The display's read circuit must be programmed explicitly.** Setting the video
+  mode and handing the hardware a frame buffer is not enough; the visible area is
+  a separate register, and without it the hardware scans out nothing whatever is
+  in memory. The symptom is a black screen with a correctly paced frame loop and
+  no error anywhere, which is indistinguishable from a renderer that draws
+  nothing.
 
 ## When to prefer it
 
 It is the default because it avoids the microcode toolchain the alternative
 depends on, and because packet-capacity limits scale with scene complexity more
-predictably than draw-call limits. Until level rendering lands, content with
-streamed worlds needs the other backend.
+predictably than draw-call limits. It draws the same scene as
+[ps2gl](PS2GL.md) — primitives, models, the sky, the interface and streamed
+world sectors, textured — so the choice between them is now about cost and
+toolchain rather than about coverage. The far field is the one thing neither
+draws.
