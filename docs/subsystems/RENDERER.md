@@ -28,15 +28,33 @@ at frame start discards work the game has already submitted. This is a real
 defect that has occurred, and it presents as screen-space content vanishing while
 world content is fine.
 
+**There is one screen-space primitive.** A backend implements a single
+axis-aligned quad carrying a position, a size, a colour with alpha, and
+optionally a texture handle with texture coordinates. Everything
+two-dimensional — the interface, the game's own rectangles, the panic display —
+reaches a backend through it, so screen space is implemented once per backend
+rather than once per kind of caller. An opaque untextured rectangle is that same
+primitive with a full alpha and no texture, offered as a convenience so a caller
+with no interface to build need not construct one.
+
 **The interface is translated once, for every backend.** A frame of interface
-arrives as one batch of screen-space quads, and turning that batch into
-screen-space rectangles is done in the shared layer rather than per backend.
-This is deliberate: comparing two backends rendering the same frame is the
-primary way rendering bugs are located here, and an interface reimplemented six
-times would differ six ways and destroy that comparison. A backend that later
-grows a textured screen-space path replaces the translation for itself; until
-one does, every backend draws the interface identically and none of them
-honours per-quad transparency.
+arrives as one batch of screen-space quads, and turning that batch into the
+primitive above is done in the shared layer rather than per backend. This is
+deliberate: comparing two backends rendering the same frame is the primary way
+rendering bugs are located here, and an interface reimplemented once per backend
+would differ once per backend and destroy that comparison. Every field of a
+submitted quad reaches the backend, so a difference between two backends is a
+difference in the backend, never in what was submitted.
+
+**Screen space blends; world geometry does not.** Every backend blends the
+screen-space pass against what is already in the framebuffer, using the quad's
+own alpha, and every backend draws that pass with depth testing off. Both are
+required rather than optional: without blending an interface cannot dim what is
+behind it, and without disabling the depth test a screen-space quad is occluded
+by whatever world geometry happened to write depth underneath it — which is a
+real defect that has occurred, on the backend whose screen-space pass was the
+only one not to disable it. Whether the world pass blends is a separate question
+each backend answers for itself.
 
 **Built-in primitive shapes are staged, not built in.** The engine describes a
 cube, a sphere and a cylinder once, in a form no backend can consume directly.
@@ -138,3 +156,13 @@ zero cost.
 - Backend feature coverage is not uniform, and the gaps are recorded in each
   backend spec rather than being discoverable only by observing a missing effect.
 - There is no render graph, no post-processing chain, and no shadow system.
+- **A backend draws no diagnostics of its own.** The on-screen overlay is
+  interface, built from the same widgets as everything else, so it exists once
+  rather than once per backend and cannot differ between them.
+- **There is no scissor or clip rectangle in the screen-space contract.** The
+  interface clips its own quads before submitting them, which is not merely a
+  substitute: clipped-away content then costs nothing to submit *or* to draw,
+  where a hardware scissor would still pay for both. It also keeps the batch
+  free of interleaved state, so a backend never has to interpret ordering. One
+  backend's graphics library has no usable scissor at all, so this is the only
+  form of clipping that works everywhere.

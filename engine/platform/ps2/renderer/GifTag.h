@@ -83,18 +83,14 @@ class GifTagRenderer final : public Renderer
         int width;
         int height;
         int psm; // GS pixel storage mode
+        TextureFilter filter;
     };
     TexEntry m_textures[TAG_MAX_TEXTURES]{};
 
-    static constexpr uint16_t TAG_MAX_2D_RECTS = 4096;
-    struct Rect2D
-    {
-        int32_t x, y, w, h;
-        Color3 color;
-    };
-    Rect2D m_rects2D[TAG_MAX_2D_RECTS];
-    uint16_t m_rect2DCount = 0;
-    uint16_t m_droppedRects2D = 0;
+    static constexpr uint16_t TAG_MAX_2D_QUADS = UI_MAX_QUADS + GFX_MAX_2D_EXTRA;
+    Quad2D m_quads2D[TAG_MAX_2D_QUADS];
+    uint16_t m_quad2DCount = 0;
+    uint16_t m_droppedQuads2D = 0;
 
     uint16_t m_frameVertsUsed = 0;
     uint16_t m_frameDroppedObjects = 0; // objects dropped this frame (budget); logged once/frame
@@ -127,7 +123,7 @@ class GifTagRenderer final : public Renderer
     // per run (the common all-visible case is a single tag).
     void DrawStrip(const float mvp[16], const float* verts, int components, const float* uvs, uint32_t vertexCount, Color3 color, uint32_t textureId);
     void BindTexture(uint32_t textureId);
-    void FlushRects2D();
+    void FlushQuads2D();
 
     // True if the current geometry packet has room for `qwNeeded` more qwords
     // (leaving GFX_GIFTAG_PACKET_MARGIN_QW free). Worst-case guard against a
@@ -159,9 +155,8 @@ public:
     void Render() override;
     void BeginFrame() override;
     void EndFrame() override;
-    void DrawDebugOverlay() override;
     void ClearFrame(const Color3& color) override;
-    void DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) override;
+    void DrawQuad2D(const Quad2D& quad) override;
     void DrawGrid(int32_t slices, float spacing) override;
 
     void SetCamera3D(CameraID id, const Camera3D& camera) override;

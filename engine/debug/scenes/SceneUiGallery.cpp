@@ -81,18 +81,18 @@ void Scene_UiGallery_Update(float dt)
     if (!platform)
         return;
 
-    const int page = Testbed_Page(PAGE_COUNT);
     const int screenW = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenWidth));
     const int screenH = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenHeight));
 
     Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
 
-    char title[64];
-    snprintf(title, sizeof(title), "%s   L1 R1 PAGE %d OF %d", (page == 0) ? "WIDGETS" : "GLYPHS", page + 1, PAGE_COUNT);
+    static const char* const PAGES[PAGE_COUNT] = {"WIDGETS", "GLYPHS"};
+
+    Ui_BeginPanelSlot("UI GALLERY", UiPanelSlot::Full);
+    const int page = Testbed_Tabs("pages", PAGES, PAGE_COUNT);
 
     if (page == 0)
     {
-        Ui_BeginPanel(title, PANEL_MARGIN, PANEL_MARGIN, screenW - PANEL_MARGIN * 2, screenH - PANEL_MARGIN * 2);
         DrawWidgets();
 
         char text[48];
@@ -102,7 +102,6 @@ void Scene_UiGallery_Update(float dt)
         return;
     }
 
-    Ui_BeginPanel(title, PANEL_MARGIN, PANEL_MARGIN, screenW - PANEL_MARGIN * 2, screenH - PANEL_MARGIN * 2);
     Ui_Label("SCALES 1 2 3");
     Ui_EndPanel();
     DrawGlyphs(PANEL_MARGIN * 2, PANEL_MARGIN + 40);

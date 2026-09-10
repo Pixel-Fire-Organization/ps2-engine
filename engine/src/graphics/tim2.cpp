@@ -32,6 +32,27 @@ namespace
     // need: sizes, dimensions and the image color type.
     constexpr size_t TIM2_PIC_HEADER_SIZE = 0x30;
 
+    // GsTex1 carries the sampling filter. Zero has always meant "backend
+    // default", and every texture cooked before the field was used holds zero,
+    // so an explicit choice is marked rather than encoded as a value.
+    constexpr uint64_t TIM2_TEX1_EXPLICIT = 1ull << 63;
+    constexpr uint64_t TIM2_TEX1_MMAG_SHIFT = 8;
+
+    uint64_t ReadU64(const uint8_t* p)
+    {
+        uint64_t v = 0;
+        for (int i = 7; i >= 0; --i)
+            v = (v << 8) | p[i];
+        return v;
+    }
+
+    TextureFilter Tim2FilterFromTex1(uint64_t tex1)
+    {
+        if (!(tex1 & TIM2_TEX1_EXPLICIT))
+            return TextureFilter::Linear;
+        return ((tex1 >> TIM2_TEX1_MMAG_SHIFT) & 1ull) ? TextureFilter::Linear : TextureFilter::Nearest;
+    }
+
     // TIM2 imageType values we accept.
     constexpr uint8_t TIM2_IMGTYPE_RGBA16 = 0x01; // A1B5G5R5
     constexpr uint8_t TIM2_IMGTYPE_RGBA32 = 0x03; // A8B8G8R8
@@ -157,6 +178,7 @@ bool Tim2_Parse(const void* data, size_t size, Tim2Image* out)
     out->width = imageWidth;
     out->height = imageHeight;
     out->format = fmt;
+    out->filter = Tim2FilterFromTex1(ReadU64(pic + 32));
     out->imageSize = imageSize;
     return true;
 }

@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "UiInternal.h"
+#include "graphics/Renderer.h"
 
 namespace
 {
@@ -12,7 +13,7 @@ namespace
         FONT_LAST = 95
     };
 
-    const unsigned char FONT5X7[][UI_GLYPH_H] = {
+    const unsigned char FONT5X7[][UI_FALLBACK_GLYPH_H] = {
         {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // 0x20 ' '
         {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04}, // 0x21 '!'
         {0x0A, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00}, // 0x22 '"'
@@ -89,82 +90,281 @@ namespace
         return FONT5X7[index - FONT_FIRST];
     }
 
-    int RowSpans(unsigned bits)
+    enum : int
+    {
+        GLYPH_MAX_SPANS_PER_ROW = (UI_FALLBACK_GLYPH_W + 1) / 2,
+        GLYPH_MAX_RUNS = GLYPH_MAX_SPANS_PER_ROW * UI_FALLBACK_GLYPH_H
+    };
+
+    /// One rectangle of set pixels within a glyph cell, in cell coordinates.
+    /// Edges are half-open, so a run covering only row 2 has y0 = 2, y1 = 3.
+    struct GlyphRun
+    {
+        uint8_t x0;
+        uint8_t x1;
+        uint8_t y0;
+        uint8_t y1;
+    };
+
+    int RowSpans(unsigned bits, uint8_t* starts, uint8_t* ends)
     {
         int spans = 0;
         int col = 0;
-        while (col < UI_GLYPH_W)
+        while (col < UI_FALLBACK_GLYPH_W)
         {
-            if (!((bits >> (UI_GLYPH_W - 1 - col)) & 1u))
+            if (!((bits >> (UI_FALLBACK_GLYPH_W - 1 - col)) & 1u))
             {
                 ++col;
                 continue;
             }
-            ++spans;
-            while (col < UI_GLYPH_W && ((bits >> (UI_GLYPH_W - 1 - col)) & 1u))
+            const int start = col;
+            while (col < UI_FALLBACK_GLYPH_W && ((bits >> (UI_FALLBACK_GLYPH_W - 1 - col)) & 1u))
                 ++col;
+            starts[spans] = static_cast<uint8_t>(start);
+            ends[spans] = static_cast<uint8_t>(col);
+            ++spans;
         }
         return spans;
+    }
+
+    /// Decompose one glyph into rectangles, merging a span with the identical
+    /// span on the row below it so a straight stroke costs one quad rather than
+    /// one per row.
+    /// @param rows The glyph's bit rows.
+    /// @param out Receives the rectangles.
+    /// @return How many rectangles were written.
+    int GlyphRuns(const unsigned char* rows, GlyphRun* out)
+    {
+        GlyphRun open[GLYPH_MAX_SPANS_PER_ROW];
+        int openCount = 0;
+        int count = 0;
+
+        for (int row = 0; row <= UI_FALLBACK_GLYPH_H; ++row)
+        {
+            uint8_t starts[GLYPH_MAX_SPANS_PER_ROW];
+            uint8_t ends[GLYPH_MAX_SPANS_PER_ROW];
+            const int spans = (row < UI_FALLBACK_GLYPH_H) ? RowSpans(rows[row], starts, ends) : 0;
+
+            bool matched[GLYPH_MAX_SPANS_PER_ROW] = {false};
+            GlyphRun stillOpen[GLYPH_MAX_SPANS_PER_ROW];
+            int stillOpenCount = 0;
+
+            for (int i = 0; i < openCount; ++i)
+            {
+                int found = -1;
+                for (int j = 0; j < spans; ++j)
+                {
+                    if (!matched[j] && starts[j] == open[i].x0 && ends[j] == open[i].x1)
+                    {
+                        found = j;
+                        break;
+                    }
+                }
+                if (found >= 0)
+                {
+                    matched[found] = true;
+                    open[i].y1 = static_cast<uint8_t>(row + 1);
+                    stillOpen[stillOpenCount++] = open[i];
+                }
+                else
+                {
+                    out[count++] = open[i];
+                }
+            }
+
+            for (int j = 0; j < spans; ++j)
+            {
+                if (matched[j])
+                    continue;
+                GlyphRun run;
+                run.x0 = starts[j];
+                run.x1 = ends[j];
+                run.y0 = static_cast<uint8_t>(row);
+                run.y1 = static_cast<uint8_t>(row + 1);
+                stillOpen[stillOpenCount++] = run;
+            }
+
+            for (int i = 0; i < stillOpenCount; ++i)
+                open[i] = stillOpen[i];
+            openCount = stillOpenCount;
+        }
+
+        return count;
     }
 } // namespace
 
 int Ui_TextWidth(int scale, const char* text)
 {
-    const int length = text ? static_cast<int>(std::strlen(text)) : 0;
-    return length * UI_GLYPH_ADVANCE * scale;
+    if (!text || scale <= 0)
+        return 0;
+
+    const Font* font = UiInternal_CookedFont();
+    if (!font)
+        return static_cast<int>(std::strlen(text)) * UI_FALLBACK_GLYPH_ADVANCE * scale;
+
+    int width = 0;
+    for (const char* p = text; *p; ++p)
+    {
+        if (*p == ' ')
+        {
+            width += font->spaceAdvance;
+            continue;
+        }
+        width += Font_GetGlyph(font, static_cast<unsigned char>(*p))->advance;
+    }
+    return width * scale;
 }
 
-int Ui_TextHeight(int scale) { return UI_GLYPH_H * scale; }
+int Ui_TextHeight(int scale)
+{
+    const Font* font = UiInternal_CookedFont();
+    const int lineHeight = font ? static_cast<int>(font->lineHeight) : static_cast<int>(UI_FALLBACK_GLYPH_H);
+    return lineHeight * scale;
+}
+
+int Ui_TextFit(int scale, const char* text, int maxWidth)
+{
+    if (!text || scale <= 0 || maxWidth <= 0)
+        return 0;
+
+    const Font* font = UiInternal_CookedFont();
+    int width = 0;
+    int fitted = 0;
+    for (const char* p = text; *p; ++p, ++fitted)
+    {
+        int advance = UI_FALLBACK_GLYPH_ADVANCE;
+        if (font)
+            advance = (*p == ' ') ? font->spaceAdvance : Font_GetGlyph(font, static_cast<unsigned char>(*p))->advance;
+        width += advance * scale;
+        if (width > maxWidth)
+            return fitted;
+    }
+    return fitted;
+}
 
 int Ui_MeasureTextQuads(int scale, const char* text)
 {
     if (!text || scale <= 0)
         return 0;
 
+    const Font* font = UiInternal_CookedFont();
+    if (font)
+    {
+        int glyphs = 0;
+        for (const char* p = text; *p; ++p)
+        {
+            if (*p != ' ' && Font_GetGlyph(font, static_cast<unsigned char>(*p))->w > 0)
+                ++glyphs;
+        }
+        return glyphs;
+    }
+
+    GlyphRun runs[GLYPH_MAX_RUNS];
     int quads = 0;
     for (const char* p = text; *p; ++p)
     {
         if (*p == ' ')
             continue;
-        const unsigned char* rows = Glyph(*p);
-        for (int row = 0; row < UI_GLYPH_H; ++row)
-            quads += RowSpans(rows[row]);
+        quads += GlyphRuns(Glyph(*p), runs);
     }
     return quads;
 }
+
+namespace
+{
+    /// Draw a string from the cooked font: one textured quad per glyph, taken
+    /// from the atlas.
+    int DrawCooked(const Font* font, uint32_t atlas, int x, int y, int scale, const char* text, UiRgba color)
+    {
+        const uint32_t aw = font->atlasWidth;
+        const uint32_t ah = font->atlasHeight;
+
+        for (const char* p = text; *p; ++p)
+        {
+            if (*p == ' ')
+            {
+                x += font->spaceAdvance * scale;
+                continue;
+            }
+
+            const FontGlyph* g = Font_GetGlyph(font, static_cast<unsigned char>(*p));
+            if (g->w > 0 && g->h > 0)
+            {
+                const uint16_t u0 = static_cast<uint16_t>(static_cast<uint32_t>(g->u) * 65535u / aw);
+                const uint16_t v0 = static_cast<uint16_t>(static_cast<uint32_t>(g->v) * 65535u / ah);
+                const uint16_t u1 = static_cast<uint16_t>(static_cast<uint32_t>(g->u + g->w) * 65535u / aw);
+                const uint16_t v1 = static_cast<uint16_t>(static_cast<uint32_t>(g->v + g->h) * 65535u / ah);
+                UiInternal_PushTexturedQuad(x + g->bearingX * scale, y + g->bearingY * scale, g->w * scale, g->h * scale, atlas, u0, v0, u1, v1, color);
+            }
+            x += g->advance * scale;
+        }
+        return x;
+    }
+} // namespace
 
 int UiFont_Draw(int x, int y, int scale, const char* text, UiRgba color)
 {
     if (!text || scale <= 0)
         return x;
 
+    const Font* font = UiInternal_CookedFont();
+    if (font)
+        return DrawCooked(font, UiInternal_AtlasTexture(), x, y, scale, text, color);
+
+    GlyphRun runs[GLYPH_MAX_RUNS];
     for (const char* p = text; *p; ++p)
     {
         if (*p == ' ')
         {
-            x += UI_GLYPH_ADVANCE * scale;
+            x += UI_FALLBACK_GLYPH_ADVANCE * scale;
             continue;
         }
 
-        const unsigned char* rows = Glyph(*p);
-        for (int row = 0; row < UI_GLYPH_H; ++row)
+        const int count = GlyphRuns(Glyph(*p), runs);
+        for (int i = 0; i < count; ++i)
         {
-            const unsigned bits = rows[row];
-            int col = 0;
-            while (col < UI_GLYPH_W)
-            {
-                if (!((bits >> (UI_GLYPH_W - 1 - col)) & 1u))
-                {
-                    ++col;
-                    continue;
-                }
-                const int start = col;
-                while (col < UI_GLYPH_W && ((bits >> (UI_GLYPH_W - 1 - col)) & 1u))
-                    ++col;
-                UiInternal_PushRect(x + start * scale, y + row * scale, (col - start) * scale, scale, color);
-            }
+            const GlyphRun& run = runs[i];
+            UiInternal_PushRect(x + run.x0 * scale, y + run.y0 * scale, (run.x1 - run.x0) * scale, (run.y1 - run.y0) * scale, color);
         }
-        x += UI_GLYPH_ADVANCE * scale;
+        x += UI_FALLBACK_GLYPH_ADVANCE * scale;
     }
     return x;
+}
+
+void Engine_DrawPanicText(Renderer* renderer, int x, int y, int scale, const char* text, UiRgba color)
+{
+    if (!renderer || !text || scale <= 0)
+        return;
+
+    GlyphRun runs[GLYPH_MAX_RUNS];
+    for (const char* p = text; *p; ++p)
+    {
+        if (*p == ' ')
+        {
+            x += UI_FALLBACK_GLYPH_ADVANCE * scale;
+            continue;
+        }
+
+        const int count = GlyphRuns(Glyph(*p), runs);
+        for (int i = 0; i < count; ++i)
+        {
+            const GlyphRun& run = runs[i];
+            Quad2D quad;
+            quad.x = x + run.x0 * scale;
+            quad.y = y + run.y0 * scale;
+            quad.w = (run.x1 - run.x0) * scale;
+            quad.h = (run.y1 - run.y0) * scale;
+            quad.texture = 0;
+            quad.u0 = 0;
+            quad.v0 = 0;
+            quad.u1 = 0;
+            quad.v1 = 0;
+            quad.r = color.r;
+            quad.g = color.g;
+            quad.b = color.b;
+            quad.a = color.a;
+            renderer->DrawQuad2D(quad);
+        }
+        x += UI_FALLBACK_GLYPH_ADVANCE * scale;
+    }
 }

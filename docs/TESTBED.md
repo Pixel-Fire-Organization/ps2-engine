@@ -22,7 +22,6 @@ force is named in the startup log and along the bottom of the menu.
 | Move | D-pad, or point with the mouse, the front touchscreen, or the left stick |
 | Choose | Cross |
 | Back | Circle — from a scene to the menu, from the menu to the game |
-| Turn the page | L1 and R1, in the scenes that say so |
 | Quit | The exit row in the menu |
 
 **Every transition resets the engine's runtime state**, including closing the
@@ -33,7 +32,6 @@ deliberate: a scene measures itself rather than whatever ran before it.
 
 | Scene | Shows |
 |---|---|
-| **Gamepad** | Every button, both sticks and both triggers, for one port at a time; L1 and R1 change port. The mask is shown as it reaches the engine, so a transposed or missing button is visible directly. |
 | **Keyboard mouse** | Held keys, cursor position, movement delta, wheel and buttons. Tapping a key faster than a frame should still register; moving focus away from the window should clear everything held. |
 | **Touch** | Front and rear contacts in **separate** boxes, with contact id and pressure. The two are never merged: a rear pad sits behind the device and corresponds to nothing on screen. |
 | **Pointer** | The cursor itself — which device currently owns it, its speed, and a trail. The left stick ramps from slow to fast while held; the d-pad hides the cursor. |
@@ -81,5 +79,5 @@ Two rules the scene has to keep, both from
 - **Gate on capability, never on platform identity.** A scene for a device this
   platform lacks still appears and says so.
 - **Fit the interface budget on the smallest screen.** Text is the expensive
-  part. Page a dense scene rather than letting it overflow; an overflow report in
+  part. Scroll a dense scene rather than letting it overflow; an overflow report in
   the log is a defect in the scene, not a limit to live with.

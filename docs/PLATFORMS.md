@@ -46,12 +46,24 @@ Read the guideline **before** starting, not while reviewing.
 
 ## Formats
 
-On-disc layouts. The first four are identical on every platform; the last is a
-console format one platform is obliged to produce.
+On-disc layouts. Every layout below is identical on every platform; what varies
+by platform is the *content* of a texture or theme payload, never its shape. The
+last is a console format one platform is obliged to produce.
+
+**Containers**
 
 - [ASSET_FORMAT.md](formats/ASSET_FORMAT.md) — one cooked asset
 - [ARCHIVE_FORMAT.md](formats/ARCHIVE_FORMAT.md) — the container, and the canonical key rule
+
+**Payloads**
+
+- [TIM2_TEXTURE.md](formats/TIM2_TEXTURE.md) — a cooked texture
+- [FONT_FORMAT.md](formats/FONT_FORMAT.md) — a cooked font's metrics
+- [THEME_FORMAT.md](formats/THEME_FORMAT.md) — a cooked interface theme
 - [LEVEL_FORMAT.md](formats/LEVEL_FORMAT.md) — compiled worlds
+
+**Records**
+
 - [ACHIEVEMENT_RECORD.md](formats/ACHIEVEMENT_RECORD.md) — what a player has earned
 - [TROPHY_PACK.md](formats/TROPHY_PACK.md) — Vita trophy container
 

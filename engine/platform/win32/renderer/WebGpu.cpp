@@ -114,8 +114,8 @@ fn fs_main(in : VsOut) -> @location(0) vec4<f32> {
 WebGpuRenderer::WebGpuRenderer(const EngineConfig& config) :
     m_instance(nullptr), m_adapter(nullptr), m_device(nullptr), m_queue(nullptr), m_surface(nullptr), m_surfaceFormat(WGPUTextureFormat_BGRA8Unorm), m_pipeline3D(nullptr), m_pipeline2D(nullptr),
     m_uniformLayout(nullptr), m_textureLayout(nullptr), m_bindGroup3D(nullptr), m_bindGroup2D(nullptr), m_uniformBuffer3D(nullptr), m_uniformBuffer2D(nullptr), m_vertexBuffer(nullptr),
-    m_vertexBufferCapacity(0), m_sampler(nullptr), m_depthTexture(nullptr), m_depthView(nullptr), m_whiteTexture{}, m_clearColor{0.0f, 0.0f, 0.0f}, m_width(0), m_height(0), m_frameStats{},
-    m_initialized(false)
+    m_vertexBufferCapacity(0), m_sampler(nullptr), m_samplerNearest(nullptr), m_depthTexture(nullptr), m_depthView(nullptr), m_whiteTexture{}, m_clearColor{0.0f, 0.0f, 0.0f}, m_width(0), m_height(0),
+    m_frameStats{}, m_initialized(false)
 {
     UNUSED_VAR(config);
     memset(m_textures, 0, sizeof(m_textures));
@@ -318,6 +318,11 @@ bool WebGpuRenderer::CreatePipelines()
     samplerDesc.maxAnisotropy = 1;
     m_sampler = wgpuDeviceCreateSampler(m_device, &samplerDesc);
 
+    samplerDesc.magFilter = WGPUFilterMode_Nearest;
+    samplerDesc.minFilter = WGPUFilterMode_Nearest;
+    samplerDesc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+    m_samplerNearest = wgpuDeviceCreateSampler(m_device, &samplerDesc);
+
     WGPUBufferDescriptor uniformDesc;
     memset(&uniformDesc, 0, sizeof(uniformDesc));
     uniformDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
@@ -414,14 +419,31 @@ bool WebGpuRenderer::CreatePipelines()
 
     m_pipeline3D = wgpuDeviceCreateRenderPipeline(m_device, &pipelineDesc);
 
-    // 2D shares everything but depth: HUD quads are submitted in draw order and
-    // must not be discarded by Z.
+    // 2D differs in depth and in blending: HUD quads are submitted in draw order
+    // and must not be discarded by Z, and the interface carries per-quad alpha.
+    // 3D is left unblended so world rendering is unaffected.
     WGPUDepthStencilState depth2D = depthState;
     depth2D.depthWriteEnabled = WGPUOptionalBool_False;
     depth2D.depthCompare = WGPUCompareFunction_Always;
 
+    WGPUBlendState blend2D;
+    memset(&blend2D, 0, sizeof(blend2D));
+    blend2D.color.operation = WGPUBlendOperation_Add;
+    blend2D.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+    blend2D.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    blend2D.alpha.operation = WGPUBlendOperation_Add;
+    blend2D.alpha.srcFactor = WGPUBlendFactor_One;
+    blend2D.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+
+    WGPUColorTargetState colorTarget2D = colorTarget;
+    colorTarget2D.blend = &blend2D;
+
+    WGPUFragmentState fragment2D = fragment;
+    fragment2D.targets = &colorTarget2D;
+
     pipelineDesc.label = Str("engine-2d");
     pipelineDesc.depthStencil = &depth2D;
+    pipelineDesc.fragment = &fragment2D;
     m_pipeline2D = wgpuDeviceCreateRenderPipeline(m_device, &pipelineDesc);
 
     if (!m_pipeline3D || !m_pipeline2D)
@@ -574,7 +596,7 @@ uint32_t WebGpuRenderer::UploadTexture(const TextureUpload& upload)
     entries[0].binding = 0;
     entries[0].textureView = view;
     entries[1].binding = 1;
-    entries[1].sampler = m_sampler;
+    entries[1].sampler = (upload.filter == TextureFilter::Nearest) ? m_samplerNearest : m_sampler;
 
     WGPUBindGroupDescriptor bindDesc;
     memset(&bindDesc, 0, sizeof(bindDesc));
@@ -731,7 +753,7 @@ void WebGpuRenderer::ClearDrawLists() { m_drawLists.Reset(false); }
 
 void WebGpuRenderer::ClearFrame(const Color3& color) { m_clearColor = color; }
 
-void WebGpuRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) { m_geometry.AddRect2D(x, y, width, height, color); }
+void WebGpuRenderer::DrawQuad2D(const Quad2D& quad) { m_geometry.AddQuad2D(quad); }
 
 void WebGpuRenderer::DrawGrid(int32_t slices, float spacing)
 {
@@ -862,13 +884,17 @@ void WebGpuRenderer::EndFrame()
             }
         }
 
-        // 2D: always the white texture, so one draw covers the whole HUD.
+        // 2D: one draw per texture run, over the top of the world.
         if (count2D > 0)
         {
             wgpuRenderPassEncoderSetPipeline(pass, m_pipeline2D);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, m_bindGroup2D, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, m_whiteTexture.bindGroup, 0, nullptr);
-            wgpuRenderPassEncoderDraw(pass, count2D, 1, count3D, 0);
+            const StagedGeometry::DrawRun* runs2D = m_geometry.Runs2D();
+            for (uint32_t i = 0; i < m_geometry.RunCount2D(); ++i)
+            {
+                wgpuRenderPassEncoderSetBindGroup(pass, 1, BindGroupFor(runs2D[i].texture), 0, nullptr);
+                wgpuRenderPassEncoderDraw(pass, runs2D[i].count, 1, count3D + runs2D[i].first, 0);
+            }
         }
     }
 
@@ -893,7 +919,6 @@ void WebGpuRenderer::EndFrame()
     m_drawLists.Reset(false);
 }
 
-void WebGpuRenderer::DrawDebugOverlay() {}
 
 // ---------------------------------------------------------------------------
 // Cameras and lifecycle
@@ -923,6 +948,8 @@ void WebGpuRenderer::Shutdown()
     ReleaseDepthTexture();
     if (m_sampler)
         wgpuSamplerRelease(m_sampler);
+    if (m_samplerNearest)
+        wgpuSamplerRelease(m_samplerNearest);
     if (m_vertexBuffer)
         wgpuBufferRelease(m_vertexBuffer);
     if (m_uniformBuffer3D)

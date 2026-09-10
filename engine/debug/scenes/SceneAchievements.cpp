@@ -65,7 +65,7 @@ void Scene_Achievements_Update(float dt)
     {
         Ui_Separator();
         Ui_LabelColored("NOT MIRRORED BECAUSE", UiColor::TextWarn);
-        Testbed_DrawWrapped(reason, UiColor::TextDim);
+        Ui_LabelWrapped(reason, UiColor::TextDim);
     }
 
     Ui_Separator();
@@ -95,7 +95,7 @@ void Scene_Achievements_Update(float dt)
         Ui_Separator();
         Ui_LabelValue(outcome, s_LastOk ? "RECORDED" : "REFUSED");
         if (!s_LastOk)
-            Testbed_DrawWrapped("REFUSED IS REPORTED, NOT SILENT. THE LOG CARRIES THE REASON.", UiColor::TextDim);
+            Ui_LabelWrapped("REFUSED IS REPORTED, NOT SILENT. THE LOG CARRIES THE REASON.", UiColor::TextDim);
     }
     Ui_EndPanel();
 

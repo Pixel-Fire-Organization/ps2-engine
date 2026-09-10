@@ -1,6 +1,42 @@
 #pragma once
 
+#include <cstddef>
 #include "EngineUi.h"
+
+#include "graphics/FontFormat.h"
+
+/// A clip rectangle in screen pixels. Quads are clipped against the top of the
+/// stack before they are appended, so content outside it costs nothing.
+struct UiClipRect
+{
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+};
+
+/// One widget's retained interaction state.
+///
+/// Never holds a value the interface displays -- only where a region is
+/// scrolled to, whether a node is open, and how long a repeat has been held.
+/// That distinction is what keeps the display unable to disagree with the thing
+/// displayed.
+struct UiState
+{
+    uint32_t id;
+    uint32_t touchedFrame;
+    int32_t whole;
+    float fraction;
+};
+
+/// One navigation group: directional movement cycles within the active group
+/// and moves between groups across it.
+struct UiFocusGroup
+{
+    uint32_t id;
+    uint16_t first;
+    uint16_t count;
+};
 
 /// Per-frame interface state, shared between the core and the widgets.
 struct UiFrameState
@@ -30,6 +66,48 @@ struct UiFrameState
     int focusIndex;
     int navDelta;
 
+    UiClipRect clipStack[UI_MAX_CLIP_DEPTH];
+    uint8_t clipDepth;
+    uint8_t clipHighWater;
+    bool clipOverflowReported;
+
+    uint32_t idStack[UI_MAX_ID_DEPTH];
+    uint8_t idDepth;
+
+    UiFocusGroup groups[UI_MAX_FOCUS_GROUPS];
+    uint8_t groupCount;
+    int8_t activeGroup;
+    int groupDelta;
+    bool consumedHorizontal;
+
+    int navRepeat;
+    int horizontalRepeat;
+
+    int scrollY;
+    int scrollTop;
+    int scrollBottom;
+    uint32_t scrollId;
+    int scrollContentStart;
+    bool inScroll;
+
+    int columnCount;
+    int columnIndex;
+    int columnStartY;
+    int columnMaxY;
+    int columnX;
+    int columnWidth;
+    bool inColumns;
+
+    bool inOverlay;
+    bool modalOpen;
+    uint32_t modalId;
+
+    // Where the focused row sits this frame, so a scrolling region can pull it
+    // into view without the row having to know it is inside one.
+    int focusRowTop;
+    int focusRowHeight;
+    bool focusRowValid;
+
     UiPointer pointer;
     bool pointerMoved;
     bool accept;
@@ -54,6 +132,41 @@ bool UiInternal_CanDraw();
 /// @param color The colour to fill with.
 void UiInternal_PushRect(int x, int y, int w, int h, UiRgba color);
 
+/// Append one textured screen-space quad, clipped, with its texture coordinates
+/// adjusted to match the clipped rectangle.
+/// @param x Left edge in screen pixels.
+/// @param y Top edge in screen pixels.
+/// @param w Width in pixels; a non-positive value draws nothing.
+/// @param h Height in pixels; a non-positive value draws nothing.
+/// @param texture Backend texture handle; zero draws a solid fill.
+/// @param u0 Left texture coordinate, normalised over the full unsigned range.
+/// @param v0 Top texture coordinate.
+/// @param u1 Right texture coordinate.
+/// @param v1 Bottom texture coordinate.
+/// @param color The colour to modulate with.
+void UiInternal_PushTexturedQuad(int x, int y, int w, int h, uint32_t texture, uint16_t u0, uint16_t v0, uint16_t u1, uint16_t v1, UiRgba color);
+
+/// Narrow the clip rectangle to the intersection of the current one and this.
+/// @param x Left edge in screen pixels.
+/// @param y Top edge in screen pixels.
+/// @param w Width in pixels.
+/// @param h Height in pixels.
+/// @return False when the stack is full, which is reported once per frame; the
+///         clip is then left unchanged and must not be popped.
+bool UiInternal_PushClip(int x, int y, int w, int h);
+
+void UiInternal_PopClip();
+
+/// @return The rectangle content is currently clipped against.
+const UiClipRect& UiInternal_CurrentClip();
+
+/// @param x Left edge in screen pixels.
+/// @param y Top edge in screen pixels.
+/// @param w Width in pixels.
+/// @param h Height in pixels.
+/// @return Whether any part of the rectangle survives the current clip.
+bool UiInternal_ClipVisible(int x, int y, int w, int h);
+
 /// A one-pixel-thick frame around a rectangle.
 /// @param x Left edge in screen pixels.
 /// @param y Top edge in screen pixels.
@@ -64,8 +177,57 @@ void UiInternal_PushRect(int x, int y, int w, int h, UiRgba color);
 void UiInternal_PushBorder(int x, int y, int w, int h, int thickness, UiRgba color);
 
 /// @param label The widget label, which carries its identity.
-/// @return A stable identifier for it.
+/// @return A stable identifier for it, seeded by the open identity scope, so
+///         two containers may hold identically-named rows without colliding.
 uint32_t UiInternal_Id(const char* label);
+
+/// Open an identity scope. Everything asked for inside it is identified by the
+/// scope as well as by its own label.
+/// @param text Text distinguishing this scope from its siblings.
+void UiInternal_PushId(const char* text);
+
+/// @param index Index distinguishing this scope from its siblings.
+void UiInternal_PushIdIndex(int index);
+
+void UiInternal_PopId();
+
+/// Start a new frame for the retained interaction state.
+void UiInternal_StateBeginFrame();
+
+/// Drop everything the interface remembers between frames.
+void UiInternal_StateReset();
+
+/// @param id The widget identity.
+/// @return Its retained state, which is zeroed the first time it is asked for.
+///         Never null: past the ceiling a widget gets scratch storage so it
+///         still draws, and loses only what it would have remembered.
+UiState* UiInternal_StateFor(uint32_t id);
+
+/// @param seed The enclosing scope's hash.
+/// @param text The text to fold in.
+/// @return The combined hash.
+uint32_t UiInternal_StateHash(uint32_t seed, const char* text);
+
+/// Open a navigation group. Directional movement cycles within the active
+/// group and moves between groups across it.
+/// @param id The group's identity.
+void UiInternal_BeginFocusGroup(uint32_t id);
+
+void UiInternal_EndFocusGroup();
+
+/// Advance and draw the front notification, if there is one.
+/// @param dt Seconds since the previous frame.
+void UiInternal_DrawToasts(float dt);
+
+/// Drop every queued notification.
+void UiInternal_ToastsReset();
+
+/// Append a quad to whichever buffer the open layer writes to.
+void UiInternal_PushOverlayQuad(const UiQuad& quad);
+
+/// @return Whether the overlay layer is currently open.
+bool UiInternal_InOverlay();
+
 
 /// Record a widget as reachable by directional navigation, in call order, and
 /// report a duplicate identity once per frame.
@@ -81,14 +243,41 @@ bool UiInternal_RegisterFocusable(uint32_t id);
 bool UiInternal_PointerOver(int x, int y, int w, int h);
 
 /// Take the next row of the open panel and advance the layout cursor past it.
+///
+/// A row entirely outside the clip still advances the cursor but reports itself
+/// invisible, so a caller can skip both drawing it and registering it as
+/// reachable by directional navigation.
 /// @param height Row height in pixels.
 /// @param outX Receives the row's left edge.
 /// @param outY Receives the row's top edge.
 /// @param outW Receives the row's width.
+/// @param outVisible Receives whether any part of the row survives the clip.
 /// @return False when no panel is open, in which case nothing is written.
-bool UiInternal_TakeRow(int height, int* outX, int* outY, int* outW);
+bool UiInternal_TakeRow(int height, int* outX, int* outY, int* outW, bool* outVisible);
 
-/// Draw a string with the built-in bitmap font.
+/// Restore the default built-in theme and its font roles.
+void UiInternal_ThemeReset();
+
+/// Ask for the cooked font if it has not been asked for, and resolve its atlas
+/// to a backend handle. Called once at the top of a frame, so the handle a
+/// frame's quads carry cannot change part-way through it.
+void UiInternal_UpdateFont();
+
+/// Release the cooked font.
+void UiInternal_FontShutdown();
+
+/// Drop the cooked font without releasing it, because the runtime reset already
+/// released every resource including pinned ones.
+void UiInternal_FontForget();
+
+/// @return The cooked font, or null when the built-in one is in use.
+const Font* UiInternal_CookedFont();
+
+/// @return The backend texture handle of the cooked font's atlas; zero when
+///         there is no cooked font.
+uint32_t UiInternal_AtlasTexture();
+
+/// Draw a string with whichever font is active.
 /// @param x Left edge in screen pixels.
 /// @param y Top edge in screen pixels.
 /// @param scale Whole-pixel size of one font dot.

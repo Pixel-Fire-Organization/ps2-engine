@@ -15,7 +15,8 @@ typedef enum
     RES_TEXTURE,
     RES_MODEL,
     RES_SOUND,
-    RES_FONT
+    RES_FONT,
+    RES_THEME
 } ResourceType;
 
 // Lifecycle state of a resource entry

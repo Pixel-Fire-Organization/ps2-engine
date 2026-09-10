@@ -93,7 +93,7 @@ without it.
   dependency was missing and what referenced it.
 - **Bad magic or unsupported version** — the load is refused rather than
   reinterpreted.
-- **Unsupported type** — sound and font are not implemented on any platform; a
+- **Unsupported type** — sound is not implemented on any platform; a
   request logs an error and fails immediately rather than returning a handle that
   will never become ready.
 
@@ -103,6 +103,12 @@ without it.
 - Dependency count per asset is fixed by the asset format.
 - Models decode from a baked, unindexed representation; there is no runtime mesh
   optimisation or index generation.
-- Sound and font are unimplemented across the engine, not merely on one platform.
+- Sound is unimplemented across the engine, not merely on one platform.
+- A theme is validated at decode rather than at use, because it is copied into
+  live state rather than read field by field. A theme that fails any check never
+  becomes ready, so a caller cannot apply half of one.
+- A font is metrics only. Its atlas is an ordinary texture named as its
+  dependency, so it is budgeted, uploaded and released by the texture path
+  rather than by a second one, and a font is never ready before its atlas is.
 - Eviction is LRU over frames, not over bytes: evicting one large unused entry is
   not preferred to evicting several small ones.

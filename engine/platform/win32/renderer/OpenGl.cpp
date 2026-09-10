@@ -424,8 +424,9 @@ uint32_t OpenGlRenderer::UploadTexture(const TextureUpload& upload)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     // GL_LINEAR rather than a mipmapped filter: only level 0 is uploaded, and a
     // mipmapped filter with no mip chain samples as incomplete and renders black.
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    const GLint filter = (upload.filter == TextureFilter::Nearest) ? GL_NEAREST : GL_LINEAR;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(width), static_cast<GLsizei>(height), 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     free(rgba);
 
@@ -499,7 +500,7 @@ void OpenGlRenderer::ClearDrawLists() { m_drawLists.Reset(false); }
 
 void OpenGlRenderer::ClearFrame(const Color3& color) { m_clearColor = color; }
 
-void OpenGlRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) { m_geometry.AddRect2D(x, y, width, height, color); }
+void OpenGlRenderer::DrawQuad2D(const Quad2D& quad) { m_geometry.AddQuad2D(quad); }
 
 void OpenGlRenderer::DrawGrid(int32_t slices, float spacing)
 {
@@ -570,14 +571,22 @@ void OpenGlRenderer::UploadAndDraw()
         }
     }
 
-    // --- 2D: unlit, untextured, drawn over the top --------------------------
+    // --- 2D: unlit, blended, drawn over the top, one draw per texture run ---
     if (count2D > 0)
     {
         glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         StagedGeometry::BuildOrtho2D(m_width, m_height, false, matrix);
         gl_UniformMatrix4fv(m_uniformViewProj, 1, GL_FALSE, matrix);
-        glBindTexture(GL_TEXTURE_2D, m_whiteTexture);
-        glDrawArrays(GL_TRIANGLES, static_cast<GLint>(count3D), static_cast<GLsizei>(count2D));
+
+        const StagedGeometry::DrawRun* runs2D = m_geometry.Runs2D();
+        for (uint32_t i = 0; i < m_geometry.RunCount2D(); ++i)
+        {
+            glBindTexture(GL_TEXTURE_2D, runs2D[i].texture ? runs2D[i].texture : m_whiteTexture);
+            glDrawArrays(GL_TRIANGLES, static_cast<GLint>(count3D + runs2D[i].first), static_cast<GLsizei>(runs2D[i].count));
+        }
+        glDisable(GL_BLEND);
     }
 }
 
@@ -602,7 +611,6 @@ void OpenGlRenderer::EndFrame()
     m_drawLists.Reset(false);
 }
 
-void OpenGlRenderer::DrawDebugOverlay() {}
 
 // ---------------------------------------------------------------------------
 // Cameras and lifecycle

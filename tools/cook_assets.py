@@ -29,7 +29,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ps2lib import mesh, ps2a, tim2
+from ps2lib import font, mesh, ps2a, theme as themelib, tim2
 
 
 DEFAULT_COOKLIST = {
@@ -39,6 +39,7 @@ DEFAULT_COOKLIST = {
         "MODEL": {"enabled": True},
         "SOUND": {"enabled": False},
         "FONT": {"enabled": False},
+        "THEME": {"enabled": True},
     },
 }
 
@@ -98,6 +99,7 @@ def pack_asset(json_path, src_dir, dst_dir, cooklist=None):
     if asset_type_str == "TEXTURE":
         tex_fmt = str(meta.get("format", "rgba32")).lower()
         mip_levels = int(meta.get("mipmaps", 0))
+        tex_filter = meta.get("filter")
 
         # The cook list overrides the authored format unless it defers to it.
         # This is what lets one source tree cook palettised for the console and
@@ -106,14 +108,17 @@ def pack_asset(json_path, src_dir, dst_dir, cooklist=None):
         if want != "source":
             tex_fmt = want
 
-        if tex_fmt not in ("rgba32", "pal8"):
+        if tex_fmt not in ("rgba32", "pal8", "coverage8"):
             print(f"  WARNING: unknown texture format '{tex_fmt}', using rgba32 for {source_name}")
             tex_fmt = "rgba32"
         try:
-            payload, ext_str = tim2.convert_texture_to_tim2(source_path, tex_fmt, mip_levels)
+            payload, ext_str = tim2.convert_texture_to_tim2(source_path, tex_fmt, mip_levels, tex_filter)
             print(f"  CONV:  {source_name} -> TIM2 {tex_fmt} mips={mip_levels} ({len(payload)} bytes)")
         except ImportError:
             print(f"  ERROR: Pillow required to bake TIM2 textures; cannot pack {source_name}")
+            return False
+        except ValueError as e:
+            print(f"  ERROR: {source_name}: {e}")
             return False
     elif asset_type_str == "MODEL":
         if not source_name.lower().endswith(".obj"):
@@ -124,6 +129,30 @@ def pack_asset(json_path, src_dir, dst_dir, cooklist=None):
             print(f"  BAKE:  {source_name} -> BKM2 ({len(payload)} bytes)")
         except Exception as e:  # noqa: BLE001 — surface any parse failure
             print(f"  ERROR: model bake failed for {source_name}: {e}")
+            return False
+    elif asset_type_str == "FONT":
+        # The source is the metrics table; the atlas is an ordinary texture
+        # asset named as this one's dependency.
+        if not deps:
+            print(f"  ERROR: FONT must name its atlas as a dependency: {json_path}")
+            return False
+        try:
+            with open(source_path, "r", encoding="utf-8-sig") as fh:
+                metrics = json.load(fh)
+            payload, ext_str = font.write_font(
+                metrics["glyphs"],
+                metrics["atlas_width"],
+                metrics["atlas_height"],
+                metrics["line_height"],
+                metrics["baseline"],
+                metrics["space_advance"],
+                metrics["white_u"],
+                metrics["white_v"],
+                metrics.get("missing_index", 0),
+            )
+            print(f"  BAKE:  {source_name} -> PSFN {len(metrics['glyphs'])} glyphs ({len(payload)} bytes)")
+        except (KeyError, font.FontError) as e:
+            print(f"  ERROR: font bake failed for {source_name}: {e}")
             return False
     else:
         return False
@@ -142,11 +171,43 @@ def pack_asset(json_path, src_dir, dst_dir, cooklist=None):
     return True
 
 
+def cook_themes(themes_path, dst_dir, cooklist):
+    """Cook every declared theme into a loadable asset.
+
+    The same declaration also generates the built-in table, so a game switching
+    themes at run time and a game using a compiled-in one cannot disagree."""
+    policy = (cooklist or DEFAULT_COOKLIST).get("assets", {}).get("THEME", {})
+    if not policy.get("enabled", False):
+        print("  SKIP:  THEME is not cooked on this platform")
+        return 0
+    if not os.path.isfile(themes_path):
+        print(f"  SKIP:  no theme declaration at {themes_path}")
+        return 0
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import theme as theme_tool
+
+    try:
+        decl = theme_tool.load(themes_path)
+        payloads = theme_tool.cook_payloads(decl)
+    except (ValueError, OSError) as e:
+        print(f"  ERROR: theme declaration unusable: {e}")
+        return 1
+
+    for name, blob in sorted(payloads.items()):
+        out = ps2a.write_ps2a(ps2a.TYPE_MAP["THEME"], blob, [], ".thm")
+        with open(os.path.join(dst_dir, f"{name}.PS2A"), "wb") as fh:
+            fh.write(out)
+        print(f"  OK:   {name}.PS2A ({len(blob)} bytes payload, 0 deps)")
+    return 0
+
+
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
 
-    src_dir = os.path.join(project_root, "game", "cd_files", "ASSETS")
+    src_dirs = []
+    themes_path = None
     dst_dir = None
     cooklist_path = None
     platform = None
@@ -155,9 +216,11 @@ def main():
     i = 0
     while i < len(args):
         if args[i] == "--src" and i + 1 < len(args):
-            src_dir = args[i + 1]; i += 2
+            src_dirs.append(args[i + 1]); i += 2
         elif args[i] == "--dst" and i + 1 < len(args):
             dst_dir = args[i + 1]; i += 2
+        elif args[i] == "--themes" and i + 1 < len(args):
+            themes_path = args[i + 1]; i += 2
         elif args[i] == "--platform" and i + 1 < len(args):
             platform = args[i + 1]; i += 2
         elif args[i] == "--cooklist" and i + 1 < len(args):
@@ -179,22 +242,32 @@ def main():
     cooklist = load_cooklist(cooklist_path)
     listed = cooklist.get("platform", "<default>")
 
-    if not os.path.isdir(src_dir):
-        print("Source directory not found: " + src_dir)
+    if not src_dirs:
+        src_dirs = [os.path.join(project_root, "game", "cd_files", "ASSETS")]
+
+    work = []
+    for d in src_dirs:
+        if not os.path.isdir(d):
+            print("Source directory not found: " + d)
+            continue
+        for jf in sorted(f for f in os.listdir(d) if f.lower().endswith(".json")):
+            work.append((d, jf))
+
+    if not work:
+        print("No .json asset descriptors found in " + ", ".join(src_dirs))
         return 0
 
     os.makedirs(dst_dir, exist_ok=True)
-    json_files = sorted(f for f in os.listdir(src_dir) if f.lower().endswith(".json"))
-    if not json_files:
-        print("No .json asset descriptors found in " + src_dir)
-        return 0
-
-    print(f"Cooking {len(json_files)} asset(s) for '{platform or listed}' [cook list: {listed}]")
-    print(f"  {src_dir} -> {dst_dir}")
+    print(f"Cooking {len(work)} asset(s) for '{platform or listed}' [cook list: {listed}]")
+    for d in src_dirs:
+        print(f"  {d} -> {dst_dir}")
     errors = 0
-    for jf in json_files:
-        if pack_asset(os.path.join(src_dir, jf), src_dir, dst_dir, cooklist) is False:
+    for d, jf in work:
+        if pack_asset(os.path.join(d, jf), d, dst_dir, cooklist) is False:
             errors += 1
+
+    if themes_path:
+        errors += cook_themes(themes_path, dst_dir, cooklist)
 
     print("")
     print(f"Finished ({errors} error(s)).")

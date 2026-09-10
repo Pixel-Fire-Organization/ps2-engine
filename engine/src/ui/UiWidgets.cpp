@@ -56,8 +56,13 @@ namespace
         int x = 0;
         int y = 0;
         int w = 0;
-        if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w))
+        bool visible = false;
+        if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
             return false;
+
+        *outX = x;
+        *outY = y;
+        *outW = w;
 
         UiFrameState& state = UiInternal_State();
         const uint32_t id = UiInternal_Id(label);
@@ -75,14 +80,17 @@ namespace
             }
         }
 
+        if (focused)
+        {
+            state.focusRowTop = y;
+            state.focusRowHeight = height;
+            state.focusRowValid = true;
+        }
+
         const bool held = hovered && state.pointer.down;
         UiInternal_PushRect(x, y, w, height, RowBackground(focused || highlight, hovered, held));
         if (focused)
             UiInternal_PushBorder(x, y, w, height, style.borderWidth, Ui_GetColor(UiColor::Border));
-
-        *outX = x;
-        *outY = y;
-        *outW = w;
 
         const bool byFocus = focused && state.accept;
         const bool byPointer = hovered && state.pointer.pressed;
@@ -114,6 +122,9 @@ void Ui_BeginPanel(const char* title, int x, int y, int w, int h)
 
     UiInternal_PushRect(x, y, w, h, Ui_GetColor(UiColor::PanelBackground));
     UiInternal_PushBorder(x, y, w, h, style.borderWidth, Ui_GetColor(UiColor::Border));
+    UiInternal_PushClip(x + style.borderWidth, y + style.borderWidth, w - style.borderWidth * 2, h - style.borderWidth * 2);
+    UiInternal_PushId(title && title[0] ? title : "panel");
+    UiInternal_BeginFocusGroup(UiInternal_Id(title ? title : ""));
 
     if (title && title[0])
     {
@@ -127,8 +138,11 @@ void Ui_BeginPanel(const char* title, int x, int y, int w, int h)
 
 void Ui_EndPanel()
 {
-    if (!UiInternal_CanDraw())
+    if (!UiInternal_CanDraw() || !UiInternal_State().inPanel)
         return;
+    UiInternal_EndFocusGroup();
+    UiInternal_PopId();
+    UiInternal_PopClip();
     UiInternal_State().inPanel = false;
 }
 
@@ -145,7 +159,8 @@ void Ui_Separator()
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(style.borderWidth, &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(style.borderWidth, &x, &y, &w, &visible) || !visible)
         return;
     UiInternal_PushRect(x, y, w, style.borderWidth, Ui_GetColor(UiColor::Border));
 }
@@ -157,7 +172,8 @@ void Ui_Header(const char* text)
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height + style.borderWidth + style.rowPadding, &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height + style.borderWidth + style.rowPadding, &x, &y, &w, &visible) || !visible)
         return;
 
     UiFont_Draw(x, y, style.textScale, text, Ui_GetColor(UiColor::Header));
@@ -168,13 +184,26 @@ int Ui_ContentWidth() { return UiInternal_CanDraw() ? UiInternal_State().content
 
 int Ui_CursorY() { return UiInternal_CanDraw() ? UiInternal_State().cursorY : 0; }
 
+int Ui_ContentHeight()
+{
+    if (!UiInternal_CanDraw())
+        return 0;
+    const UiFrameState& state = UiInternal_State();
+    if (!state.inPanel)
+        return 0;
+    const int bottom = state.panelY + state.panelH - Ui_GetStyle().panelPadding;
+    const int left = bottom - state.cursorY;
+    return (left > 0) ? left : 0;
+}
+
 void Ui_LabelColored(const char* text, UiColor role)
 {
     const UiStyle& style = Ui_GetStyle();
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(Ui_TextHeight(style.textScale), &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(Ui_TextHeight(style.textScale), &x, &y, &w, &visible) || !visible)
         return;
     UiFont_Draw(x, y, style.textScale, text, Ui_GetColor(role));
 }
@@ -187,7 +216,8 @@ void Ui_LabelValue(const char* label, const char* value)
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(Ui_TextHeight(style.textScale), &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(Ui_TextHeight(style.textScale), &x, &y, &w, &visible) || !visible)
         return;
 
     UiFont_Draw(x, y, style.textScale, label, Ui_GetColor(UiColor::TextDim));
@@ -238,12 +268,10 @@ bool Ui_SelectableValue(const char* label, const char* value, bool selected)
     if (w == 0)
         return false;
 
-    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label,
-                Ui_GetColor(selected ? UiColor::TextAccent : UiColor::Text));
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(selected ? UiColor::TextAccent : UiColor::Text));
 
     const int valueWidth = Ui_TextWidth(style.textScale, value);
-    UiFont_Draw(x + w - valueWidth - style.rowPadding, y + style.rowPadding, style.textScale, value,
-                Ui_GetColor(UiColor::TextDim));
+    UiFont_Draw(x + w - valueWidth - style.rowPadding, y + style.rowPadding, style.textScale, value, Ui_GetColor(UiColor::TextDim));
     return activated;
 }
 
@@ -298,11 +326,9 @@ bool Ui_SliderInt(const char* label, int* value, int minimum, int maximum)
     if (!focused)
         return false;
 
-    int step = 0;
-    if (WasGamePadButtonPressed(0, GamepadButton::DPadRight))
-        step = 1;
-    if (WasGamePadButtonPressed(0, GamepadButton::DPadLeft))
-        step = -1;
+    int step = state.horizontalRepeat;
+    if (step != 0)
+        state.consumedHorizontal = true;
 
     const int range = maximum - minimum;
     const int grain = (range > 32) ? (range / 32) : 1;
@@ -323,6 +349,132 @@ bool Ui_SliderInt(const char* label, int* value, int minimum, int maximum)
     return true;
 }
 
+
+bool Ui_SliderFloat(const char* label, float* value, float minimum, float maximum, float step)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    const bool activated = ActivatableRow(label, false, &x, &y, &w);
+    if (w == 0 || !value)
+        return false;
+
+    UiFrameState& state = UiInternal_State();
+    const bool focused = state.focusId == UiInternal_Id(label);
+
+    char readout[32];
+    snprintf(readout, sizeof(readout), "%.3f", static_cast<double>(*value));
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::Text));
+    const int readoutWidth = Ui_TextWidth(style.textScale, readout);
+    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiColor::TextAccent));
+
+    if (!focused)
+        return false;
+
+    const int direction = state.horizontalRepeat;
+    if (direction == 0)
+        return activated;
+    state.consumedHorizontal = true;
+
+    float next = *value + static_cast<float>(direction) * step;
+    if (next < minimum)
+        next = minimum;
+    if (next > maximum)
+        next = maximum;
+    if (next == *value)
+        return false;
+
+    *value = next;
+    return true;
+}
+
+bool Ui_Stepper(const char* label, int* value, int minimum, int maximum, int step)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    const bool activated = ActivatableRow(label, false, &x, &y, &w);
+    if (w == 0 || !value)
+        return false;
+
+    UiFrameState& state = UiInternal_State();
+    const bool focused = state.focusId == UiInternal_Id(label);
+
+    char readout[32];
+    snprintf(readout, sizeof(readout), "< %d >", *value);
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::Text));
+    const int readoutWidth = Ui_TextWidth(style.textScale, readout);
+    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(focused ? UiColor::TextAccent : UiColor::TextDim));
+
+    if (!focused)
+        return false;
+
+    const int direction = state.horizontalRepeat;
+    if (direction == 0)
+        return activated;
+    state.consumedHorizontal = true;
+
+    int next = *value + direction * step;
+    if (next < minimum)
+        next = minimum;
+    if (next > maximum)
+        next = maximum;
+    if (next == *value)
+        return false;
+
+    *value = next;
+    return true;
+}
+
+bool Ui_Radio(const char* label, int* value, int option)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    const bool selected = value && (*value == option);
+    const bool activated = ActivatableRow(label, selected, &x, &y, &w);
+    if (w == 0 || !value)
+        return false;
+
+    const int box = Ui_TextHeight(style.textScale);
+    const int boxX = x + style.rowPadding;
+    const int boxY = y + style.rowPadding;
+    UiInternal_PushBorder(boxX, boxY, box, box, style.borderWidth, Ui_GetColor(UiColor::Border));
+    if (selected)
+        UiInternal_PushRect(boxX + 3, boxY + 3, box - 6, box - 6, Ui_GetColor(UiColor::TextAccent));
+
+    UiFont_Draw(boxX + box + style.rowPadding, boxY, style.textScale, label, Ui_GetColor(selected ? UiColor::TextAccent : UiColor::Text));
+
+    if (activated && *value != option)
+    {
+        *value = option;
+        return true;
+    }
+    return false;
+}
+
+void Ui_ColorSwatch(const char* label, UiRgba color)
+{
+    const UiStyle& style = Ui_GetStyle();
+    const int height = Ui_TextHeight(style.textScale) + style.rowPadding * 2;
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
+        return;
+
+    UiFont_Draw(x, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::TextDim));
+
+    const int box = height - style.rowPadding;
+    const int boxX = x + w - box;
+    UiInternal_PushRect(boxX, y, box, box, color);
+    UiInternal_PushBorder(boxX, y, box, box, style.borderWidth, Ui_GetColor(UiColor::Border));
+}
+
 void Ui_Bar(const char* label, int value, int maximum)
 {
     const UiStyle& style = Ui_GetStyle();
@@ -331,7 +483,8 @@ void Ui_Bar(const char* label, int value, int maximum)
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
         return;
 
     char readout[64];
@@ -362,7 +515,8 @@ void Ui_Plot(const char* label, const float* values, int count, float minimum, f
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
         return;
 
     UiFont_Draw(x, y, style.textScale, label, Ui_GetColor(UiColor::TextDim));
@@ -404,7 +558,8 @@ void Ui_BeginPointBox(const char* label, int height)
     int x = 0;
     int y = 0;
     int w = 0;
-    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(textHeight + style.rowPadding + height, &x, &y, &w))
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(textHeight + style.rowPadding + height, &x, &y, &w, &visible) || !visible)
         return;
 
     UiFrameState& state = UiInternal_State();

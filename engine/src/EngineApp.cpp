@@ -70,6 +70,7 @@ void EngineUpdate()
             GameUpdate(dt);
         Engine_Achievement_Update(dt);
     }
+    Engine_DrawDebugOverlay();
     Ui_EndFrame();
     gameLogicEndTime = platform->GetTimeSeconds();
 
@@ -79,7 +80,6 @@ void EngineUpdate()
     {
         r->BeginFrame();
         r->Render();
-        Engine_DrawDebugOverlay();
         r->EndFrame();
     }
 

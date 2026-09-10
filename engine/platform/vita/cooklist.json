@@ -16,7 +16,10 @@
       "enabled": false
     },
     "FONT": {
-      "enabled": false
+      "enabled": true
+    },
+    "THEME": {
+      "enabled": true
     }
   }
 }

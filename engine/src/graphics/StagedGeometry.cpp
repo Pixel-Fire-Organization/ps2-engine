@@ -50,10 +50,11 @@ namespace
 } // namespace
 
 StagedGeometry::StagedGeometry()
-    : m_verts3D(nullptr), m_count3D(0), m_capacity3D(0), m_verts2D(nullptr), m_count2D(0), m_capacity2D(0), m_runCount(0), m_stats(nullptr), m_vertexBudget(0), m_budget3D(0),
-      m_viewportWidth(0), m_viewportHeight(0), m_frustum(), m_frustumValid(false)
+    : m_verts3D(nullptr), m_count3D(0), m_capacity3D(0), m_verts2D(nullptr), m_count2D(0), m_capacity2D(0), m_runCount(0), m_runCount2D(0), m_droppedRuns2D(0), m_stats(nullptr),
+      m_vertexBudget(0), m_budget3D(0), m_viewportWidth(0), m_viewportHeight(0), m_frustum(), m_frustumValid(false)
 {
     memset(m_runs, 0, sizeof(m_runs));
+    memset(m_runs2D, 0, sizeof(m_runs2D));
 }
 
 void StagedGeometry::SetFrameBudget(uint32_t maxVertices, uint32_t viewportWidth, uint32_t viewportHeight)
@@ -77,7 +78,16 @@ void StagedGeometry::BeginFrame()
     m_runCount = 0;
 }
 
-void StagedGeometry::EndFrame() { m_count2D = 0; }
+void StagedGeometry::EndFrame()
+{
+    if (m_droppedRuns2D > 0)
+    {
+        Engine_LogError("StagedGeometry: dropped %u screen-space quad(s) this frame (run capacity %u).", m_droppedRuns2D, static_cast<unsigned>(GFX_MAX_2D_RUNS));
+        m_droppedRuns2D = 0;
+    }
+    m_count2D = 0;
+    m_runCount2D = 0;
+}
 
 bool StagedGeometry::Reserve(Vertex*& array, uint32_t& capacity, uint32_t used, uint32_t extra)
 {
@@ -390,19 +400,42 @@ void StagedGeometry::BuildFrame(DrawLists& lists, DrawStats* stats)
     m_stats = nullptr;
 }
 
-void StagedGeometry::AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, const Color3& color)
+void StagedGeometry::AddQuad2D(const Quad2D& quad)
 {
+    const bool opensRun = (m_runCount2D == 0) || (m_runs2D[m_runCount2D - 1].texture != quad.texture);
+    if (opensRun && m_runCount2D >= GFX_MAX_2D_RUNS)
+    {
+        ++m_droppedRuns2D;
+        return;
+    }
     if (!Reserve(m_verts2D, m_capacity2D, m_count2D, 6))
         return;
 
-    const float x0 = static_cast<float>(x);
-    const float y0 = static_cast<float>(y);
-    const float x1 = static_cast<float>(x + w);
-    const float y1 = static_cast<float>(y + h);
+    if (opensRun)
+    {
+        DrawRun& run = m_runs2D[m_runCount2D++];
+        run.first = m_count2D;
+        run.count = 0;
+        run.texture = quad.texture;
+    }
+    m_runs2D[m_runCount2D - 1].count += 6;
 
-    // Two triangles. Normals stay zero, which the shaders read as "unlit", and
-    // UVs stay zero so an untextured backend samples a single white texel.
-    const float corners[6][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y0}, {x1, y1}, {x0, y1}};
+    const float x0 = static_cast<float>(quad.x);
+    const float y0 = static_cast<float>(quad.y);
+    const float x1 = static_cast<float>(quad.x + quad.w);
+    const float y1 = static_cast<float>(quad.y + quad.h);
+    const float u0 = static_cast<float>(quad.u0) / 65535.0f;
+    const float v0 = static_cast<float>(quad.v0) / 65535.0f;
+    const float u1 = static_cast<float>(quad.u1) / 65535.0f;
+    const float v1 = static_cast<float>(quad.v1) / 65535.0f;
+
+    const float r = static_cast<float>(quad.r) / 255.0f;
+    const float g = static_cast<float>(quad.g) / 255.0f;
+    const float b = static_cast<float>(quad.b) / 255.0f;
+    const float a = static_cast<float>(quad.a) / 255.0f;
+
+    // Two triangles. Normals stay zero, which the shaders read as "unlit".
+    const float corners[6][4] = {{x0, y0, u0, v0}, {x1, y0, u1, v0}, {x1, y1, u1, v1}, {x0, y0, u0, v0}, {x1, y1, u1, v1}, {x0, y1, u0, v1}};
     for (int i = 0; i < 6; ++i)
     {
         Vertex& v = m_verts2D[m_count2D++];
@@ -410,11 +443,12 @@ void StagedGeometry::AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, const
         v.y = corners[i][1];
         v.z = 0.0f;
         v.nx = v.ny = v.nz = 0.0f;
-        v.u = v.v = 0.0f;
-        v.r = color.r;
-        v.g = color.g;
-        v.b = color.b;
-        v.a = 1.0f;
+        v.u = corners[i][2];
+        v.v = corners[i][3];
+        v.r = r;
+        v.g = g;
+        v.b = b;
+        v.a = a;
     }
 }
 

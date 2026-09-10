@@ -12,7 +12,6 @@ namespace
 {
     const int NOTICE_MARGIN_RATIO = 8;
     const int NOTICE_TITLE_SCALE = 3;
-    const int WRAP_MAX_CHARS = 64;
 
     bool s_Pending = false;
     char s_Title[64] = {0};
@@ -28,43 +27,6 @@ namespace
         Engine_LogInfo("Notice: %s - %s", s_Title, s_Reason);
     }
 
-    void DrawWrapped(const char* text)
-    {
-        if (!text || !text[0])
-            return;
-
-        const int scale = Ui_GetStyle().textScale;
-        const int advance = UI_GLYPH_ADVANCE * scale;
-        int perLine = (advance > 0) ? (Ui_ContentWidth() / advance) : 0;
-        if (perLine < 4)
-            perLine = 4;
-        if (perLine > WRAP_MAX_CHARS)
-            perLine = WRAP_MAX_CHARS;
-
-        const int length = static_cast<int>(strlen(text));
-        int start = 0;
-        while (start < length)
-        {
-            int take = ((length - start) < perLine) ? (length - start) : perLine;
-            if (start + take < length)
-            {
-                int space = take;
-                while (space > 0 && text[start + space] != ' ')
-                    --space;
-                if (space > 0)
-                    take = space;
-            }
-
-            char line[WRAP_MAX_CHARS + 1];
-            memcpy(line, text + start, static_cast<size_t>(take));
-            line[take] = '\0';
-            Ui_Label(line);
-
-            start += take;
-            while (start < length && text[start] == ' ')
-                ++start;
-        }
-    }
 } // namespace
 
 void Engine_Notice_RequestSubsystems(Platform* platform)
@@ -120,7 +82,7 @@ bool Engine_Notice_Update(float dt)
     Ui_Text((screenW - Ui_TextWidth(NOTICE_TITLE_SCALE, s_Title)) / 2, margin / 2, NOTICE_TITLE_SCALE, s_Title, UiColor::Header);
 
     Ui_BeginPanel("", margin, margin, screenW - margin * 2, screenH - margin * 2);
-    DrawWrapped(s_Reason);
+    Ui_LabelWrapped(s_Reason, UiColor::Text);
     Ui_Separator();
     Ui_Label("THE GAME PLAYS NORMALLY.");
     Ui_Spacing(Ui_TextHeight(Ui_GetStyle().textScale));

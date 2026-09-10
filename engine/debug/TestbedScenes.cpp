@@ -17,6 +17,7 @@ namespace
         {"SCREEN AND ASPECT", TestbedCategory::RenderingDisplay, Scene_ScreenAspect_Init, Scene_ScreenAspect_Update, nullptr},
         {"DEPTH RANGE", TestbedCategory::RenderingDisplay, Scene_DepthRange_Init, Scene_DepthRange_Update, nullptr},
         {"UI GALLERY", TestbedCategory::RenderingDisplay, Scene_UiGallery_Init, Scene_UiGallery_Update, nullptr},
+        {"UI BUDGET", TestbedCategory::SystemsBudgets, Scene_UiBudget_Init, Scene_UiBudget_Update, Scene_UiBudget_Shutdown},
         {"STYLE", TestbedCategory::RenderingDisplay, Scene_Style_Init, Scene_Style_Update, nullptr},
         {"DRAW LOAD", TestbedCategory::RenderingDisplay, Scene_DrawLoad_Init, Scene_DrawLoad_Update, nullptr},
         {"PLATFORM INFO", TestbedCategory::SystemsBudgets, Scene_PlatformInfo_Init, Scene_PlatformInfo_Update, nullptr},
@@ -30,7 +31,6 @@ namespace
     };
 
     const int s_SceneCount = static_cast<int>(sizeof(s_Scenes) / sizeof(s_Scenes[0]));
-    const int WRAP_MAX_CHARS = 64;
 } // namespace
 
 const TestbedScene* Testbed_Catalogue(int* outCount)
@@ -58,42 +58,19 @@ const char* Testbed_CategoryName(TestbedCategory category)
     return "?";
 }
 
-void Testbed_DrawWrapped(const char* text, UiColor role)
+int Testbed_Tabs(const char* id, const char* const* names, int count)
 {
-    if (!text || !text[0])
-        return;
+    if (count <= 1 || !Ui_BeginTabBar(id))
+        return 0;
 
-    const int scale = Ui_GetStyle().textScale;
-    const int advance = UI_GLYPH_ADVANCE * scale;
-    int perLine = (advance > 0) ? (Ui_ContentWidth() / advance) : 0;
-    if (perLine < 4)
-        perLine = 4;
-    if (perLine > WRAP_MAX_CHARS)
-        perLine = WRAP_MAX_CHARS;
-
-    const int length = static_cast<int>(strlen(text));
-    int start = 0;
-    while (start < length)
+    int active = 0;
+    for (int i = 0; i < count; ++i)
     {
-        int take = ((length - start) < perLine) ? (length - start) : perLine;
-        if (start + take < length)
-        {
-            int space = take;
-            while (space > 0 && text[start + space] != ' ')
-                --space;
-            if (space > 0)
-                take = space;
-        }
-
-        char line[WRAP_MAX_CHARS + 1];
-        memcpy(line, text + start, static_cast<size_t>(take));
-        line[take] = '\0';
-        Ui_LabelColored(line, role);
-
-        start += take;
-        while (start < length && text[start] == ' ')
-            ++start;
+        if (Ui_Tab(names[i]))
+            active = i;
     }
+    Ui_EndTabBar();
+    return active;
 }
 
 void Testbed_DrawUnavailable(const char* what)

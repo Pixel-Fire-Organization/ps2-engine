@@ -136,3 +136,18 @@ EngineUpdate()
   └─ Engine_ReportFrameStats()
   └─ Engine_PerfLogger_Tick()
 ```
+
+## Drawing an interface
+
+Game code may draw an interface with the same subsystem the engine's own tooling
+uses, when it asks for it. Two things are deliberately kept apart:
+
+- A **screen-space rectangle** goes straight to the renderer. It is the
+  primitive for a game running without the interface subsystem, and it is
+  therefore neither clipped by a container nor layered above one.
+- **Interface calls** go through the subsystem: they are clipped, they take part
+  in navigation, and they can be drawn above the world in the overlay layer.
+
+Without the subsystem every interface call is a no-op and every query reports
+"not interacted with", so game code compiles and runs either way. That is the
+same guarantee the subsystem gives the engine's own tooling.

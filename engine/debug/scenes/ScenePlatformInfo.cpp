@@ -106,16 +106,15 @@ void Scene_PlatformInfo_Update(float dt)
     if (!platform)
         return;
 
-    const int page = Testbed_Page(PAGE_COUNT);
     const int screenW = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenWidth));
     const int screenH = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenHeight));
 
     Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
 
-    char title[48];
-    snprintf(title, sizeof(title), "%s   L1 R1 PAGE %d OF %d", (page == 0) ? "PLATFORM" : "BUDGETS", page + 1, PAGE_COUNT);
+    static const char* const PAGES[PAGE_COUNT] = {"PLATFORM", "BUDGETS"};
 
-    Ui_BeginPanel(title, PANEL_MARGIN, PANEL_MARGIN, screenW - PANEL_MARGIN * 2, screenH - PANEL_MARGIN * 2);
+    Ui_BeginPanelSlot("PLATFORM INFO", UiPanelSlot::Full);
+    const int page = Testbed_Tabs("pages", PAGES, PAGE_COUNT);
     if (page == 0)
         DrawIdentity(*platform, screenW, screenH);
     else

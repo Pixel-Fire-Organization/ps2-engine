@@ -1,5 +1,7 @@
 ﻿#include <cstring>
 #include "Engine.h"
+#include "EngineUi.h"
+#include "graphics/FontFormat.h"
 #include "graphics/ModelFormat.h"
 #include "graphics/Renderer.h"
 #include "graphics/Types.h"
@@ -34,12 +36,14 @@ typedef struct
     uint8_t depCount;
 
     // Engine-native resource storage (only one is active based on type).
-    // Fonts and sound were dropped with raylib; those types are unsupported and
-    // load attempts are logged and rejected.
+    // Sound has no implementation on any platform; a load of that type is
+    // logged and rejected.
     union
     {
         Texture2D texture;
         Model model;
+        Font font;
+        UiStyle theme;
     } handle;
 } ResourceEntry;
 
@@ -148,9 +152,12 @@ static void Internal_UnloadHandle(ResourceEntry* entry)
     case RES_MODEL:
         Model_FreeBaked(&entry->handle.model);
         break;
-    case RES_SOUND:
     case RES_FONT:
-        break; // unsupported — nothing was allocated
+        Font_FreeBaked(&entry->handle.font);
+        break;
+    case RES_THEME:
+    case RES_SOUND:
+        break; // nothing was allocated
     }
 }
 
@@ -270,7 +277,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
 
     // Validate header.type is within the supported ResourceType enum range.
     // A corrupt asset or out-of-date packer can produce invalid type values.
-    if (header.type >= 4) // RES_TEXTURE=0, RES_MODEL=1, RES_SOUND=2, RES_FONT=3
+    if (header.type > RES_THEME) // RES_TEXTURE=0, RES_MODEL=1, RES_SOUND=2, RES_FONT=3, RES_THEME=4
     {
         Engine_LogError("Resource: invalid type %u in .ps2a header for slot %d (%s)", header.type, idx, entry->key);
         Internal_UnloadEntry(idx);
@@ -335,6 +342,7 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             upload.width = img.width;
             upload.height = img.height;
             upload.format = img.format;
+            upload.filter = img.filter;
             upload.clut = img.clut;
 
             Renderer* renderer = Engine_GetRenderer();
@@ -374,9 +382,46 @@ static void Internal_OnAsyncLoadComplete(const void* data, size_t size, void* us
             entry->state = RES_STATE_READY;
         }
         break;
-    case RES_SOUND:
     case RES_FONT:
-        Engine_LogError("Resource: type %u unsupported (fonts/sound were dropped with raylib) for slot %d (%s)", header.type, idx, entry->key);
+        {
+            // Metrics only: the atlas is an ordinary texture named as this
+            // asset's first dependency, already queued above, so it is budgeted
+            // and uploaded by the texture path rather than a second one.
+            const int32_t atlas = (entry->depCount > 0) ? entry->deps[0].index : -1;
+            if (atlas < 0)
+            {
+                Engine_LogError("Resource: font slot %d (%s) names no atlas dependency", idx, entry->key);
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
+            }
+            if (!Font_LoadBaked(payload, static_cast<size_t>(payloadSize), atlas, &entry->handle.font))
+            {
+                Engine_LogError("Resource: cooked font load failed for slot %d (%s)", idx, entry->key);
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
+            }
+            entry->state = RES_STATE_READY;
+        }
+        break;
+    case RES_THEME:
+        {
+            // A theme is copied into live engine state rather than parsed, so
+            // the decode is where identity, version, size and integrity are
+            // checked; nothing downstream would catch a bad one.
+            if (!Ui_ThemeDecode(payload, static_cast<size_t>(payloadSize), &entry->handle.theme))
+            {
+                Engine_LogError("Resource: cooked theme load failed for slot %d (%s)", idx, entry->key);
+                Internal_UnloadEntry(idx);
+                Engine_PoolFreeMain(ctx);
+                return;
+            }
+            entry->state = RES_STATE_READY;
+        }
+        break;
+    case RES_SOUND:
+        Engine_LogError("Resource: sound is not implemented on any platform; refusing slot %d (%s)", idx, entry->key);
         Internal_UnloadEntry(idx);
         Engine_PoolFreeMain(ctx);
         return;
@@ -636,9 +681,12 @@ void* Engine_Resource_Get(int32_t handle)
         return &entry->handle.texture;
     case RES_MODEL:
         return &entry->handle.model;
-    case RES_SOUND:
     case RES_FONT:
-        return nullptr; // unsupported (dropped with raylib)
+        return &entry->handle.font;
+    case RES_THEME:
+        return &entry->handle.theme;
+    case RES_SOUND:
+        return nullptr; // not implemented on any platform
     }
     return nullptr;
 }

@@ -217,6 +217,7 @@ void Engine_ResetRuntimeState()
 {
     Engine_Game_ResetState();
     Engine_AchievementUi_Reset();
+    Ui_ResetRuntimeState();
 
     if (Engine_Subsystem_IsEnabled(EngineSubsystem::Io))
         Engine_IO_Drain();

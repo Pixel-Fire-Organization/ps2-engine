@@ -56,6 +56,31 @@ namespace game
     // Screen-space rectangle in pixels. Colour components 0..255. The building
     // block for UI/HUD authored in C++ (there is no separate UI scripting layer).
     void DrawRect(int x, int y, int width, int height, int r, int g, int b);
+    // The same, with an alpha component. Goes straight to the renderer, so it is
+    // neither clipped nor layered; the interface calls below are.
+    void DrawRect(int x, int y, int width, int height, int r, int g, int b, int a);
+
+    // --- Interface --------------------------------------------------------------
+    // Available when the Ui subsystem is running. Absent, every call here is a
+    // no-op and a query reports "not interacted with", so game code compiles and
+    // runs either way.
+    int ScreenWidth();
+    int ScreenHeight();
+
+    // Text drawn with whichever font the interface has: a cooked one where the
+    // content pipeline supplied it, the built-in one otherwise.
+    void Text(int x, int y, const char* text);
+    int TextWidth(const char* text);
+    int TextHeight();
+
+    // A panel, and the rows that stack inside it. Every Panel must be closed.
+    void Panel(const char* title, int x, int y, int width, int height);
+    void EndPanel();
+    void Label(const char* text);
+    bool Button(const char* label);
+
+    // A notification, shown in the corner for a few seconds.
+    void Toast(const char* text, float seconds);
 
     // --- 3D primitives (immediate mode — submit every frame) --------------------
     // Colour components are 0..255.

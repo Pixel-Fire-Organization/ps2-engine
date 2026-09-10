@@ -67,6 +67,16 @@ enum class PixelFormat : uint8_t
     PAL8, // 8-bit indexed + 256-entry R8G8B8A8 CLUT
 };
 
+/// How a texture is sampled. Fixed at upload and immutable afterwards, because
+/// a backend bakes it into the sampler or the texture register.
+enum class TextureFilter : uint8_t
+{
+    Linear = 0,
+    Nearest,
+
+    Count
+};
+
 // Maximum mip levels a texture may carry (level 0 + up to 6 downsamples).
 #define TEX_MAX_MIP_LEVELS 7
 
@@ -80,8 +90,31 @@ typedef struct TextureUpload
     int width; // level-0 width
     int height; // level-0 height
     PixelFormat format;
+    TextureFilter filter; // Linear unless the asset asked otherwise
     const void* clut; // 256 x u32 R8G8B8A8, null unless PAL8
 } TextureUpload;
+
+/// One screen-space, axis-aligned quad handed to a backend.
+///
+/// Positions and sizes are whole pixels in framebuffer space, origin top-left.
+/// Texture coordinates are normalised across the full unsigned range and are
+/// read only when `texture` is non-zero; a zero texture is a solid colour fill.
+struct Quad2D
+{
+    int32_t x;
+    int32_t y;
+    int32_t w;
+    int32_t h;
+    uint32_t texture; // backend handle as returned by UploadTexture; 0 = solid
+    uint16_t u0;
+    uint16_t v0;
+    uint16_t u1;
+    uint16_t v1;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+};
 
 // --- Camera ------------------------------------------------------------
 

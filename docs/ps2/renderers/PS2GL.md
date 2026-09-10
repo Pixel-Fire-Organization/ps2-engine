@@ -39,13 +39,27 @@ not own.
 
 - **Far-field geometry is not implemented**, as on every other backend. Level
   geometry and the sky both draw; the distant impostor ring does not.
-- **Screen-space rectangles are queued, with a fixed per-frame ceiling.** Interface
+- **Screen-space quads are queued, with a fixed per-frame ceiling.** Interface
   drawing is submitted before the frame begins, so it is buffered and emitted at the
-  end. The queue holds roughly four thousand rectangles per frame; beyond that they
-  are dropped. The overflow is reported **once per frame, with a count** — never once
-  per dropped rectangle. A per-item diagnostic on this platform's console costs more
-  than the frame it describes, so it would replace the problem it reports rather than
-  measure it.
+  end. The queue is sized as the interface budget plus a fixed headroom for the
+  game's own rectangles and the panic display, so raising the interface budget
+  raises the queue with it rather than silently dropping quads inside the backend
+  and blaming the backend. Beyond capacity they are dropped, and the overflow is
+  reported **once per frame, with a count** — never once per dropped quad. A
+  per-item diagnostic on this platform's console costs more than the frame it
+  describes, so it would replace the problem it reports rather than measure it.
+- **Blending works, but only three factor pairs exist.** The library implements
+  exactly three combinations and rejects the rest; the one the interface needs —
+  source alpha against its inverse — is among them. Anything else is a
+  not-implemented failure inside the library rather than a compile error here, so
+  a change to the blend equation must be checked against that list first.
+- **There is no scissor.** The library's clipping region is part of the draw
+  environment rather than an independent rectangle, so the entry point exists but
+  does nothing useful. Screen-space clipping is therefore done before submission,
+  which is the arrangement every backend uses anyway.
+- **Screen-space texturing goes through the fixed-function modulate path**, which
+  the library does implement. The neighbouring decal and blend texture modes do
+  not, so the interface must stay on modulate.
 - **Indexed drawing is unavailable.** The library treats it as a hard error, so
   indexed meshes are skipped entirely rather than drawn incorrectly. Content must
   be baked unindexed, which is what the cook stage produces.

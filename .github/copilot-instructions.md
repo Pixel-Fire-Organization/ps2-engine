@@ -66,7 +66,8 @@ Two engine subsystems arrived together and are easiest to understand as a pair.
 - **UI** (`engine/src/ui/**`, `engine/include/EngineUi.h`) is an immediate-mode interface in the Dear ImGui style:
   widgets are calls made fresh every frame, identity comes from the label, nothing is retained and nothing is
   allocated. It fills in `class UI` and `Renderer::AddUIToDrawList`, which had been reserved and empty. Text is drawn
-  from a built-in 5x7 bitmap font as **several quads per glyph**, so a screen is budgeted in quads (`UI_MAX_QUADS`, a
+  from a cooked font atlas as **one quad per glyph**, falling back to a built-in 5x7 bitmap font that costs several
+  quads per glyph where no cooked font is available. Either way a screen is budgeted in quads (`UI_MAX_QUADS`, a
   platform constant) and a dense screen is paged rather than allowed to overflow. `AddUIToDrawList` is implemented
   once in the base class so every backend draws an identical interface.
 - **Testbed** (`engine/debug/**`) is the scene catalogue reached by the `DebugChord::DebugMenu` chord. It is
@@ -191,7 +192,11 @@ new platform boot and be validated before any graphics code exists.
   `tools/title.py`) holds who made the title, what it is called, and what each platform files it under. Every
   platform's packaging and every platform's writable-storage location are built from it, so the identity a console
   shows and the identity a save is filed under cannot disagree. `game/achievements.json` (schema and reader
-  alongside) is the same idea for the achievement set. A platform config — `game/platform/<name>/package.json`,
+  alongside) is the same idea for the achievement set, and `game/theme.json` for the interface's look — its
+  themes are generated into the binary *and* cooked as loadable assets from one declaration, and the generator
+  checks it against `UiColor` so a colour role cannot exist in the engine without one.
+  The PS2 memory card save icon is generated from the same title declaration (`tools/ps2/save_icon.py`): a save
+  directory without it is reported as corrupted by the console browser even though its data is intact. A platform config — `game/platform/<name>/package.json`,
   validated against `game/platform/package.schema.json` — carries only what is *specific* to that platform's
   container, and has its identity folded in when it is read; it does not restate one. The cook list answers a
   *hardware* question and stays in `engine/platform/<name>/`; a title id and an icon answer a question about the
@@ -333,7 +338,9 @@ the change is responsible for updating the relevant file(s) before considering t
   memory — it uses `Engine_PlatformAlloc`/`Engine_PlatformFree` or `PlatformArray<T>` (`EngineMemory.h`). See the
   allocator-pairing rule in "NEVER DO" and in `cpp-expert.instructions.md`.
 - **GFX Resources**: Textures and models are managed by the **Resource Manager** (`EngineResource.h`); note that
-  `RES_SOUND`/`RES_FONT` are currently unsupported since raylib was removed. Never allocate GFX resources in engine arenas.
+  `RES_FONT` is a cooked font: metrics whose atlas is an ordinary texture named as its dependency, so the texture
+  budget and upload path serve it unchanged. `RES_SOUND` remains unimplemented on every platform. Never allocate GFX
+  resources in engine arenas.
     - Use `Engine_Resource_Load(type, path)` to load, `Engine_Resource_Get(handle)` to access.
     - See `docs/subsystems/RESOURCE.md` for the runtime contract and `docs/formats/ASSET_FORMAT.md` for the `.ps2a` layout.
 - **Engine Arenas** (for internal subsystems only) — sizes below are the PS2 values:

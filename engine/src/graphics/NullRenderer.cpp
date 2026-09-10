@@ -64,18 +64,10 @@ void NullRenderer::BeginFrame() {}
 
 void NullRenderer::EndFrame() { m_drawLists.Reset(false); }
 
-void NullRenderer::DrawDebugOverlay() {}
 
 void NullRenderer::ClearFrame(const Color3& color) { UNUSED_VAR(color); }
 
-void NullRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color)
-{
-    UNUSED_VAR(x);
-    UNUSED_VAR(y);
-    UNUSED_VAR(width);
-    UNUSED_VAR(height);
-    UNUSED_VAR(color);
-}
+void NullRenderer::DrawQuad2D(const Quad2D& quad) { UNUSED_VAR(quad); }
 
 void NullRenderer::DrawGrid(int32_t slices, float spacing)
 {

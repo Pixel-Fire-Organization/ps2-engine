@@ -1,5 +1,6 @@
 #include "EngineUi.h"
 
+#include <cstdio>
 #include <cstring>
 
 #include "EngineCore.h"
@@ -17,8 +18,29 @@ namespace
     const uint32_t FNV_OFFSET_BASIS = 2166136261u;
     const uint32_t FNV_PRIME = 16777619u;
 
+    /// @param a Value at the start of the span.
+    /// @param b Value at the end of the span.
+    /// @param cut How far into the span the clip fell.
+    /// @param span The span's full length in pixels.
+    /// @return The value at the cut.
+    uint16_t Interpolate(uint16_t a, uint16_t b, int cut, int span)
+    {
+        if (span <= 0)
+            return a;
+        const int32_t delta = static_cast<int32_t>(b) - static_cast<int32_t>(a);
+        return static_cast<uint16_t>(static_cast<int32_t>(a) + (delta * cut) / span);
+    }
+
     bool s_Active = false;
     UI s_Ui;
+
+    // Content that must draw above the interface lives in its own buffer and is
+    // appended at submission. One hand-off still, and a modal cannot starve the
+    // screen underneath it.
+    UiQuad s_Overlay[UI_MAX_OVERLAY_QUADS];
+    uint32_t s_OverlayCount = 0;
+    uint32_t s_OverlayDropped = 0;
+
     UiFrameState s_State;
     float s_StickHeld = 0.0f;
 
@@ -27,6 +49,55 @@ namespace
         const Platform* platform = Engine_GetPlatform();
         s_State.screenW = platform ? static_cast<int>(platform->GetConstant(PlatformConstant::ScreenWidth)) : GFX_SCREEN_WIDTH;
         s_State.screenH = platform ? static_cast<int>(platform->GetConstant(PlatformConstant::ScreenHeight)) : GFX_SCREEN_HEIGHT;
+    }
+
+    float s_VerticalHeld = 0.0f;
+    float s_HorizontalHeld = 0.0f;
+    int s_VerticalFired = 0;
+    int s_HorizontalFired = 0;
+
+    /// A held direction repeats after a delay and then at an interval, both in
+    /// seconds. Never in frames: two of this engine's platform variants differ
+    /// only in refresh rate, and a frame-counted repeat would run measurably
+    /// faster on one of them.
+    /// @param positive The button meaning +1.
+    /// @param negative The button meaning -1.
+    /// @param held How long the current direction has been down; updated.
+    /// @param fired How many repeats have been emitted; updated.
+    /// @param dt Seconds since the previous frame.
+    /// @return -1, 0 or +1 for this frame.
+    int Repeat(GamepadButton positive, GamepadButton negative, float& held, int& fired, float dt)
+    {
+        const bool down = IsGamePadButtonPressed(0, positive);
+        const bool up = IsGamePadButtonPressed(0, negative);
+        if (down == up)
+        {
+            held = 0.0f;
+            fired = 0;
+            return 0;
+        }
+
+        const int direction = down ? 1 : -1;
+        const UiStyle& style = Ui_GetStyle();
+        const float previous = held;
+        held += dt;
+
+        if (previous == 0.0f)
+        {
+            fired = 1;
+            return direction;
+        }
+        if (held < style.repeatDelaySeconds)
+            return 0;
+
+        const float since = held - style.repeatDelaySeconds;
+        const int want = 1 + static_cast<int>(since / style.repeatIntervalSeconds) + 1;
+        if (want > fired)
+        {
+            fired = want;
+            return direction;
+        }
+        return 0;
     }
 
     void ClampPointer()
@@ -152,26 +223,155 @@ UiFrameState& UiInternal_State() { return s_State; }
 
 bool UiInternal_CanDraw() { return s_Active && s_State.inFrame; }
 
-void UiInternal_PushRect(int x, int y, int w, int h, UiRgba color)
+bool UiInternal_PushClip(int x, int y, int w, int h)
+{
+    if (s_State.clipDepth >= UI_MAX_CLIP_DEPTH)
+    {
+        if (!s_State.clipOverflowReported)
+        {
+            s_State.clipOverflowReported = true;
+            Engine_LogError("Ui: containers nested deeper than %u; the innermost is not opened.", static_cast<unsigned>(UI_MAX_CLIP_DEPTH));
+        }
+        return false;
+    }
+
+    const UiClipRect& outer = UiInternal_CurrentClip();
+    int x0 = x;
+    int y0 = y;
+    int x1 = x + w;
+    int y1 = y + h;
+    if (x0 < outer.x)
+        x0 = outer.x;
+    if (y0 < outer.y)
+        y0 = outer.y;
+    if (x1 > outer.x + outer.w)
+        x1 = outer.x + outer.w;
+    if (y1 > outer.y + outer.h)
+        y1 = outer.y + outer.h;
+    if (x1 < x0)
+        x1 = x0;
+    if (y1 < y0)
+        y1 = y0;
+
+    UiClipRect& top = s_State.clipStack[s_State.clipDepth++];
+    top.x = static_cast<int16_t>(x0);
+    top.y = static_cast<int16_t>(y0);
+    top.w = static_cast<int16_t>(x1 - x0);
+    top.h = static_cast<int16_t>(y1 - y0);
+
+    if (s_State.clipDepth > s_State.clipHighWater)
+        s_State.clipHighWater = s_State.clipDepth;
+    return true;
+}
+
+void UiInternal_PopClip()
+{
+    if (s_State.clipDepth > 1)
+        --s_State.clipDepth;
+}
+
+const UiClipRect& UiInternal_CurrentClip() { return s_State.clipStack[s_State.clipDepth ? s_State.clipDepth - 1 : 0]; }
+
+bool UiInternal_ClipVisible(int x, int y, int w, int h)
+{
+    const UiClipRect& clip = UiInternal_CurrentClip();
+    return (x < clip.x + clip.w) && (x + w > clip.x) && (y < clip.y + clip.h) && (y + h > clip.y);
+}
+
+void UiInternal_PushTexturedQuad(int x, int y, int w, int h, uint32_t texture, uint16_t u0, uint16_t v0, uint16_t u1, uint16_t v1, UiRgba color)
 {
     if (!UiInternal_CanDraw() || w <= 0 || h <= 0)
         return;
 
+    const UiClipRect& clip = UiInternal_CurrentClip();
+    const int cx0 = clip.x;
+    const int cy0 = clip.y;
+    const int cx1 = clip.x + clip.w;
+    const int cy1 = clip.y + clip.h;
+    if (x >= cx1 || x + w <= cx0 || y >= cy1 || y + h <= cy0)
+        return;
+
+    int x0 = x;
+    int y0 = y;
+    int x1 = x + w;
+    int y1 = y + h;
+    uint16_t su0 = u0;
+    uint16_t sv0 = v0;
+    uint16_t su1 = u1;
+    uint16_t sv1 = v1;
+
+    if (x0 < cx0)
+    {
+        if (texture)
+            su0 = Interpolate(u0, u1, cx0 - x, w);
+        x0 = cx0;
+    }
+    if (x1 > cx1)
+    {
+        if (texture)
+            su1 = Interpolate(u0, u1, cx1 - x, w);
+        x1 = cx1;
+    }
+    if (y0 < cy0)
+    {
+        if (texture)
+            sv0 = Interpolate(v0, v1, cy0 - y, h);
+        y0 = cy0;
+    }
+    if (y1 > cy1)
+    {
+        if (texture)
+            sv1 = Interpolate(v0, v1, cy1 - y, h);
+        y1 = cy1;
+    }
+
     UiQuad quad;
-    quad.x = static_cast<int16_t>(x);
-    quad.y = static_cast<int16_t>(y);
-    quad.w = static_cast<int16_t>(w);
-    quad.h = static_cast<int16_t>(h);
-    quad.u0 = 0;
-    quad.v0 = 0;
-    quad.u1 = 0;
-    quad.v1 = 0;
-    quad.texture = 0;
+    quad.texture = texture;
+    quad.x = static_cast<int16_t>(x0);
+    quad.y = static_cast<int16_t>(y0);
+    quad.w = static_cast<int16_t>(x1 - x0);
+    quad.h = static_cast<int16_t>(y1 - y0);
+    quad.u0 = su0;
+    quad.v0 = sv0;
+    quad.u1 = su1;
+    quad.v1 = sv1;
     quad.r = color.r;
     quad.g = color.g;
     quad.b = color.b;
     quad.a = color.a;
-    s_Ui.Add(quad);
+
+    if (s_State.inOverlay)
+        UiInternal_PushOverlayQuad(quad);
+    else
+        s_Ui.Add(quad);
+}
+
+void UiInternal_PushOverlayQuad(const UiQuad& quad)
+{
+    if (s_OverlayCount >= UI_MAX_OVERLAY_QUADS)
+    {
+        ++s_OverlayDropped;
+        return;
+    }
+    s_Overlay[s_OverlayCount++] = quad;
+}
+
+bool UiInternal_InOverlay() { return s_State.inOverlay; }
+
+void UiInternal_PushRect(int x, int y, int w, int h, UiRgba color)
+{
+    const Font* font = UiInternal_CookedFont();
+    if (!font)
+    {
+        UiInternal_PushTexturedQuad(x, y, w, h, 0, 0, 0, 0, 0, color);
+        return;
+    }
+
+    // The centre of the atlas's opaque texel, as a zero-width span so clipping
+    // cannot walk it onto a neighbour.
+    const uint16_t u = static_cast<uint16_t>((static_cast<uint32_t>(font->whiteU) * 2u + 1u) * 65535u / (static_cast<uint32_t>(font->atlasWidth) * 2u));
+    const uint16_t v = static_cast<uint16_t>((static_cast<uint32_t>(font->whiteV) * 2u + 1u) * 65535u / (static_cast<uint32_t>(font->atlasHeight) * 2u));
+    UiInternal_PushTexturedQuad(x, y, w, h, UiInternal_AtlasTexture(), u, v, u, v, color);
 }
 
 void UiInternal_PushBorder(int x, int y, int w, int h, int thickness, UiRgba color)
@@ -186,13 +386,29 @@ void UiInternal_PushBorder(int x, int y, int w, int h, int thickness, UiRgba col
 
 uint32_t UiInternal_Id(const char* label)
 {
-    uint32_t hash = FNV_OFFSET_BASIS;
-    for (const char* p = label; p && *p; ++p)
-    {
-        hash ^= static_cast<uint32_t>(static_cast<unsigned char>(*p));
-        hash *= FNV_PRIME;
-    }
-    return hash ? hash : 1u;
+    const uint32_t seed = s_State.idDepth ? s_State.idStack[s_State.idDepth - 1] : FNV_OFFSET_BASIS;
+    return UiInternal_StateHash(seed, label);
+}
+
+void UiInternal_PushId(const char* text)
+{
+    if (s_State.idDepth >= UI_MAX_ID_DEPTH)
+        return;
+    s_State.idStack[s_State.idDepth] = UiInternal_Id(text);
+    ++s_State.idDepth;
+}
+
+void UiInternal_PushIdIndex(int index)
+{
+    char text[16];
+    snprintf(text, sizeof(text), "#%d", index);
+    UiInternal_PushId(text);
+}
+
+void UiInternal_PopId()
+{
+    if (s_State.idDepth > 0)
+        --s_State.idDepth;
 }
 
 bool UiInternal_RegisterFocusable(uint32_t id)
@@ -214,9 +430,23 @@ bool UiInternal_RegisterFocusable(uint32_t id)
         if (s_State.focusId == id)
             s_State.focusIndex = static_cast<int>(s_State.focusableCount);
         s_State.focusables[s_State.focusableCount++] = id;
+        if (s_State.groupCount > 0)
+            ++s_State.groups[s_State.groupCount - 1].count;
     }
     return s_State.focusId == id;
 }
+
+void UiInternal_BeginFocusGroup(uint32_t id)
+{
+    if (s_State.groupCount >= UI_MAX_FOCUS_GROUPS)
+        return;
+    UiFocusGroup& group = s_State.groups[s_State.groupCount++];
+    group.id = id;
+    group.first = s_State.focusableCount;
+    group.count = 0;
+}
+
+void UiInternal_EndFocusGroup() {}
 
 bool UiInternal_PointerOver(int x, int y, int w, int h)
 {
@@ -227,7 +457,7 @@ bool UiInternal_PointerOver(int x, int y, int w, int h)
     return px >= static_cast<float>(x) && px < static_cast<float>(x + w) && py >= static_cast<float>(y) && py < static_cast<float>(y + h);
 }
 
-bool UiInternal_TakeRow(int height, int* outX, int* outY, int* outW)
+bool UiInternal_TakeRow(int height, int* outX, int* outY, int* outW, bool* outVisible)
 {
     if (!s_State.inPanel)
         return false;
@@ -236,6 +466,8 @@ bool UiInternal_TakeRow(int height, int* outX, int* outY, int* outW)
     *outX = s_State.contentX;
     *outY = s_State.cursorY;
     *outW = s_State.contentW;
+    if (outVisible)
+        *outVisible = UiInternal_ClipVisible(s_State.contentX, s_State.cursorY, s_State.contentW, height);
     s_State.cursorY += height + style.itemSpacing;
     return true;
 }
@@ -250,6 +482,7 @@ bool Engine_Ui_Init()
 
     memset(&s_State, 0, sizeof(s_State));
     s_State.focusIndex = -1;
+    s_State.clipDepth = 1;
     s_Ui.Reset();
     s_StickHeld = 0.0f;
     s_Active = true;
@@ -257,12 +490,37 @@ bool Engine_Ui_Init()
     return true;
 }
 
+void Ui_ResetRuntimeState()
+{
+    if (!s_Active)
+        return;
+
+    UiInternal_FontForget();
+    UiInternal_StateReset();
+    s_OverlayCount = 0;
+    s_OverlayDropped = 0;
+    UiInternal_ToastsReset();
+
+    const int screenW = s_State.screenW;
+    const int screenH = s_State.screenH;
+    memset(&s_State, 0, sizeof(s_State));
+    s_State.screenW = screenW;
+    s_State.screenH = screenH;
+    s_State.focusIndex = -1;
+    s_State.clipDepth = 1;
+    s_Ui.Reset();
+    s_StickHeld = 0.0f;
+    UiInternal_ThemeReset();
+}
+
 void Engine_Ui_Shutdown()
 {
+    UiInternal_FontShutdown();
     s_Active = false;
     s_Ui.Reset();
     memset(&s_State, 0, sizeof(s_State));
     s_State.focusIndex = -1;
+    s_State.clipDepth = 1;
 }
 
 bool Engine_Ui_IsActive() { return s_Active; }
@@ -277,6 +535,8 @@ void Ui_BeginFrame()
         return;
     }
 
+    UiInternal_UpdateFont();
+
     s_State.inFrame = true;
     s_State.inPanel = false;
     s_State.inBox = false;
@@ -286,17 +546,38 @@ void Ui_BeginFrame()
     s_State.hotId = 0;
     s_State.navDelta = 0;
     s_State.pointerMoved = false;
+    s_State.clipOverflowReported = false;
+    s_State.idDepth = 0;
+    s_State.groupCount = 0;
+    s_State.groupDelta = 0;
+    s_State.consumedHorizontal = false;
+    s_State.inScroll = false;
+    s_State.inColumns = false;
+    s_State.inOverlay = false;
+    s_State.modalOpen = false;
+    s_State.focusRowValid = false;
+    s_OverlayCount = 0;
     s_Ui.Reset();
+    UiInternal_StateBeginFrame();
 
     ReadScreenSize();
 
-    const bool navUp = WasGamePadButtonPressed(0, GamepadButton::DPadUp);
-    const bool navDown = WasGamePadButtonPressed(0, GamepadButton::DPadDown);
-    if (navUp != navDown)
+    s_State.clipDepth = 1;
+    s_State.clipHighWater = 1;
+    s_State.clipStack[0].x = 0;
+    s_State.clipStack[0].y = 0;
+    s_State.clipStack[0].w = static_cast<int16_t>(s_State.screenW);
+    s_State.clipStack[0].h = static_cast<int16_t>(s_State.screenH);
+
+    const float dt = Engine_GetDeltaTime();
+    const int vertical = Repeat(GamepadButton::DPadDown, GamepadButton::DPadUp, s_VerticalHeld, s_VerticalFired, dt);
+    if (vertical != 0)
     {
-        s_State.navDelta = navDown ? 1 : -1;
+        s_State.navDelta = vertical;
         s_State.pointer.visible = false;
     }
+    s_State.horizontalRepeat = Repeat(GamepadButton::DPadRight, GamepadButton::DPadLeft, s_HorizontalHeld, s_HorizontalFired, dt);
+    s_State.groupDelta = s_State.horizontalRepeat;
 
     s_State.accept = WasGamePadButtonPressed(0, GamepadButton::Cross);
     s_State.back = WasGamePadButtonPressed(0, GamepadButton::Circle);
@@ -320,11 +601,12 @@ void Ui_EndFrame()
         Engine_LogError("Ui: EndFrame called with no frame open");
         return;
     }
-    if (s_State.inPanel)
+    if (s_State.inPanel || s_State.clipDepth != 1)
     {
-        Engine_LogError("Ui: a panel was left open at end of frame; nothing submitted");
+        Engine_LogError("Ui: a container was left open at end of frame; nothing submitted");
         s_State.inFrame = false;
         s_State.inPanel = false;
+        s_State.clipDepth = 1;
         s_Ui.Reset();
         return;
     }
@@ -332,7 +614,63 @@ void Ui_EndFrame()
     if (s_State.focusableCount > 0)
     {
         const int count = static_cast<int>(s_State.focusableCount);
-        int index = (s_State.focusIndex < 0) ? 0 : s_State.focusIndex + s_State.navDelta;
+        int index = (s_State.focusIndex < 0) ? 0 : s_State.focusIndex;
+
+        // Left and right belong to the focused widget when it edits with them;
+        // only when it does not do they move between groups. Without this rule,
+        // grouping silently steals a slider's own gesture.
+        if (s_State.groupDelta != 0 && !s_State.consumedHorizontal && s_State.groupCount > 1)
+        {
+            int current = 0;
+            for (uint8_t g = 0; g < s_State.groupCount; ++g)
+            {
+                if (index >= s_State.groups[g].first && index < s_State.groups[g].first + s_State.groups[g].count)
+                {
+                    current = g;
+                    break;
+                }
+            }
+            for (uint8_t step = 0; step < s_State.groupCount; ++step)
+            {
+                current += s_State.groupDelta;
+                while (current < 0)
+                    current += s_State.groupCount;
+                while (current >= s_State.groupCount)
+                    current -= s_State.groupCount;
+                if (s_State.groups[current].count > 0)
+                    break;
+            }
+            index = s_State.groups[current].first;
+            s_State.pointer.visible = false;
+        }
+        else if (s_State.navDelta != 0 && s_State.groupCount > 0)
+        {
+            // Cycling stays inside the active group; crossing between them is
+            // the other axis. Without this, moving down the last row of one
+            // panel walks into whichever panel happened to be built next.
+            int first = 0;
+            int span = count;
+            for (uint8_t g = 0; g < s_State.groupCount; ++g)
+            {
+                if (s_State.groups[g].count > 0 && index >= s_State.groups[g].first && index < s_State.groups[g].first + s_State.groups[g].count)
+                {
+                    first = s_State.groups[g].first;
+                    span = s_State.groups[g].count;
+                    break;
+                }
+            }
+            int offset = index - first + s_State.navDelta;
+            while (offset < 0)
+                offset += span;
+            while (offset >= span)
+                offset -= span;
+            index = first + offset;
+        }
+        else
+        {
+            index += s_State.navDelta;
+        }
+
         while (index < 0)
             index += count;
         while (index >= count)
@@ -345,12 +683,28 @@ void Ui_EndFrame()
         s_State.focusId = 0;
     }
 
+    s_State.clipDepth = 1;
+    UiInternal_DrawToasts(Engine_GetDeltaTime());
+
+    // The cursor is drawn last within the overlay, so nothing can cover it.
+    s_State.inOverlay = true;
     DrawCursor();
+    s_State.inOverlay = false;
 
     if (s_Ui.Dropped() > 0)
     {
-        Engine_LogError("Ui: dropped %u quad(s) this frame (budget %u); the screen needs paging.", static_cast<unsigned>(s_Ui.Dropped()),
-                        static_cast<unsigned>(UI::Capacity()));
+        Engine_LogError("Ui: dropped %u quad(s) this frame (budget %u); the screen needs paging.", static_cast<unsigned>(s_Ui.Dropped()), static_cast<unsigned>(UI::Capacity()));
+    }
+
+    // The overlay is concatenated rather than sorted: one hand-off, order
+    // preserved, and bounded work whatever is on screen.
+    for (uint32_t i = 0; i < s_OverlayCount; ++i)
+        s_Ui.Add(s_Overlay[i]);
+
+    if (s_OverlayDropped > 0)
+    {
+        Engine_LogError("Ui: dropped %u overlay quad(s) this frame (budget %u).", static_cast<unsigned>(s_OverlayDropped), static_cast<unsigned>(UI_MAX_OVERLAY_QUADS));
+        s_OverlayDropped = 0;
     }
 
     Renderer* renderer = Engine_GetRenderer();
@@ -367,6 +721,18 @@ void Ui_EndFrame()
 bool Ui_WasBackPressed() { return s_Active && s_State.back; }
 
 const UiPointer& Ui_GetPointer() { return s_State.pointer; }
+
+uint32_t Ui_FocusablesUsed() { return s_State.focusableCount; }
+
+uint32_t Ui_FocusableBudget() { return UI_MAX_FOCUSABLES; }
+
+uint32_t Ui_OverlayQuadsUsed() { return s_OverlayCount; }
+
+uint32_t Ui_OverlayQuadBudget() { return UI_MAX_OVERLAY_QUADS; }
+
+uint32_t Ui_ClipDepthUsed() { return s_State.clipHighWater; }
+
+uint32_t Ui_ClipDepthBudget() { return UI_MAX_CLIP_DEPTH; }
 
 uint32_t Ui_QuadsUsed() { return s_Ui.Count(); }
 

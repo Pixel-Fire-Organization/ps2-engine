@@ -30,6 +30,8 @@ namespace
             return "SND";
         case RES_FONT:
             return "FNT";
+        case RES_THEME:
+            return "THM";
         }
         return "?";
     }

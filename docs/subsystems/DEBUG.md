@@ -39,7 +39,7 @@ Three intents exist:
 | Intent | Meaning |
 | :--- | :--- |
 | Performance snapshot | Take the on-demand snapshot described below. |
-| Overlay toggle | Show or hide the on-screen debug overlay. |
+| Overlay toggle | Show or hide the on-screen debug overlay, which is drawn as interface. |
 | Debug menu | Open or close the debug testbed. |
 
 **A chord is not the performance logger's private property.** The intents are

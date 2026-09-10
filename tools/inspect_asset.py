@@ -15,16 +15,21 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ps2lib import ps2a, tim2
+from ps2lib import font, ps2a, theme as themelib, tim2
 
 
 def describe_payload(info):
     """Decode just enough of the payload to be useful. Never fatal: a payload we
-    cannot read is still worth reporting alongside its header."""
-    if info["type"] != "TEXTURE":
+    cannot read is still worth reporting alongside its header.
+
+    Returns (label, text) so the caller need not know which kinds decode."""
+    decoders = {"TEXTURE": ("texture", tim2.describe_text), "FONT": ("font", font.describe_text), "THEME": ("theme", themelib.describe_text)}
+    entry = decoders.get(info["type"])
+    if not entry:
         return None
+    label, decode = entry
     try:
-        return tim2.describe_text(info["payload"])
+        return label, decode(info["payload"])
     except Exception:  # noqa: BLE001 - diagnostics must survive a bad payload
         return None
 
@@ -43,7 +48,7 @@ def dump(path):
 
     detail = describe_payload(info)
     if detail:
-        print(f"  texture    {detail}")
+        print(f"  {detail[0]:<10} {detail[1]}")
 
     if info["deps"]:
         print(f"  deps       {len(info['deps'])}")

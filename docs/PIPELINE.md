@@ -51,6 +51,13 @@ it cannot be installed against another platform content.
 
 ## Cooking is per platform
 
+**The cook has two source trees.** Game-owned content and engine-owned content
+are cooked together into one tree, because a resource key is a resource key and
+the runtime cannot tell which side authored an asset. The engine owns very
+little — its default interface font is the whole of it today — but it owns that
+much because the interface has to be able to draw before a game supplies
+anything. Engine-owned keys carry a prefix so the two cannot collide.
+
 The right encoding for an asset is a hardware question. A platform with a small
 dedicated video memory region wants a palettised texture that fits its budget; a
 platform with an ordinary graphics processor wants something it can upload

@@ -98,8 +98,10 @@ function(game_add_cook_target PLATFORM)
         COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/cook_assets.py"
             --platform "${_lower}"
             --src "${GAME_ASSETS_SRC_DIR}"
+            --src "${ENGINE_ASSETS_SRC_DIR}"
+            --themes "${CMAKE_SOURCE_DIR}/game/theme.json"
             --dst "${_cooked}/rassets"
-        COMMENT "Cook: source assets -> dist/cooked/${_lower}/rassets"
+        COMMENT "Cook: engine + game source assets -> dist/cooked/${_lower}/rassets"
         VERBATIM
     )
 

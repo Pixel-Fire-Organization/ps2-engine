@@ -26,25 +26,33 @@ public:
     /// Translate one frame of interface into this backend's screen-space path.
     ///
     /// Shared rather than per-backend so every renderer draws an identical
-    /// interface; a backend gaining a textured screen-space path overrides it.
+    /// interface, which is what makes comparing two backends on the same frame
+    /// a usable way to locate a rendering bug.
     /// @param ui The quads built this frame, in draw order.
     /// @param offset Screen-space translation applied to every quad.
     /// @param scale Screen-space scale applied to every quad.
-    virtual void AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
+    void AddUIToDrawList(const UI& ui, const Vector2& offset, const Vector2& scale)
     {
         const UiQuad* quads = ui.Quads();
         const uint32_t count = ui.Count();
         for (uint32_t i = 0; i < count; ++i)
         {
-            const UiQuad& quad = quads[i];
-            Color3 color;
-            color.r = static_cast<float>(quad.r) / 255.0f;
-            color.g = static_cast<float>(quad.g) / 255.0f;
-            color.b = static_cast<float>(quad.b) / 255.0f;
-            DrawRect2D(static_cast<int32_t>(offset.x + static_cast<float>(quad.x) * scale.x),
-                       static_cast<int32_t>(offset.y + static_cast<float>(quad.y) * scale.y),
-                       static_cast<int32_t>(static_cast<float>(quad.w) * scale.x),
-                       static_cast<int32_t>(static_cast<float>(quad.h) * scale.y), color);
+            const UiQuad& src = quads[i];
+            Quad2D quad;
+            quad.x = static_cast<int32_t>(offset.x + static_cast<float>(src.x) * scale.x);
+            quad.y = static_cast<int32_t>(offset.y + static_cast<float>(src.y) * scale.y);
+            quad.w = static_cast<int32_t>(static_cast<float>(src.w) * scale.x);
+            quad.h = static_cast<int32_t>(static_cast<float>(src.h) * scale.y);
+            quad.texture = src.texture;
+            quad.u0 = src.u0;
+            quad.v0 = src.v0;
+            quad.u1 = src.u1;
+            quad.v1 = src.v1;
+            quad.r = src.r;
+            quad.g = src.g;
+            quad.b = src.b;
+            quad.a = src.a;
+            DrawQuad2D(quad);
         }
     }
     virtual void AddLevelToDrawList(const Level& level) = 0;
@@ -55,9 +63,43 @@ public:
     virtual void Render() = 0;
     virtual void BeginFrame() = 0;
     virtual void EndFrame() = 0;
-    virtual void DrawDebugOverlay() = 0;
     virtual void ClearFrame(const Color3& color) = 0;
-    virtual void DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) = 0;
+
+    /// Draw one screen-space quad.
+    ///
+    /// The single screen-space primitive: everything two-dimensional reaches a
+    /// backend through it, so a backend implements screen space exactly once.
+    /// @param quad The quad to draw, in framebuffer pixels.
+    virtual void DrawQuad2D(const Quad2D& quad) = 0;
+
+    /// An opaque, untextured rectangle.
+    ///
+    /// Convenience over DrawQuad2D for callers that have no interface to build,
+    /// such as the panic display and the game's own screen-space primitive.
+    /// @param x Left edge in framebuffer pixels.
+    /// @param y Top edge in framebuffer pixels.
+    /// @param width Width in pixels.
+    /// @param height Height in pixels.
+    /// @param color The colour to fill with.
+    void DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color)
+    {
+        Quad2D quad;
+        quad.x = x;
+        quad.y = y;
+        quad.w = width;
+        quad.h = height;
+        quad.texture = 0;
+        quad.u0 = 0;
+        quad.v0 = 0;
+        quad.u1 = 0;
+        quad.v1 = 0;
+        quad.r = ToByte(color.r);
+        quad.g = ToByte(color.g);
+        quad.b = ToByte(color.b);
+        quad.a = 255;
+        DrawQuad2D(quad);
+    }
+
     virtual void DrawGrid(int32_t slices, float spacing) = 0;
 
     // --- Camera (fixed-slot model) ---
@@ -81,6 +123,18 @@ public:
     virtual Camera3D GetActiveCamera3D() const = 0;
 
 protected:
+    /// @param value A colour channel in [0,1].
+    /// @return The channel as an 8-bit value, clamped.
+    static uint8_t ToByte(float value)
+    {
+        const float scaled = value * 255.0f;
+        if (scaled <= 0.0f)
+            return 0;
+        if (scaled >= 255.0f)
+            return 255;
+        return static_cast<uint8_t>(scaled);
+    }
+
     DrawLists m_drawLists;
 
     virtual void RenderSkybox(const DrawLists& lists) = 0;

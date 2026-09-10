@@ -4,6 +4,7 @@
 #include "EngineDebug.h"
 #include "EngineIO.h" // IO_FILE_MAX_PATH
 #include "Platform.h"
+#include "Ps2SaveIcon.h"
 #include "TitleInfo.h"
 
 #include <libmc.h>
@@ -170,6 +171,69 @@ bool Ps2Platform::BuildPath(const char* relativePath, char* outBuf, size_t bufSi
     return true;
 }
 
+namespace
+{
+    /// Write the descriptor and icon a memory card browser needs, once.
+    ///
+    /// A save directory without them is reported as corrupted by the console's
+    /// browser even when its data is perfectly readable, so the player cannot
+    /// see or delete it. Written only when absent, so this costs one failed
+    /// open per boot rather than a rewrite.
+    /// @param port Memory card port the save lives on.
+    /// @param directory The save directory, already created.
+    void EnsureSaveIcon(int port, const char* directory)
+    {
+        // The directory is the title id, so it is short; bound it anyway rather
+        // than let a longer one silently truncate into a different path.
+        char safeDir[64];
+        std::strncpy(safeDir, directory, sizeof(safeDir) - 1);
+        safeDir[sizeof(safeDir) - 1] = '\0';
+
+        char path[IO_FILE_MAX_PATH];
+
+        snprintf(path, sizeof(path), "mc%d:%s/icon.sys", port, safeDir);
+        if (FILE* existing = fopen(path, "rb"))
+        {
+            fclose(existing);
+            return;
+        }
+
+        if (FILE* sys = fopen(path, "wb"))
+        {
+            fwrite(PS2_SAVE_ICON_SYS, 1, sizeof(PS2_SAVE_ICON_SYS), sys);
+            fclose(sys);
+        }
+        else
+        {
+            Engine_LogError("PS2 storage: could not write '%s'; the browser will report this save corrupted.", path);
+            return;
+        }
+
+        snprintf(path, sizeof(path), "mc%d:%s/%s", port, safeDir, PS2_SAVE_ICON_NAME);
+        FILE* icon = fopen(path, "wb");
+        if (!icon)
+        {
+            Engine_LogError("PS2 storage: could not write '%s'; the browser will report this save corrupted.", path);
+            return;
+        }
+
+        fwrite(PS2_SAVE_ICON_MODEL, 1, sizeof(PS2_SAVE_ICON_MODEL), icon);
+
+        // The model declares an uncompressed texture; a single colour repeated
+        // is written here rather than stored, which keeps 32 KB of identical
+        // bytes out of the binary.
+        const uint16_t texel = PS2_SAVE_ICON_TEXEL;
+        uint16_t row[PS2_SAVE_ICON_TEX_DIM];
+        for (int i = 0; i < PS2_SAVE_ICON_TEX_DIM; ++i)
+            row[i] = texel;
+        for (int y = 0; y < PS2_SAVE_ICON_TEX_DIM; ++y)
+            fwrite(row, sizeof(uint16_t), PS2_SAVE_ICON_TEX_DIM, icon);
+
+        fclose(icon);
+        Engine_LogInfo("PS2 storage: wrote the save icon for '%s'.", safeDir);
+    }
+} // namespace
+
 bool Ps2Platform::BuildWritablePath(const char* relativePath, char* outBuf, size_t bufSize) const
 {
     if (!relativePath || !outBuf || bufSize == 0)
@@ -189,6 +253,8 @@ bool Ps2Platform::BuildWritablePath(const char* relativePath, char* outBuf, size
     mcMkDir(port, MC_SLOT, directory);
     int result = 0;
     mcSync(0, nullptr, &result);
+
+    EnsureSaveIcon(port, directory);
 
     const int written = snprintf(outBuf, bufSize, "mc%d:%s/%s", port, directory, relativePath);
     return written >= 0 && static_cast<size_t>(written) < bufSize;

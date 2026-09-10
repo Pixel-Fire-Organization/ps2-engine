@@ -39,6 +39,18 @@ split back apart.
 
 ## Quirks and limits
 
+- **The screen-space pass blends; the world pass does not.** Blending is enabled
+  only for screen space, so world rendering is unaffected by the interface
+  gaining transparency. Depth testing is off for the same pass, so quads draw in
+  submission order.
+- **Screen-space work is drawn as one call per texture run.** Consecutive quads
+  sharing a texture coalesce, so a solid interface is a single call and a
+  glyph-atlas interface is a small number. A run count ceiling exists; exceeding
+  it drops the excess and reports once per frame.
+- **A texture chooses its filter at upload and cannot change it afterwards.**
+  The filter is fixed in the sampler or texture object at creation. Nearest
+  exists for content that is magnified to whole-pixel scales — a pixel font
+  atlas is the case that needs it, and linear filtering visibly blurs it.
 **It tells the library when a system dialog is open.** The library composites the
 dialog itself, but only when the frame is presented with that fact declared;
 presenting without it draws the title correctly and leaves the dialog invisible

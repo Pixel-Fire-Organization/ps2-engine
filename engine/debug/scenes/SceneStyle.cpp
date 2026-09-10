@@ -8,16 +8,9 @@ namespace
 {
     const int PANEL_MARGIN = 16;
     const int COLUMN_GAP = 8;
-    const int ROLES_PER_PAGE = 6;
     const int SWATCH_HEIGHT = 18;
 
     int s_Role = 0;
-
-    int PageCount()
-    {
-        const int roles = static_cast<int>(UiColor::Count);
-        return (roles + ROLES_PER_PAGE - 1) / ROLES_PER_PAGE;
-    }
 
     void ChannelSlider(const char* label, uint8_t* channel)
     {
@@ -37,7 +30,6 @@ void Scene_Style_Update(float dt)
     if (!platform)
         return;
 
-    const int page = Testbed_Page(PageCount());
     const int screenW = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenWidth));
     const int screenH = static_cast<int>(platform->GetConstant(PlatformConstant::ScreenHeight));
 
@@ -46,17 +38,18 @@ void Scene_Style_Update(float dt)
     const int width = (screenW - PANEL_MARGIN * 2 - COLUMN_GAP) / 2;
     const int height = screenH - PANEL_MARGIN * 2;
 
-    char title[64];
-    snprintf(title, sizeof(title), "ROLES   L1 R1 PAGE %d OF %d", page + 1, PageCount());
-    Ui_BeginPanel(title, PANEL_MARGIN, PANEL_MARGIN, width, height);
+    Ui_BeginPanel("ROLES", PANEL_MARGIN, PANEL_MARGIN, width, height);
 
-    const int first = page * ROLES_PER_PAGE;
     const int roles = static_cast<int>(UiColor::Count);
-    for (int i = first; i < first + ROLES_PER_PAGE && i < roles; ++i)
+    if (Ui_BeginScroll("roles", Ui_ContentHeight()))
     {
-        const UiColor role = static_cast<UiColor>(i);
-        if (Ui_Selectable(Ui_ColorName(role), i == s_Role))
-            s_Role = i;
+        for (int i = 0; i < roles; ++i)
+        {
+            const UiColor role = static_cast<UiColor>(i);
+            if (Ui_Selectable(Ui_ColorName(role), i == s_Role))
+                s_Role = i;
+        }
+        Ui_EndScroll();
     }
     Ui_EndPanel();
 

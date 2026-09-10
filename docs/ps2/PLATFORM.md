@@ -94,6 +94,19 @@ would make one a requirement for playing rather than for saving.
 An unformatted card counts as no card. The engine does not offer to format one:
 that is a decision about the player's other saves, not ours to take.
 
+**A save the console cannot browse looks broken to the player.** The card browser
+does not read a save's data; it reads a descriptor naming an icon model, and
+draws that. A directory carrying neither is reported as *corrupted data* even
+when every byte the engine wrote is intact and reads back perfectly — the player
+cannot see what it is, and cannot delete it to reclaim the space. The engine
+therefore writes both the first time it creates the directory, and only then, so
+the cost is one failed open per boot rather than a rewrite.
+
+Both are generated from the title declaration and compiled in, for two reasons:
+the name shown on the card is then the name the title declares and cannot drift
+from it, and writing them needs nothing from the disc, so it works whichever
+device the title was launched from.
+
 ## Input
 
 Two pad ports. Analog sticks report a raw byte centred at 128; magnitudes below a

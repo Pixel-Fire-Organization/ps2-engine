@@ -59,6 +59,26 @@ endfunction()
 function(platform_configure PLATFORM)
     engine_platform_dirs(${PLATFORM} _variantDir _baseDir)
 
+    # A save directory the console can browse needs a descriptor and an icon
+    # model. They carry the declared title, so they are generated from it rather
+    # than committed, and compiled in so the engine can write them whatever
+    # device it was launched from.
+    set(PS2_ICON_GEN_DIR "${CMAKE_BINARY_DIR}/generated/ps2icon" CACHE INTERNAL "")
+    set(_iconHeader "${PS2_ICON_GEN_DIR}/Ps2SaveIcon.h")
+    if(NOT TARGET ps2-save-icon)
+        add_custom_command(
+            OUTPUT  "${_iconHeader}"
+            COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/ps2/save_icon.py"
+                    --declaration "${CMAKE_SOURCE_DIR}/game/title.json"
+                    --emit-header "${_iconHeader}"
+            DEPENDS "${CMAKE_SOURCE_DIR}/game/title.json" "${CMAKE_SOURCE_DIR}/tools/ps2/save_icon.py"
+            COMMENT "Generating the PS2 save icon from title.json"
+            VERBATIM
+        )
+        set_source_files_properties("${_iconHeader}" PROPERTIES GENERATED TRUE)
+        add_custom_target(ps2-save-icon DEPENDS "${_iconHeader}")
+    endif()
+
     set(ENGINE_PLATFORM_${PLATFORM}_SOURCES
         "${_baseDir}/Platform.cpp"
         "${_baseDir}/Entry.cpp"
@@ -82,6 +102,7 @@ function(platform_configure PLATFORM)
 
     set(ENGINE_PLATFORM_${PLATFORM}_INCLUDES
         "${CMAKE_SOURCE_DIR}/external/ps2gl/include"
+        "${PS2_ICON_GEN_DIR}"
         PARENT_SCOPE)
 
     # Link order matters: ps2stuff must follow ps2gl.
@@ -114,7 +135,7 @@ function(platform_package PLATFORM EXE_TARGET DIST_DIR)
     set(_stage "${CMAKE_BINARY_DIR}/iso_root_${PLATFORM_${PLATFORM}_DIST}")
     set(_cnf "${CMAKE_BINARY_DIR}/SYSTEM.CNF.${PLATFORM_${PLATFORM}_DIST}")
 
-    file(WRITE "${_cnf}" "BOOT2 = cdrom0:${_serial};1
+    file(WRITE "${_cnf}" "BOOT2 = cdrom0:\\${_serial};1
 VER = 1.00
 VMODE = ${_vmode}
 ")

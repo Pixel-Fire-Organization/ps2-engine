@@ -32,6 +32,7 @@ namespace
     // GS register indices (for GIF REGLIST descriptors).
     constexpr uint64_t GSREG_RGBAQ = 0x01;
     constexpr uint64_t GSREG_ST = 0x02;
+    constexpr uint64_t GSREG_UV = 0x03;
     constexpr uint64_t GSREG_XYZ2 = 0x05;
 
     // Build a GIFtag low word (see tGifTag in ps2s/gs.h for the field layout).
@@ -308,6 +309,14 @@ void GifTagRenderer::BeginFrame()
     packet2_update(m_geom, draw_setup_environment(m_geom->next, 0, &m_frame[m_drawBuffer], &m_z));
     packet2_update(m_geom, draw_primitive_xyoffset(m_geom->next, 0, 2048 - (GFX_SCREEN_WIDTH / 2), 2048 - (GFX_SCREEN_HEIGHT / 2)));
 
+    blend_t blend;
+    blend.color1 = BLEND_COLOR_SOURCE;
+    blend.color2 = BLEND_COLOR_DEST;
+    blend.alpha = BLEND_ALPHA_SOURCE;
+    blend.color3 = BLEND_COLOR_DEST;
+    blend.fixed_alpha = 0x80;
+    packet2_update(m_geom, draw_alpha_blending(m_geom->next, 0, &blend));
+
     const int cr = static_cast<int>(m_clearColor.r * 255.0f);
     const int cg = static_cast<int>(m_clearColor.g * 255.0f);
     const int cb = static_cast<int>(m_clearColor.b * 255.0f);
@@ -316,7 +325,7 @@ void GifTagRenderer::BeginFrame()
 
 void GifTagRenderer::EndFrame()
 {
-    FlushRects2D();
+    FlushQuads2D();
 
     if (m_frameDroppedObjects > 0)
         Engine_LogError("GifTagRenderer: dropped %u object(s) this frame (geometry budget exceeded).", m_frameDroppedObjects);
@@ -353,7 +362,6 @@ void GifTagRenderer::EndFrame()
     m_inFrame = false;
 }
 
-void GifTagRenderer::DrawDebugOverlay() {}
 
 void GifTagRenderer::ClearFrame(const Color3& color)
 {
@@ -363,53 +371,96 @@ void GifTagRenderer::ClearFrame(const Color3& color)
     m_clearColor = color;
 }
 
-void GifTagRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color)
+void GifTagRenderer::DrawQuad2D(const Quad2D& quad)
 {
-    if (m_rect2DCount >= TAG_MAX_2D_RECTS)
+    if (m_quad2DCount >= TAG_MAX_2D_QUADS)
     {
-        ++m_droppedRects2D;
+        ++m_droppedQuads2D;
         return;
     }
-    m_rects2D[m_rect2DCount++] = Rect2D{x, y, width, height, color};
+    m_quads2D[m_quad2DCount++] = quad;
 }
 
-void GifTagRenderer::FlushRects2D()
+void GifTagRenderer::FlushQuads2D()
 {
-    if (m_droppedRects2D > 0)
+    if (m_droppedQuads2D > 0)
     {
-        Engine_LogError("GifTagRenderer: dropped %u 2D rect(s) this frame (queue capacity %u).", m_droppedRects2D, TAG_MAX_2D_RECTS);
-        m_droppedRects2D = 0;
+        Engine_LogError("GifTagRenderer: dropped %u 2D quad(s) this frame (queue capacity %u).", m_droppedQuads2D, TAG_MAX_2D_QUADS);
+        m_droppedQuads2D = 0;
     }
 
-    if (m_rect2DCount == 0)
+    if (m_quad2DCount == 0)
         return;
 
-    // Sprite (untextured) primitives in screen space. XYOFFSET is already set to
+    packet2_update(m_geom, draw_disable_tests(m_geom->next, 0, &m_z));
+
+    // Sprite primitives in screen space. XYOFFSET is already set to
     // (2048 - W/2, 2048 - H/2), so screen pixels map through 12.4 window coords.
-    for (uint16_t i = 0; i < m_rect2DCount; ++i)
+    uint16_t dropped = 0;
+    for (uint16_t i = 0; i < m_quad2DCount; ++i)
     {
-        const Rect2D& r = m_rects2D[i];
-        const uint16_t x0 = static_cast<uint16_t>(r.x * 16);
-        const uint16_t y0 = static_cast<uint16_t>(r.y * 16);
-        const uint16_t x1 = static_cast<uint16_t>((r.x + r.w) * 16);
-        const uint16_t y1 = static_cast<uint16_t>((r.y + r.h) * 16);
+        const Quad2D& q = m_quads2D[i];
+        const bool textured = (q.texture != 0) && (q.texture <= TAG_MAX_TEXTURES) && m_textures[q.texture - 1].inUse;
 
-        const uint8_t cr = static_cast<uint8_t>(r.color.r * 255.0f);
-        const uint8_t cg = static_cast<uint8_t>(r.color.g * 255.0f);
-        const uint8_t cb = static_cast<uint8_t>(r.color.b * 255.0f);
-        const uint64_t rgbaq = static_cast<uint64_t>(cr) | (static_cast<uint64_t>(cg) << 8) | (static_cast<uint64_t>(cb) << 16) | (static_cast<uint64_t>(0x80) << 24) | (FloatBits(1.0f) << 32);
+        if (!PacketHasSpace(textured ? 4u : 3u))
+        {
+            dropped = static_cast<uint16_t>(m_quad2DCount - i);
+            break;
+        }
 
-        // PRIM = sprite (6), gouraud off, no texture. NLOOP=2 (two vertices).
-        const uint32_t prim = 6u;
-        packet2_add_u64(m_geom, GifTagLo(2, prim, 2, true));
-        packet2_add_u64(m_geom, GSREG_RGBAQ | (GSREG_XYZ2 << 4));
-        packet2_add_u64(m_geom, rgbaq);
-        packet2_add_u64(m_geom, static_cast<uint64_t>(x0) | (static_cast<uint64_t>(y0) << 16));
-        packet2_add_u64(m_geom, rgbaq);
-        packet2_add_u64(m_geom, static_cast<uint64_t>(x1) | (static_cast<uint64_t>(y1) << 16));
+        if (textured)
+            BindTexture(q.texture);
+
+        const uint16_t x0 = static_cast<uint16_t>(q.x * 16);
+        const uint16_t y0 = static_cast<uint16_t>(q.y * 16);
+        const uint16_t x1 = static_cast<uint16_t>((q.x + q.w) * 16);
+        const uint16_t y1 = static_cast<uint16_t>((q.y + q.h) * 16);
+
+        const uint64_t alpha = (static_cast<uint64_t>(q.a) * 0x80u) / 255u;
+        const uint64_t rgbaq = static_cast<uint64_t>(q.r) | (static_cast<uint64_t>(q.g) << 8) | (static_cast<uint64_t>(q.b) << 16) | (alpha << 24) | (FloatBits(1.0f) << 32);
+
+        // PRIM: sprite(6), TME bit4 and FST bit8 when textured, ABE bit6 when
+        // the quad is not fully opaque.
+        uint32_t prim = 6u;
+        if (textured)
+            prim |= (1u << 4) | (1u << 8);
+        if (q.a < 255)
+            prim |= (1u << 6);
+
+        if (textured)
+        {
+            const TexEntry& t = m_textures[q.texture - 1];
+            const uint32_t tu0 = (static_cast<uint32_t>(q.u0) * static_cast<uint32_t>(t.width) * 16u) / 65535u;
+            const uint32_t tv0 = (static_cast<uint32_t>(q.v0) * static_cast<uint32_t>(t.height) * 16u) / 65535u;
+            const uint32_t tu1 = (static_cast<uint32_t>(q.u1) * static_cast<uint32_t>(t.width) * 16u) / 65535u;
+            const uint32_t tv1 = (static_cast<uint32_t>(q.v1) * static_cast<uint32_t>(t.height) * 16u) / 65535u;
+
+            packet2_add_u64(m_geom, GifTagLo(2, prim, 3, true));
+            packet2_add_u64(m_geom, GSREG_RGBAQ | (GSREG_UV << 4) | (GSREG_XYZ2 << 8));
+            packet2_add_u64(m_geom, rgbaq);
+            packet2_add_u64(m_geom, static_cast<uint64_t>(tu0) | (static_cast<uint64_t>(tv0) << 16));
+            packet2_add_u64(m_geom, static_cast<uint64_t>(x0) | (static_cast<uint64_t>(y0) << 16));
+            packet2_add_u64(m_geom, rgbaq);
+            packet2_add_u64(m_geom, static_cast<uint64_t>(tu1) | (static_cast<uint64_t>(tv1) << 16));
+            packet2_add_u64(m_geom, static_cast<uint64_t>(x1) | (static_cast<uint64_t>(y1) << 16));
+        }
+        else
+        {
+            packet2_add_u64(m_geom, GifTagLo(2, prim, 2, true));
+            packet2_add_u64(m_geom, GSREG_RGBAQ | (GSREG_XYZ2 << 4));
+            packet2_add_u64(m_geom, rgbaq);
+            packet2_add_u64(m_geom, static_cast<uint64_t>(x0) | (static_cast<uint64_t>(y0) << 16));
+            packet2_add_u64(m_geom, rgbaq);
+            packet2_add_u64(m_geom, static_cast<uint64_t>(x1) | (static_cast<uint64_t>(y1) << 16));
+        }
     }
 
-    m_rect2DCount = 0;
+    packet2_update(m_geom, draw_enable_tests(m_geom->next, 0, &m_z));
+
+    if (dropped > 0)
+        Engine_LogError("GifTagRenderer: dropped %u 2D quad(s) this frame (transfer packet full).", dropped);
+
+    m_quad2DCount = 0;
 }
 
 void GifTagRenderer::DrawGrid(int32_t slices, float spacing)
@@ -848,27 +899,31 @@ void GifTagRenderer::BindTexture(uint32_t textureId)
     lod_t lod;
     lod.calculation = mipped ? LOD_FORMULAIC : LOD_USE_K;
     lod.max_level = maxLevel;
-    lod.mag_filter = LOD_MAG_LINEAR;
-    lod.min_filter = mipped ? LOD_MIN_LINE_MIPMAP_LINE : LOD_MIN_LINEAR;
+    const bool nearest = (t.filter == TextureFilter::Nearest);
+    lod.mag_filter = nearest ? LOD_MAG_NEAREST : LOD_MAG_LINEAR;
+    lod.min_filter = nearest ? LOD_MIN_NEAREST : (mipped ? LOD_MIN_LINE_MIPMAP_LINE : LOD_MIN_LINEAR);
     lod.mipmap_select = LOD_MIPMAP_REGISTER;
     lod.l = 0;
     lod.k = 0.0f;
 
     packet2_update(m_geom, draw_texture_sampling(m_geom->next, 0, &lod));
 
-    // PAL8 textures carry a CLUT; RGBA formats pass null.
+    // Only a palettised texture loads a colour table, but the register writer
+    // reads the struct either way, so the inert case is a zeroed one rather
+    // than a null pointer.
     clutbuffer_t clut;
-    clutbuffer_t* clutPtr = nullptr;
+    clut.address = 0;
+    clut.psm = 0;
+    clut.storage_mode = CLUT_STORAGE_MODE1;
+    clut.start = 0;
+    clut.load_method = CLUT_NO_LOAD;
     if (t.psm == GS_PSM_8 && t.clutAddr != 0u)
     {
         clut.address = t.clutAddr;
         clut.psm = GS_PSM_32;
-        clut.storage_mode = CLUT_STORAGE_MODE1;
-        clut.start = 0;
         clut.load_method = CLUT_LOAD;
-        clutPtr = &clut;
     }
-    packet2_update(m_geom, draw_texturebuffer(m_geom->next, 0, &tb, clutPtr));
+    packet2_update(m_geom, draw_texturebuffer(m_geom->next, 0, &tb, &clut));
 
     if (mipped)
     {
@@ -1177,6 +1232,7 @@ uint32_t GifTagRenderer::UploadTexture(const TextureUpload& upload)
     te.width = width;
     te.height = height;
     te.psm = psm;
+    te.filter = upload.filter;
 
     return static_cast<uint32_t>(slot + 1);
 }

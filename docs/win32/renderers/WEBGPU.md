@@ -17,6 +17,18 @@ textures are bound per run.
 
 ## Quirks and limits
 
+- **The screen-space pipeline blends; the world pipelines do not.** Only the
+  screen-space pipeline carries a blend state, so world rendering is byte for
+  byte what it was before the interface gained transparency. That pipeline also
+  never writes or tests depth, so quads draw in submission order.
+- **Screen-space work is drawn as one call per texture run.** Consecutive quads
+  sharing a texture coalesce, so a solid interface is a single call and a
+  glyph-atlas interface is a small number. A run count ceiling exists; exceeding
+  it drops the excess and reports once per frame.
+- **A texture chooses its filter at upload and cannot change it afterwards.**
+  Two samplers exist and a texture binds one of them at creation. Nearest exists
+  for content magnified to whole-pixel scales — a pixel font atlas is the case
+  that needs it, and linear filtering visibly blurs it.
 - **A non-sRGB surface format is chosen deliberately.** The API will happily
   offer an sRGB surface, and taking it applies a colour transform to everything
   the engine draws, making every frame visibly lighter than the same content on

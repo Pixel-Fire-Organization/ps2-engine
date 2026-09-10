@@ -139,11 +139,9 @@ namespace
         Ui_EndPanel();
     }
 
-    void DrawEntries(int x, int y, int w, int h, int page, int pageCount)
+    void DrawEntries(int x, int y, int w, int h)
     {
-        char title[64];
-        snprintf(title, sizeof(title), "ENTRIES  L1 R1 PAGE %d OF %d", page + 1, pageCount);
-        Ui_BeginPanel(title, x, y, w, h);
+        Ui_BeginPanel("ENTRIES", x, y, w, h);
 
         ArchiveMountInfo info;
         if (s_Mount < 0 || !Engine_Archive_GetMount(s_Mount, &info))
@@ -153,8 +151,12 @@ namespace
             return;
         }
 
-        const uint32_t first = static_cast<uint32_t>(page) * ENTRIES_PER_PAGE;
-        for (uint32_t i = first; i < first + ENTRIES_PER_PAGE && i < info.entryCount; ++i)
+        if (!Ui_BeginScroll("entries", Ui_ContentHeight()))
+        {
+            Ui_EndPanel();
+            return;
+        }
+        for (uint32_t i = 0; i < info.entryCount; ++i)
         {
             ArchiveTocEntry toc;
             char name[IO_FILE_MAX_PATH];
@@ -166,6 +168,7 @@ namespace
             if (Ui_Selectable(row, s_HaveEntry && i == s_Entry))
                 SelectEntry(s_Mount, i);
         }
+        Ui_EndScroll();
         Ui_EndPanel();
     }
 
@@ -306,14 +309,13 @@ void Scene_AssetBrowser_Update(float dt)
     uint32_t entries = 0;
     if (s_Mount >= 0 && Engine_Archive_GetMount(s_Mount, &info))
         entries = info.entryCount;
-    const int pageCount = (entries > 0) ? static_cast<int>((entries + ENTRIES_PER_PAGE - 1) / ENTRIES_PER_PAGE) : 1;
-    const int page = Testbed_Page(pageCount);
+    (void)entries;
 
     const int width = (screenW - PANEL_MARGIN * 2 - COLUMN_GAP) / 2;
     const int height = screenH - PANEL_MARGIN * 2;
     const int mountsHeight = height / 3;
 
     DrawMounts(PANEL_MARGIN, PANEL_MARGIN, width, mountsHeight);
-    DrawEntries(PANEL_MARGIN, PANEL_MARGIN + mountsHeight + COLUMN_GAP, width, height - mountsHeight - COLUMN_GAP, page, pageCount);
+    DrawEntries(PANEL_MARGIN, PANEL_MARGIN + mountsHeight + COLUMN_GAP, width, height - mountsHeight - COLUMN_GAP);
     DrawEntryDetail(PANEL_MARGIN + width + COLUMN_GAP, PANEL_MARGIN, width, height);
 }

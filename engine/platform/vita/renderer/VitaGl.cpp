@@ -117,8 +117,9 @@ uint32_t VitaGlRenderer::UploadTexture(const TextureUpload& upload)
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    const GLint filter = (upload.filter == TextureFilter::Nearest) ? GL_NEAREST : GL_LINEAR;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(width), static_cast<GLsizei>(height), 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     free(rgba);
 
@@ -183,7 +184,7 @@ void VitaGlRenderer::ClearDrawLists() { m_drawLists.Reset(false); }
 
 void VitaGlRenderer::ClearFrame(const Color3& color) { m_clearColor = color; }
 
-void VitaGlRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) { m_geometry.AddRect2D(x, y, width, height, color); }
+void VitaGlRenderer::DrawQuad2D(const Quad2D& quad) { m_geometry.AddQuad2D(quad); }
 
 void VitaGlRenderer::DrawGrid(int32_t slices, float spacing)
 {
@@ -253,8 +254,13 @@ void VitaGlRenderer::DrawStagedGeometry()
         glLoadMatrixf(matrix);
 
         BindVertexArrays(m_geometry.Vertices2D());
-        glBindTexture(GL_TEXTURE_2D, m_whiteTexture);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(count2D));
+
+        const StagedGeometry::DrawRun* runs2D = m_geometry.Runs2D();
+        for (uint32_t i = 0; i < m_geometry.RunCount2D(); ++i)
+        {
+            glBindTexture(GL_TEXTURE_2D, runs2D[i].texture ? runs2D[i].texture : m_whiteTexture);
+            glDrawArrays(GL_TRIANGLES, static_cast<GLint>(runs2D[i].first), static_cast<GLsizei>(runs2D[i].count));
+        }
     }
 
     glDisableClientState(GL_COLOR_ARRAY);
@@ -284,7 +290,6 @@ void VitaGlRenderer::EndFrame()
     m_drawLists.Reset(false);
 }
 
-void VitaGlRenderer::DrawDebugOverlay() {}
 
 void VitaGlRenderer::SetCamera3D(CameraID id, const Camera3D& camera) { m_drawLists.SetCamera3D(id, camera); }
 void VitaGlRenderer::SetActiveCamera3D(CameraID id) { m_drawLists.SetActiveCamera3D(id); }

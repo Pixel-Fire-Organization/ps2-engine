@@ -25,8 +25,8 @@
             "enabled": { "type": "boolean" },
             "format": {
               "type": "string",
-              "enum": ["rgba32", "pal8", "source"],
-              "description": "Target encoding. 'source' honours the per-asset format instead of overriding it."
+              "enum": ["rgba32", "pal8", "coverage8", "source"],
+              "description": "Target encoding. 'source' honours the per-asset format instead of overriding it. 'coverage8' keeps only an alpha channel, against a white ramp, which is what a glyph atlas needs."
             },
             "max_width": { "type": "integer", "minimum": 1 },
             "max_height": { "type": "integer", "minimum": 1 },
@@ -50,6 +50,11 @@
           "properties": { "enabled": { "type": "boolean" } }
         },
         "FONT": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean" } }
+        },
+        "THEME": {
           "type": "object",
           "additionalProperties": false,
           "properties": { "enabled": { "type": "boolean" } }

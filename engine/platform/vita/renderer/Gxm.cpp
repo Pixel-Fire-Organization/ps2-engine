@@ -509,8 +509,9 @@ uint32_t GxmRenderer::UploadTexture(const TextureUpload& upload)
         return 0;
     }
 
-    sceGxmTextureSetMinFilter(&tex.texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
-    sceGxmTextureSetMagFilter(&tex.texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+    const SceGxmTextureFilter filter = (upload.filter == TextureFilter::Nearest) ? SCE_GXM_TEXTURE_FILTER_POINT : SCE_GXM_TEXTURE_FILTER_LINEAR;
+    sceGxmTextureSetMinFilter(&tex.texture, filter);
+    sceGxmTextureSetMagFilter(&tex.texture, filter);
     sceGxmTextureSetUAddrMode(&tex.texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
     sceGxmTextureSetVAddrMode(&tex.texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
@@ -578,7 +579,7 @@ void GxmRenderer::ClearDrawLists() { m_drawLists.Reset(false); }
 
 void GxmRenderer::ClearFrame(const Color3& color) { m_clearColor = color; }
 
-void GxmRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) { m_geometry.AddRect2D(x, y, width, height, color); }
+void GxmRenderer::DrawQuad2D(const Quad2D& quad) { m_geometry.AddQuad2D(quad); }
 
 void GxmRenderer::DrawGrid(int32_t slices, float spacing)
 {
@@ -738,10 +739,25 @@ void GxmRenderer::DrawStagedGeometry()
         sceGxmReserveVertexDefaultUniformBuffer(m_context, &uniforms);
         sceGxmSetUniformDataF(uniforms, m_viewProjParam, 0, 16, matrix);
 
-        if (m_whiteTexture && m_textures[m_whiteTexture - 1u].used)
-            sceGxmSetFragmentTexture(m_context, 0, &m_textures[m_whiteTexture - 1u].texture);
+        const StagedGeometry::DrawRun* runs2D = m_geometry.Runs2D();
+        for (uint32_t i = 0; i < m_geometry.RunCount2D(); ++i)
+        {
+            const uint32_t first = runs2D[i].first;
+            if (first >= m_frame2DVertices)
+                continue;
+            uint32_t count = runs2D[i].count;
+            if (first + count > m_frame2DVertices)
+                count = m_frame2DVertices - first;
+            count -= count % 3u;
+            if (!count)
+                continue;
 
-        sceGxmDraw(m_context, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, indices + m_frame3DVertices, m_frame2DVertices);
+            const uint32_t handle = runs2D[i].texture ? runs2D[i].texture : m_whiteTexture;
+            if (handle && handle <= GXM_MAX_RESIDENT_TEXTURES && m_textures[handle - 1u].used)
+                sceGxmSetFragmentTexture(m_context, 0, &m_textures[handle - 1u].texture);
+
+            sceGxmDraw(m_context, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, indices + m_frame3DVertices + first, count);
+        }
     }
 }
 
@@ -799,7 +815,6 @@ void GxmRenderer::EndFrame()
     m_drawLists.Reset(false);
 }
 
-void GxmRenderer::DrawDebugOverlay() {}
 
 void GxmRenderer::SetCamera3D(CameraID id, const Camera3D& camera) { m_drawLists.SetCamera3D(id, camera); }
 void GxmRenderer::SetActiveCamera3D(CameraID id) { m_drawLists.SetActiveCamera3D(id); }

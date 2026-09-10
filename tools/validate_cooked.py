@@ -18,7 +18,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ps2lib import ps2a, tim2
+from ps2lib import font, ps2a, theme as themelib, tim2
 import cook_assets
 
 
@@ -79,6 +79,13 @@ def validate_tree(directory, cooklist, report):
 
         if info["type"] == "TEXTURE":
             texture_bytes += _validate_texture(name, info, policy, report)
+        elif info["type"] == "FONT":
+            _validate_font(directory, name, info, report)
+        elif info["type"] == "THEME":
+            try:
+                themelib.describe(info["payload"])
+            except ValueError as e:
+                report.error(name, f"theme payload unreadable: {e}")
 
     _validate_deps(directory, names, present, report)
 
@@ -106,6 +113,39 @@ def _validate_texture(name, info, policy, report):
         report.error(name, f"height {desc['height']} exceeds the platform maximum {max_h}")
 
     return info["data_size"]
+
+
+def _validate_font(directory, name, info, report):
+    """A font is metrics plus an atlas dependency, and the two must agree. A
+    disagreement draws every glyph from the wrong place, which looks like
+    corruption rather than like a content error, so it is caught here."""
+    try:
+        desc = font.describe(info["payload"])
+    except ValueError as e:
+        report.error(name, f"font payload unreadable: {e}")
+        return
+
+    if not info["deps"]:
+        report.error(name, "names no atlas dependency")
+        return
+
+    atlas_key = info["deps"][0]
+    atlas_path = os.path.join(directory, os.path.basename(atlas_key))
+    try:
+        atlas = ps2a.read_ps2a(atlas_path)
+        image = tim2.describe(atlas["payload"])
+    except (ValueError, OSError) as e:
+        report.error(name, f"atlas '{atlas_key}' could not be read: {e}")
+        return
+
+    if image["width"] != desc["atlas_width"] or image["height"] != desc["atlas_height"]:
+        report.error(name, f"metrics describe a {desc['atlas_width']}x{desc['atlas_height']} atlas "
+                           f"but '{atlas_key}' is {image['width']}x{image['height']}")
+
+    # A pixel font magnified to a whole-pixel scale is exact; linearly filtered
+    # it is blurred at every scale, so the wrong filter is a defect not a taste.
+    if image["filter"] != "nearest":
+        report.warn(name, f"atlas '{atlas_key}' is not cooked with the nearest filter")
 
 
 def _validate_deps(directory, names, present, report):

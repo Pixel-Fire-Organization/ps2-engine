@@ -31,9 +31,16 @@ set(ENGINE_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/Ui.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiWidgets.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiFont.cpp"
+    "${THEME_GEN_DIR}/UiThemeTable.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiLayout.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiOverlay.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiState.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiTheme.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiFontAsset.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiStyle.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/NullRenderer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/tim2.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/FontLoad.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/ModelLoad.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/Transform3D.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/DrawList.cpp"
@@ -92,6 +99,7 @@ if(DEBUG)
     set(ENGINE_DEBUG_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/Testbed.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/TestbedScenes.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneUiBudget.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/ScenePlatformInfo.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneGamepad.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/debug/scenes/SceneKeyboardMouse.cpp"
@@ -128,6 +136,8 @@ find_program(PYTHON3_BIN python3 REQUIRED)
 # platform files it under. A platform builds its writable-storage location from
 # this, so the identity a console shows and the identity a save is filed under
 # cannot disagree.
+set(ENGINE_ASSETS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets" CACHE INTERNAL "Engine-owned source assets")
+
 set(TITLE_GEN_DIR "${CMAKE_BINARY_DIR}/generated/title" CACHE INTERNAL "")
 set(TITLE_JSON   "${CMAKE_SOURCE_DIR}/game/title.json")
 set(TITLE_GEN_PY "${CMAKE_SOURCE_DIR}/tools/title.py")
@@ -144,6 +154,34 @@ add_custom_command(
 set_source_files_properties("${TITLE_GEN_DIR}/TitleInfo.h" PROPERTIES GENERATED TRUE)
 add_custom_target(title-generate DEPENDS "${TITLE_GEN_DIR}/TitleInfo.h")
 
+# game/theme.json is the single source of truth for the interface's look. Its
+# themes are compiled in, because the interface must be able to draw before a
+# filesystem exists and because a built-in theme is what a refused load falls
+# back to. The generator checks the declaration against UiColor, so a role added
+# to the engine and forgotten there fails the build rather than producing a
+# theme with a missing colour.
+set(THEME_GEN_DIR "${CMAKE_BINARY_DIR}/generated/theme" CACHE INTERNAL "")
+set(THEME_JSON   "${CMAKE_SOURCE_DIR}/game/theme.json")
+set(THEME_GEN_PY "${CMAKE_SOURCE_DIR}/tools/theme.py")
+
+add_custom_command(
+    OUTPUT  "${THEME_GEN_DIR}/UiThemeIds.h"
+            "${THEME_GEN_DIR}/UiThemeTable.cpp"
+    COMMAND ${PYTHON3_BIN} "${THEME_GEN_PY}"
+            --declaration "${THEME_JSON}"
+            --emit-ids   "${THEME_GEN_DIR}/UiThemeIds.h"
+            --emit-table "${THEME_GEN_DIR}/UiThemeTable.cpp"
+    DEPENDS "${THEME_JSON}" "${THEME_GEN_PY}" "${CMAKE_CURRENT_SOURCE_DIR}/include/EngineUi.h"
+    COMMENT "Generating themes (UiThemeIds.h, UiThemeTable.cpp) from theme.json"
+    VERBATIM
+)
+set_source_files_properties(
+    "${THEME_GEN_DIR}/UiThemeIds.h"
+    "${THEME_GEN_DIR}/UiThemeTable.cpp"
+    PROPERTIES GENERATED TRUE
+)
+add_custom_target(theme-generate DEPENDS "${THEME_GEN_DIR}/UiThemeIds.h" "${THEME_GEN_DIR}/UiThemeTable.cpp")
+
 
 # Build the engine library for one platform. That platform.cmake fragment has
 # already run and set ENGINE_PLATFORM_<P>_SOURCES / _LIBS / _DEFINES / _INCLUDES.
@@ -152,6 +190,10 @@ function(engine_add_library PLATFORM OUT_TARGET)
     set(_target "engine_${_lower}")
 
     engine_platform_dirs(${PLATFORM} _variantDir _baseDir)
+
+    # This function is called from the root list file, so the GENERATED property
+    # set at this file's scope does not reach the target; mark it again here.
+    set_source_files_properties("${THEME_GEN_DIR}/UiThemeTable.cpp" PROPERTIES GENERATED TRUE)
 
     add_library(${_target} STATIC
         ${ENGINE_CORE_SOURCES}
@@ -167,9 +209,13 @@ function(engine_add_library PLATFORM OUT_TARGET)
         "${ENGINE_INCLUDE_DIR}"
         "${ENGINE_DEBUG_INCLUDE_DIR}"
         "${TITLE_GEN_DIR}"
+        "${THEME_GEN_DIR}"
         "${_variantDir}"
     )
-    add_dependencies(${_target} title-generate)
+    add_dependencies(${_target} title-generate theme-generate)
+    if(TARGET ps2-save-icon)
+        add_dependencies(${_target} ps2-save-icon)
+    endif()
     if(_baseDir)
         target_include_directories(${_target} PUBLIC "${_baseDir}")
     endif()

@@ -38,10 +38,17 @@ production is in [PIPELINE.md](../PIPELINE.md).
 | Texture | Platform texture encoding chosen by that platform cook list | Supported |
 | Model | Baked geometry: separated, unindexed vertex arrays | Supported |
 | Sound | — | **Not implemented on any platform** |
-| Font | — | **Not implemented on any platform** |
+| Font | Glyph metrics; the atlas is a separate texture dependency | Supported |
+| Theme | An interface theme, as a memory image | Supported |
 
-Sound and font are enumerated but unimplemented engine-wide. A request for either
-fails immediately rather than returning a handle that never becomes ready.
+Sound is enumerated but unimplemented engine-wide. A request for it fails
+immediately rather than returning a handle that never becomes ready.
+
+The font payload is described by [FONT_FORMAT.md](FONT_FORMAT.md) and the theme
+payload by [THEME_FORMAT.md](THEME_FORMAT.md). Both are **identical on every
+platform** — glyph metrics and interface colours are not hardware questions.
+What varies by hardware varies in a font's atlas, which is an ordinary texture
+and follows the texture rules below.
 
 ## Dependencies
 
@@ -74,6 +81,8 @@ meaningful check.
 - The header is a fixed size regardless of how many dependencies are used, so
   every asset pays for the maximum. This is deliberate: a fixed header means the
   payload offset is known without parsing.
-- No checksum. A truncated payload is detected by size mismatch, not by content
-  verification.
+- No checksum, with one exception. A truncated payload is detected by size
+  mismatch, not by content verification, because every payload is parsed and a
+  parse rejects nonsense as it reads. The theme payload is copied into live
+  state rather than parsed and therefore carries one of its own.
 - `ext` is diagnostic only. Nothing dispatches on it; `type` is authoritative.

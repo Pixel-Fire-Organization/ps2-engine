@@ -36,9 +36,8 @@ public:
     void Render() override;
     void BeginFrame() override;
     void EndFrame() override;
-    void DrawDebugOverlay() override;
     void ClearFrame(const Color3& color) override;
-    void DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) override;
+    void DrawQuad2D(const Quad2D& quad) override;
     void DrawGrid(int32_t slices, float spacing) override;
 
     void SetCamera3D(CameraID id, const Camera3D& camera) override;
@@ -102,6 +101,7 @@ private:
     WGPUBuffer m_vertexBuffer;
     uint64_t m_vertexBufferCapacity;
     WGPUSampler m_sampler;
+    WGPUSampler m_samplerNearest;
 
     WGPUTexture m_depthTexture;
     WGPUTextureView m_depthView;

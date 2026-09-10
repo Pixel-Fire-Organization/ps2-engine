@@ -6,6 +6,7 @@
 #include "graphics/Frustum.h"
 
 #define GFX_MAX_DRAW_RUNS 1024
+#define GFX_MAX_2D_RUNS 256
 
 /// Processor-side geometry staging for backends that rebuild their vertex data
 /// each frame and upload it once. Not used by the PS2 backends.
@@ -36,12 +37,13 @@ public:
     StagedGeometry& operator=(const StagedGeometry&) = delete;
     StagedGeometry& operator=(StagedGeometry&&) = delete;
 
-    // Clear the 3D staging for a new frame. 2D is NOT cleared here: DrawRect2D
+    // Clear the 3D staging for a new frame. 2D is NOT cleared here: DrawQuad2D
     // runs during GameUpdate, before the renderer's BeginFrame, so wiping it at
     // frame start would discard what the game just submitted.
     void BeginFrame();
 
-    // Clear the 2D staging. Call after the frame has been submitted.
+    // Clear the 2D staging and report any run overflow. Call after the frame
+    // has been submitted.
     void EndFrame();
 
     /// Declare what the backend can accept this frame, before it is built.
@@ -56,7 +58,10 @@ public:
     // budget, are rejected here rather than being built and then discarded.
     void BuildFrame(DrawLists& lists, DrawStats* stats);
 
-    void AddRect2D(int32_t x, int32_t y, int32_t w, int32_t h, const Color3& color);
+    /// Stage one screen-space quad, coalescing it into the open 2D run when it
+    /// shares that run's texture.
+    /// @param quad The quad to stage, in framebuffer pixels.
+    void AddQuad2D(const Quad2D& quad);
 
     const Vertex* Vertices3D() const { return m_verts3D; }
     uint32_t Count3D() const { return m_count3D; }
@@ -64,6 +69,11 @@ public:
     uint32_t Count2D() const { return m_count2D; }
     const DrawRun* Runs() const { return m_runs; }
     uint32_t RunCount() const { return m_runCount; }
+
+    /// @return This frame's screen-space runs, in draw order. Offsets are into
+    ///         Vertices2D(), so a backend adds its own 3D span base.
+    const DrawRun* Runs2D() const { return m_runs2D; }
+    uint32_t RunCount2D() const { return m_runCount2D; }
 
     // Column-major, matching the PS2 path's convention.
     static void BuildModelMatrix(const Vector3& pos, const Vector3& rot, const Vector3& scale, float out[16]);
@@ -97,6 +107,10 @@ private:
 
     DrawRun m_runs[GFX_MAX_DRAW_RUNS];
     uint32_t m_runCount;
+
+    DrawRun m_runs2D[GFX_MAX_2D_RUNS];
+    uint32_t m_runCount2D;
+    uint32_t m_droppedRuns2D;
 
     DrawStats* m_stats; // borrowed for the duration of BuildFrame
 

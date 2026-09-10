@@ -52,6 +52,13 @@ cmake -DUSERETAILNAME=ON -DAPP_SERIAL=SLES_508.77 ...
 `BOOT2` path always reflects the current value of `APP_SERIAL` (e.g. `BOOT2 = cdrom0:\SLHB_000.00;1` when
 `USERETAILNAME=ON`, or `BOOT2 = cdrom0:\main.elf;1` by default).
 
+**The boot path needs its separator.** The console's loader takes
+`cdrom0:\NAME;1` — device, backslash, file, version. Written without the
+backslash the loader reports that it could not open the file and then jumps
+through a null pointer, so the failure presents as a corrupt executable rather
+than as a malformed path. Nothing in the image is wrong when this happens; only
+the one line naming it is.
+
 ---
 
 ## Adding Assets to the Disc

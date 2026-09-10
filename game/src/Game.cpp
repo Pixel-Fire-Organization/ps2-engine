@@ -64,8 +64,8 @@ namespace
             s_Pitch = PITCH_MIN;
 
         const float flat = cosf(s_Pitch);
-        game::SetCamera3D(s_PlayerX + CAMERA_DISTANCE * flat * sinf(s_Yaw), s_PlayerY + CAMERA_DISTANCE * sinf(s_Pitch),
-                          s_PlayerZ + CAMERA_DISTANCE * flat * cosf(s_Yaw), s_PlayerX, s_PlayerY, s_PlayerZ, 45.0f);
+        game::SetCamera3D(s_PlayerX + CAMERA_DISTANCE * flat * sinf(s_Yaw), s_PlayerY + CAMERA_DISTANCE * sinf(s_Pitch), s_PlayerZ + CAMERA_DISTANCE * flat * cosf(s_Yaw), s_PlayerX, s_PlayerY,
+                          s_PlayerZ, 45.0f);
     }
 } // namespace
 
@@ -75,8 +75,8 @@ namespace
 void GameConfigure(EngineConfig* config)
 {
     static const EngineSubsystem kSubsystems[] = {
-        EngineSubsystem::Io,    EngineSubsystem::Archive,     EngineSubsystem::Resource,  EngineSubsystem::Level,
-        EngineSubsystem::Sector, EngineSubsystem::Input,      EngineSubsystem::Achievement, EngineSubsystem::PerfLogger,
+        EngineSubsystem::Io,    EngineSubsystem::Archive, EngineSubsystem::Resource,    EngineSubsystem::Level,      EngineSubsystem::Sector,
+        EngineSubsystem::Input, EngineSubsystem::Ui,      EngineSubsystem::Achievement, EngineSubsystem::PerfLogger,
     };
 
     config->subsystems = kSubsystems;

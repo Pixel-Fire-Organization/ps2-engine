@@ -8,10 +8,14 @@
 ///
 /// Positions and sizes are whole pixels in framebuffer space. Texture
 /// coordinates are normalised across the full unsigned range and are only read
-/// when `texture` is non-zero; a zero texture means a solid colour fill, which
-/// is what the built-in bitmap font emits.
+/// when `texture` is non-zero; a zero texture means a solid colour fill.
+///
+/// `texture` is a *backend* handle, not a resource handle: the interface
+/// resolves its atlas once per frame, so translating a batch performs no
+/// resource lookups.
 struct UiQuad
 {
+    uint32_t texture;
     int16_t x;
     int16_t y;
     int16_t w;
@@ -20,7 +24,6 @@ struct UiQuad
     uint16_t v0;
     uint16_t u1;
     uint16_t v1;
-    uint16_t texture;
     uint8_t r;
     uint8_t g;
     uint8_t b;

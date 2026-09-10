@@ -34,15 +34,10 @@ class Ps2GlRenderer final : public Renderer
     unsigned int m_dlSphere = 0;
     unsigned int m_dlCylinder = 0;
 
-    static constexpr uint16_t GL_MAX_2D_RECTS = 4096;
-    struct Rect2D
-    {
-        int32_t x, y, w, h;
-        Color3 color;
-    };
-    Rect2D m_rects2D[GL_MAX_2D_RECTS];
-    uint16_t m_rect2DCount = 0;
-    uint16_t m_droppedRects2D = 0;
+    static constexpr uint16_t GL_MAX_2D_QUADS = UI_MAX_QUADS + GFX_MAX_2D_EXTRA;
+    Quad2D m_quads2D[GL_MAX_2D_QUADS];
+    uint16_t m_quad2DCount = 0;
+    uint16_t m_droppedQuads2D = 0;
 
     uint16_t m_frameDrawCallsUsed = 0;
 
@@ -84,7 +79,7 @@ class Ps2GlRenderer final : public Renderer
     void InitGsMemory(bool pal); // replaces raylib's initGsMemoryForRaylib
     void CompilePrimitiveDLists(); // build DLists from DrawLists' arrays
     unsigned int GetListForType(Primitive3D type) const;
-    void FlushRects2D(); // draw queued 2D rects (ortho) inside the frame block
+    void FlushQuads2D(); // draw queued 2D rects (ortho) inside the frame block
 
     void ApplyProjection(const Camera3D& camera) const;
     void ApplyCameraTransform(const Camera3D& camera) const;
@@ -119,9 +114,8 @@ public:
     void Render() override;
     void BeginFrame() override;
     void EndFrame() override;
-    void DrawDebugOverlay() override;
     void ClearFrame(const Color3& color) override;
-    void DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color) override;
+    void DrawQuad2D(const Quad2D& quad) override;
     void DrawGrid(int32_t slices, float spacing) override;
 
     void SetCamera3D(CameraID id, const Camera3D& camera) override;

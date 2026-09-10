@@ -7,6 +7,7 @@
 #include <malloc.h>
 #include "Engine.h"
 #include "EngineInput.h"
+#include "EngineUi.h"
 #include "graphics/DrawList.h"
 #include "graphics/Renderer.h"
 #include "platform/Platform.h"
@@ -23,18 +24,8 @@ enum
     LOG_ERROR
 };
 
-static constexpr char ASCII_TABLE_STR[] = "!\"#$%&'()*\n" /* 33-42  */
-                                          "+,-./01234\n" /* 43-52  */
-                                          "56789:;<=>\n" /* 53-62  */
-                                          "?@ABCDEFGH\n" /* 63-72  */
-                                          "IJKLMNOPQR\n" /* 73-82  */
-                                          "STUVWXYZ[\\\n" /* 83-92  */
-                                          "]^_`abcdef\n" /* 93-102 */
-                                          "ghijklmnop\n" /* 103-112 */
-                                          "qrstuvwxyz\n" /* 113-122 */
-                                          "{|}~\x7f"; /* 123-127 */
-
 static bool s_DebugOverlayVisible = false;
+
 
 /// Rewrite %z length modifiers to plain int conversions where the two are
 /// equivalent, for C libraries built without C99 format support.
@@ -131,12 +122,29 @@ void Engine_LogError(const char* text, ...)
 
 void Engine_DrawDebugOverlay()
 {
-    Renderer* r = Engine_GetRenderer();
-    if (r)
-        r->DrawDebugOverlay();
+    if (!s_DebugOverlayVisible || !Engine_Ui_IsActive())
+        return;
+
+    // Drawn as interface, not by a backend: it is interface, and a backend that
+    // drew its own would be one more thing that differs between backends.
+    const Renderer* renderer = Engine_GetRenderer();
+    if (!renderer)
+        return;
+
+    const DrawStats stats = renderer->GetLastStats();
+    const float dt = Engine_GetDeltaTime();
+
+    Ui_BeginOverlay();
+    Ui_BeginPanelSlot("OVERLAY", UiPanelSlot::TopRight);
+    Ui_LabelValueFormat("FPS", "%.0f", (dt > 0.0f) ? static_cast<double>(1.0f / dt) : 0.0);
+    Ui_LabelValueFormat("FRAME MS", "%.2f", static_cast<double>(dt * 1000.0f));
+    Ui_LabelValueFormat("PRIMS", "%u", static_cast<unsigned>(stats.primitiveCount));
+    Ui_LabelValueFormat("TRIS", "%u", static_cast<unsigned>(stats.trisSubmitted));
+    Ui_LabelValueFormat("UI QUADS", "%u / %u", static_cast<unsigned>(Ui_QuadsUsed()), static_cast<unsigned>(Ui_QuadBudget()));
+    Ui_EndPanel();
+    Ui_EndOverlay();
 }
 
-void Engine_DrawAsciiTable() {}
 
 [[noreturn]] void Engine_Panic(const char* message)
 {

@@ -29,6 +29,7 @@ struct Tim2Image
     int width; // level-0 width
     int height; // level-0 height
     PixelFormat format;
+    TextureFilter filter; // Linear unless the asset asked for something else
     uint32_t imageSize; // bytes of level-0 pixel payload
 };
 

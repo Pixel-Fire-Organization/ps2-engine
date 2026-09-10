@@ -35,18 +35,14 @@ const TestbedScene* Testbed_Catalogue(int* outCount);
 /// @return Its heading text.
 const char* Testbed_CategoryName(TestbedCategory category);
 
-/// Split a scene that will not fit the interface budget on the smallest screen.
-/// L1 and R1 move between pages, and the page resets whenever a scene is
-/// entered. Draw only the page returned.
-/// @param pageCount How many pages the scene has.
+/// Draw a strip of pages inside the open panel and report which is showing.
+/// Replaces the shoulder-button paging a scene used to do for itself, so the
+/// page is a property of the scene rather than of the testbed.
+/// @param id Identity of the strip, which is where the active page is filed.
+/// @param names One name per page.
+/// @param count How many pages.
 /// @return The page to draw, counting from zero.
-int Testbed_Page(int pageCount);
-
-/// Draw a long string across as many label rows as the open panel needs,
-/// breaking on spaces. A diagnostic is only useful if it is readable.
-/// @param text The string to lay out.
-/// @param role Which colour role to draw it in.
-void Testbed_DrawWrapped(const char* text, UiColor role);
+int Testbed_Tabs(const char* id, const char* const* names, int count);
 
 /// Draw the panel a scene shows when the thing it tests is not present here.
 /// @param what The capability or subsystem that is unavailable.
@@ -80,6 +76,10 @@ void Scene_ScreenAspect_Update(float dt);
 
 void Scene_DepthRange_Init();
 void Scene_DepthRange_Update(float dt);
+
+void Scene_UiBudget_Init();
+void Scene_UiBudget_Update(float dt);
+void Scene_UiBudget_Shutdown();
 
 void Scene_UiGallery_Init();
 void Scene_UiGallery_Update(float dt);

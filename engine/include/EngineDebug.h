@@ -17,8 +17,6 @@ void Engine_LogError(const char* text, ...);
 void Engine_DrawDebugOverlay();
 
 // Draw a printable ASCII table (codepoints 33–127) for font/glyph diagnostics.
-// Assumes the active renderer's BeginFrame() has been called.
-void Engine_DrawAsciiTable();
 
 // Stop the engine. Never returns: the active platform decides what a panic
 // looks like, and every platform terminates. See docs/subsystems/DEBUG.md.

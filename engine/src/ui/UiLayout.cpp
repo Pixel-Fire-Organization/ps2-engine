@@ -1,0 +1,528 @@
+#include "EngineUi.h"
+
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+
+#include "EngineDebug.h"
+#include "UiInternal.h"
+
+namespace
+{
+    const char* const ELLIPSIS = "...";
+
+    void SlotRect(UiPanelSlot slot, int* x, int* y, int* w, int* h)
+    {
+        const UiStyle& style = Ui_GetStyle();
+        const int margin = style.screenMargin;
+        const int gap = style.panelGap;
+        const int fullW = Ui_ScreenWidth() - margin * 2;
+        const int fullH = Ui_ScreenHeight() - margin * 2;
+        const int halfW = (fullW - gap) / 2;
+        const int halfH = (fullH - gap) / 2;
+        const int rightX = margin + halfW + gap;
+        const int lowerY = margin + halfH + gap;
+
+        switch (slot)
+        {
+        case UiPanelSlot::Full:
+            *x = margin;
+            *y = margin;
+            *w = fullW;
+            *h = fullH;
+            break;
+        case UiPanelSlot::Left:
+            *x = margin;
+            *y = margin;
+            *w = halfW;
+            *h = fullH;
+            break;
+        case UiPanelSlot::Right:
+            *x = rightX;
+            *y = margin;
+            *w = halfW;
+            *h = fullH;
+            break;
+        case UiPanelSlot::Top:
+            *x = margin;
+            *y = margin;
+            *w = fullW;
+            *h = halfH;
+            break;
+        case UiPanelSlot::Bottom:
+            *x = margin;
+            *y = lowerY;
+            *w = fullW;
+            *h = halfH;
+            break;
+        case UiPanelSlot::TopLeft:
+            *x = margin;
+            *y = margin;
+            *w = halfW;
+            *h = halfH;
+            break;
+        case UiPanelSlot::TopRight:
+            *x = rightX;
+            *y = margin;
+            *w = halfW;
+            *h = halfH;
+            break;
+        case UiPanelSlot::BottomLeft:
+            *x = margin;
+            *y = lowerY;
+            *w = halfW;
+            *h = halfH;
+            break;
+        case UiPanelSlot::BottomRight:
+            *x = rightX;
+            *y = lowerY;
+            *w = halfW;
+            *h = halfH;
+            break;
+        case UiPanelSlot::Count:
+            *x = margin;
+            *y = margin;
+            *w = fullW;
+            *h = fullH;
+            break;
+        }
+    }
+} // namespace
+
+void Ui_BeginPanelSlot(const char* title, UiPanelSlot slot)
+{
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
+    SlotRect(slot, &x, &y, &w, &h);
+    Ui_BeginPanel(title, x, y, w, h);
+}
+
+int Ui_ScreenWidth() { return UiInternal_State().screenW; }
+
+int Ui_ScreenHeight() { return UiInternal_State().screenH; }
+
+void Ui_PushId(const char* text) { UiInternal_PushId(text); }
+
+void Ui_PushIdIndex(int index) { UiInternal_PushIdIndex(index); }
+
+void Ui_PopId() { UiInternal_PopId(); }
+
+// ---------------------------------------------------------------------------
+// Scrolling
+// ---------------------------------------------------------------------------
+
+bool Ui_BeginScroll(const char* id, int height)
+{
+    if (!UiInternal_CanDraw())
+        return false;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inPanel || state.inScroll)
+        return false;
+
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_TakeRow(height, &x, &y, &w, &visible))
+        return false;
+
+    const uint32_t regionId = UiInternal_Id(id);
+    UiState* remembered = UiInternal_StateFor(regionId);
+
+    state.inScroll = true;
+    state.scrollId = regionId;
+    state.scrollTop = y;
+    state.scrollBottom = y + height;
+    state.scrollY = remembered->whole;
+    state.scrollContentStart = y;
+
+    if (!UiInternal_PushClip(x, y, w, height))
+    {
+        state.inScroll = false;
+        return false;
+    }
+
+    UiInternal_PushId(id);
+    state.cursorY = y - state.scrollY;
+    return true;
+}
+
+void Ui_EndScroll()
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inScroll)
+        return;
+
+    UiInternal_PopId();
+    UiInternal_PopClip();
+
+    const int contentHeight = state.cursorY + state.scrollY - state.scrollContentStart;
+    const int viewHeight = state.scrollBottom - state.scrollTop;
+
+    UiState* remembered = UiInternal_StateFor(state.scrollId);
+    remembered->fraction = static_cast<float>(contentHeight);
+
+    // Navigation scrolls rather than pages: a focused row below or above the
+    // band pulls the band to it.
+    if (state.focusRowValid && state.focusRowTop >= state.scrollTop - state.scrollY && contentHeight > viewHeight)
+    {
+        const int rowTop = state.focusRowTop + state.scrollY - state.scrollTop;
+        const int rowBottom = rowTop + state.focusRowHeight;
+        if (rowTop < state.scrollY)
+            remembered->whole = rowTop;
+        else if (rowBottom > state.scrollY + viewHeight)
+            remembered->whole = rowBottom - viewHeight;
+    }
+
+    const int maximum = (contentHeight > viewHeight) ? (contentHeight - viewHeight) : 0;
+    if (remembered->whole > maximum)
+        remembered->whole = maximum;
+    if (remembered->whole < 0)
+        remembered->whole = 0;
+
+    // The bar is drawn from last frame's content height, which is what the
+    // retained state is for.
+    if (contentHeight > viewHeight)
+    {
+        const UiStyle& style = Ui_GetStyle();
+        const int barX = state.contentX + state.contentW - style.scrollBarWidth;
+        const int trackH = viewHeight;
+        int thumbH = (trackH * viewHeight) / contentHeight;
+        if (thumbH < 8)
+            thumbH = 8;
+        const int travel = trackH - thumbH;
+        const int thumbY = state.scrollTop + ((maximum > 0) ? (state.scrollY * travel) / maximum : 0);
+        UiInternal_PushRect(barX, state.scrollTop, style.scrollBarWidth, trackH, Ui_GetColor(UiColor::BarTrack));
+        UiInternal_PushRect(barX, thumbY, style.scrollBarWidth, thumbH, Ui_GetColor(UiColor::Border));
+    }
+
+    state.inScroll = false;
+    state.cursorY = state.scrollBottom + Ui_GetStyle().itemSpacing;
+}
+
+// ---------------------------------------------------------------------------
+// Columns
+// ---------------------------------------------------------------------------
+
+void Ui_BeginColumns(int count)
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inPanel || state.inColumns || count <= 1)
+        return;
+
+    const UiStyle& style = Ui_GetStyle();
+    state.inColumns = true;
+    state.columnCount = count;
+    state.columnIndex = 0;
+    state.columnStartY = state.cursorY;
+    state.columnMaxY = state.cursorY;
+    state.columnX = state.contentX;
+    state.columnWidth = state.contentW;
+
+    const int gap = style.panelGap;
+    const int each = (state.contentW - gap * (count - 1)) / count;
+    state.contentW = each;
+    UiInternal_PushIdIndex(0);
+}
+
+void Ui_NextColumn()
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inColumns)
+        return;
+
+    if (state.cursorY > state.columnMaxY)
+        state.columnMaxY = state.cursorY;
+
+    UiInternal_PopId();
+    ++state.columnIndex;
+    UiInternal_PushIdIndex(state.columnIndex);
+
+    const int gap = Ui_GetStyle().panelGap;
+    state.contentX = state.columnX + state.columnIndex * (state.contentW + gap);
+    state.cursorY = state.columnStartY;
+}
+
+void Ui_EndColumns()
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inColumns)
+        return;
+
+    if (state.cursorY > state.columnMaxY)
+        state.columnMaxY = state.cursorY;
+
+    UiInternal_PopId();
+    state.inColumns = false;
+    state.contentX = state.columnX;
+    state.contentW = state.columnWidth;
+    state.cursorY = state.columnMaxY;
+}
+
+// ---------------------------------------------------------------------------
+// Trees and tabs
+// ---------------------------------------------------------------------------
+
+bool Ui_BeginTree(const char* label, bool defaultOpen)
+{
+    if (!UiInternal_CanDraw())
+        return false;
+
+    const uint32_t id = UiInternal_Id(label);
+    UiState* remembered = UiInternal_StateFor(id);
+    if (remembered->touchedFrame == 0 || remembered->whole == 0)
+    {
+        if (remembered->whole == 0)
+            remembered->whole = defaultOpen ? 1 : -1;
+    }
+
+    const bool open = remembered->whole > 0;
+    char row[UI_TEXT_MAX];
+    snprintf(row, sizeof(row), "%s %s", open ? "-" : "+", label);
+
+    // The caret is drawn separately rather than folded into the label, because
+    // a label that changes is a different widget.
+    UiInternal_PushId(label);
+    const bool toggled = Ui_Selectable(label, open);
+    UiInternal_PopId();
+    if (toggled)
+        remembered->whole = open ? -1 : 1;
+
+    if (remembered->whole > 0)
+    {
+        UiInternal_PushId(label);
+        UiFrameState& state = UiInternal_State();
+        const int indent = Ui_GetStyle().panelPadding;
+        state.contentX += indent;
+        state.contentW -= indent;
+        return true;
+    }
+    return false;
+}
+
+void Ui_EndTree()
+{
+    if (!UiInternal_CanDraw())
+        return;
+    UiFrameState& state = UiInternal_State();
+    const int indent = Ui_GetStyle().panelPadding;
+    state.contentX -= indent;
+    state.contentW += indent;
+    UiInternal_PopId();
+}
+
+namespace
+{
+    uint32_t s_TabBarId = 0;
+    int s_TabIndex = 0;
+    int s_TabActive = 0;
+    int s_TabX = 0;
+    int s_TabY = 0;
+    int s_TabHeight = 0;
+    bool s_InTabBar = false;
+} // namespace
+
+bool Ui_BeginTabBar(const char* id)
+{
+    if (!UiInternal_CanDraw())
+        return false;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inPanel || s_InTabBar)
+        return false;
+
+    const UiStyle& style = Ui_GetStyle();
+    const int height = Ui_TextHeight(style.textScale) + style.rowPadding * 2;
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_TakeRow(height, &x, &y, &w, &visible))
+        return false;
+
+    s_TabBarId = UiInternal_Id(id);
+    s_TabActive = UiInternal_StateFor(s_TabBarId)->whole;
+    s_TabIndex = 0;
+    s_TabX = x;
+    s_TabY = y;
+    s_TabHeight = height;
+    s_InTabBar = true;
+    UiInternal_PushId(id);
+    return true;
+}
+
+bool Ui_Tab(const char* label)
+{
+    if (!UiInternal_CanDraw() || !s_InTabBar)
+        return false;
+
+    const UiStyle& style = Ui_GetStyle();
+    const int width = Ui_TextWidth(style.textScale, label) + style.rowPadding * 4;
+    const int index = s_TabIndex++;
+    const bool active = (index == s_TabActive);
+
+    const uint32_t id = UiInternal_Id(label);
+    const bool focused = UiInternal_RegisterFocusable(id);
+    const bool hovered = UiInternal_PointerOver(s_TabX, s_TabY, width, s_TabHeight);
+
+    UiFrameState& state = UiInternal_State();
+    if (hovered && state.pointerMoved)
+        state.focusId = id;
+
+    UiInternal_PushRect(s_TabX, s_TabY, width, s_TabHeight, Ui_GetColor(active ? UiColor::ItemActive : UiColor::ItemBackground));
+    if (focused)
+        UiInternal_PushBorder(s_TabX, s_TabY, width, s_TabHeight, style.borderWidth, Ui_GetColor(UiColor::Border));
+    UiFont_Draw(s_TabX + style.rowPadding * 2, s_TabY + style.rowPadding, style.textScale, label, Ui_GetColor(active ? UiColor::TextAccent : UiColor::Text));
+
+    const bool picked = (focused && state.accept) || (hovered && state.pointer.pressed);
+    if (picked)
+        UiInternal_StateFor(s_TabBarId)->whole = index;
+
+    s_TabX += width + style.itemSpacing;
+    return active;
+}
+
+void Ui_EndTabBar()
+{
+    if (!UiInternal_CanDraw() || !s_InTabBar)
+        return;
+    UiInternal_PopId();
+    s_InTabBar = false;
+}
+
+// ---------------------------------------------------------------------------
+// Text
+// ---------------------------------------------------------------------------
+
+void Ui_LabelWrapped(const char* text, UiColor role)
+{
+    if (!UiInternal_CanDraw() || !text || !text[0])
+        return;
+
+    const int scale = Ui_GetStyle().textScale;
+    const int width = Ui_ContentWidth();
+    const int length = static_cast<int>(strlen(text));
+
+    int start = 0;
+    while (start < length)
+    {
+        int take = Ui_TextFit(scale, text + start, width);
+        if (take <= 0)
+            take = 1;
+        if (start + take < length)
+        {
+            int space = take;
+            while (space > 0 && text[start + space] != ' ')
+                --space;
+            if (space > 0)
+                take = space;
+        }
+        if (take > UI_TEXT_MAX - 1)
+            take = UI_TEXT_MAX - 1;
+
+        char line[UI_TEXT_MAX];
+        memcpy(line, text + start, static_cast<size_t>(take));
+        line[take] = '\0';
+        Ui_LabelColored(line, role);
+
+        start += take;
+        while (start < length && text[start] == ' ')
+            ++start;
+    }
+}
+
+void Ui_LabelAligned(const char* text, UiAlign align, UiColor role)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(Ui_TextHeight(style.textScale), &x, &y, &w, &visible) || !visible)
+        return;
+    Ui_TextAligned(x, y, w, style.textScale, text, align, role);
+}
+
+void Ui_LabelEllipsized(const char* text, UiColor role)
+{
+    if (!UiInternal_CanDraw() || !text)
+        return;
+
+    const int scale = Ui_GetStyle().textScale;
+    const int width = Ui_ContentWidth();
+    if (Ui_TextWidth(scale, text) <= width)
+    {
+        Ui_LabelColored(text, role);
+        return;
+    }
+
+    const int room = width - Ui_TextWidth(scale, ELLIPSIS);
+    int take = (room > 0) ? Ui_TextFit(scale, text, room) : 0;
+    if (take > UI_TEXT_MAX - 4)
+        take = UI_TEXT_MAX - 4;
+
+    char line[UI_TEXT_MAX];
+    memcpy(line, text, static_cast<size_t>(take));
+    line[take] = '\0';
+    strncat(line, ELLIPSIS, sizeof(line) - strlen(line) - 1);
+    Ui_LabelColored(line, role);
+}
+
+void Ui_LabelFormat(const char* format, ...)
+{
+    if (!UiInternal_CanDraw())
+        return;
+    char text[UI_TEXT_MAX];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    Ui_Label(text);
+}
+
+void Ui_LabelValueFormat(const char* label, const char* format, ...)
+{
+    if (!UiInternal_CanDraw())
+        return;
+    char value[UI_TEXT_MAX];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(value, sizeof(value), format, args);
+    va_end(args);
+    Ui_LabelValue(label, value);
+}
+
+int Ui_TextAligned(int x, int y, int w, int scale, const char* text, UiAlign align, UiColor role)
+{
+    const int width = Ui_TextWidth(scale, text);
+    int drawX = x;
+    switch (align)
+    {
+    case UiAlign::Left:
+        break;
+    case UiAlign::Center:
+        drawX = x + (w - width) / 2;
+        break;
+    case UiAlign::Right:
+        drawX = x + w - width;
+        break;
+    case UiAlign::Count:
+        break;
+    }
+    return UiFont_Draw(drawX, y, scale, text, Ui_GetColor(role));
+}

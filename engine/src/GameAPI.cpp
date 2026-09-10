@@ -9,6 +9,8 @@
 
 #include "GameAPI.h"
 
+#include "EngineUi.h"
+
 #include <cstdlib>
 #include <cstring>
 
@@ -467,6 +469,49 @@ namespace game
         if (s_LevelLoaded)
             Engine_Level_SetStreamingCenter(x, z);
     }
+
+    void DrawRect(int x, int y, int width, int height, int r, int g, int b, int a)
+    {
+        Renderer* renderer = Engine_GetRenderer();
+        if (!renderer)
+            return;
+
+        Quad2D quad;
+        quad.x = x;
+        quad.y = y;
+        quad.w = width;
+        quad.h = height;
+        quad.texture = 0;
+        quad.u0 = 0;
+        quad.v0 = 0;
+        quad.u1 = 0;
+        quad.v1 = 0;
+        quad.r = static_cast<uint8_t>(r);
+        quad.g = static_cast<uint8_t>(g);
+        quad.b = static_cast<uint8_t>(b);
+        quad.a = static_cast<uint8_t>(a);
+        renderer->DrawQuad2D(quad);
+    }
+
+    int ScreenWidth() { return Ui_ScreenWidth(); }
+
+    int ScreenHeight() { return Ui_ScreenHeight(); }
+
+    void Text(int x, int y, const char* text) { Ui_Text(x, y, Ui_GetStyle().textScale, text, UiColor::Text); }
+
+    int TextWidth(const char* text) { return Ui_TextWidth(Ui_GetStyle().textScale, text); }
+
+    int TextHeight() { return Ui_TextHeight(Ui_GetStyle().textScale); }
+
+    void Panel(const char* title, int x, int y, int width, int height) { Ui_BeginPanel(title, x, y, width, height); }
+
+    void EndPanel() { Ui_EndPanel(); }
+
+    void Label(const char* text) { Ui_Label(text); }
+
+    bool Button(const char* label) { return Ui_Button(label); }
+
+    void Toast(const char* text, float seconds) { Ui_Toast(text, seconds); }
 
 } // namespace game
 

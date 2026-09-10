@@ -316,7 +316,7 @@ void Ps2GlRenderer::BeginFrame()
 
 void Ps2GlRenderer::EndFrame()
 {
-    FlushRects2D();
+    FlushQuads2D();
 
     // Order matches the ps2glut reference loop. ps2gl double-buffers the DMA
     // packet: pglRenderGeometry() sends LastPacket, and pglSwapBuffers() is what
@@ -338,7 +338,6 @@ void Ps2GlRenderer::EndFrame()
     m_inFrame = false;
 }
 
-void Ps2GlRenderer::DrawDebugOverlay() {} // text/fonts dropped with raylib
 
 void Ps2GlRenderer::ClearFrame(const Color3& color)
 {
@@ -354,29 +353,31 @@ void Ps2GlRenderer::ClearFrame(const Color3& color)
     }
 }
 
-void Ps2GlRenderer::DrawRect2D(int32_t x, int32_t y, int32_t width, int32_t height, const Color3& color)
+void Ps2GlRenderer::DrawQuad2D(const Quad2D& quad)
 {
-    if (m_rect2DCount >= GL_MAX_2D_RECTS)
+    if (m_quad2DCount >= GL_MAX_2D_QUADS)
     {
-        ++m_droppedRects2D;
+        ++m_droppedQuads2D;
         return;
     }
-    m_rects2D[m_rect2DCount++] = Rect2D{x, y, width, height, color};
+    m_quads2D[m_quad2DCount++] = quad;
 }
 
-void Ps2GlRenderer::FlushRects2D()
+void Ps2GlRenderer::FlushQuads2D()
 {
-    if (m_droppedRects2D > 0)
+    if (m_droppedQuads2D > 0)
     {
-        Engine_LogError("Ps2GlRenderer: dropped %u 2D rect(s) this frame (queue capacity %u).", m_droppedRects2D, GL_MAX_2D_RECTS);
-        m_droppedRects2D = 0;
+        Engine_LogError("Ps2GlRenderer: dropped %u 2D quad(s) this frame (queue capacity %u).", m_droppedQuads2D, GL_MAX_2D_QUADS);
+        m_droppedQuads2D = 0;
     }
 
-    if (m_rect2DCount == 0)
+    if (m_quad2DCount == 0)
         return;
 
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     // Screen-space quads have a fixed winding that is back-facing under the
     // Y-flipped ortho below; with GL_CULL_FACE left enabled (from Init) every rect
     // would be culled and nothing would show. Disable culling for the 2D pass
@@ -392,20 +393,60 @@ void Ps2GlRenderer::FlushRects2D()
     glPushMatrix();
     glLoadIdentity();
 
-    for (uint16_t i = 0; i < m_rect2DCount; ++i)
+    uint32_t boundTexture = 0;
+    bool texturing = false;
+    for (uint16_t i = 0; i < m_quad2DCount; ++i)
     {
-        const Rect2D& r = m_rects2D[i];
-        const float x0 = static_cast<float>(r.x);
-        const float y0 = static_cast<float>(r.y);
-        const float x1 = static_cast<float>(r.x + r.w);
-        const float y1 = static_cast<float>(r.y + r.h);
+        const Quad2D& q = m_quads2D[i];
+        const float x0 = static_cast<float>(q.x);
+        const float y0 = static_cast<float>(q.y);
+        const float x1 = static_cast<float>(q.x + q.w);
+        const float y1 = static_cast<float>(q.y + q.h);
 
-        glColor4f(r.color.r, r.color.g, r.color.b, 1.0f);
+        if (q.texture != boundTexture)
+        {
+            boundTexture = q.texture;
+            if (boundTexture)
+            {
+                if (!texturing)
+                {
+                    glEnable(GL_TEXTURE_2D);
+                    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+                    texturing = true;
+                }
+                glBindTexture(GL_TEXTURE_2D, boundTexture);
+            }
+            else if (texturing)
+            {
+                glDisable(GL_TEXTURE_2D);
+                texturing = false;
+            }
+        }
+
+        glColor4f(static_cast<float>(q.r) / 255.0f, static_cast<float>(q.g) / 255.0f, static_cast<float>(q.b) / 255.0f, static_cast<float>(q.a) / 255.0f);
         glBegin(GL_QUADS);
-        glVertex2f(x0, y0);
-        glVertex2f(x1, y0);
-        glVertex2f(x1, y1);
-        glVertex2f(x0, y1);
+        if (texturing)
+        {
+            const float u0 = static_cast<float>(q.u0) / 65535.0f;
+            const float v0 = static_cast<float>(q.v0) / 65535.0f;
+            const float u1 = static_cast<float>(q.u1) / 65535.0f;
+            const float v1 = static_cast<float>(q.v1) / 65535.0f;
+            glTexCoord2f(u0, v0);
+            glVertex2f(x0, y0);
+            glTexCoord2f(u1, v0);
+            glVertex2f(x1, y0);
+            glTexCoord2f(u1, v1);
+            glVertex2f(x1, y1);
+            glTexCoord2f(u0, v1);
+            glVertex2f(x0, y1);
+        }
+        else
+        {
+            glVertex2f(x0, y0);
+            glVertex2f(x1, y0);
+            glVertex2f(x1, y1);
+            glVertex2f(x0, y1);
+        }
         glEnd();
     }
 
@@ -414,11 +455,12 @@ void Ps2GlRenderer::FlushRects2D()
     glMatrixMode(GL_MODELVIEW);
     glPopMatrix();
 
+    glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_TEXTURE_2D);
 
-    m_rect2DCount = 0;
+    m_quad2DCount = 0;
 }
 
 void Ps2GlRenderer::DrawGrid(int32_t slices, float spacing)
@@ -1034,8 +1076,9 @@ uint32_t Ps2GlRenderer::UploadTexture(const TextureUpload& upload)
     }
 
     glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    const GLint filter = (upload.filter == TextureFilter::Nearest) ? GL_NEAREST : GL_LINEAR;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, type, copy);

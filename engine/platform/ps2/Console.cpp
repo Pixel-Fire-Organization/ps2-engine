@@ -1,6 +1,7 @@
 #include <cstdio>
 
 #include "EngineCore.h" // Engine_GetRenderer
+#include "EngineUi.h"
 #include "Macros.h"
 #include "Platform.h"
 #include "graphics/Renderer.h"
@@ -54,7 +55,11 @@ void Ps2Platform::ConsoleWrite(LogLevel level, const char* line)
         {
             renderer->BeginFrame();
             renderer->ClearFrame(Color3{1.0f, 0.0f, 0.0f});
-            renderer->DrawRect2D(PANIC_UI_PADDING, PANIC_UI_PADDING, 320, 80, Color3{1.0f, 1.0f, 1.0f});
+
+            const UiRgba white = UiRgba{255, 255, 255, 255};
+            Engine_DrawPanicText(renderer, PANIC_UI_PADDING, PANIC_UI_PADDING, 2, "PANIC", white);
+            Engine_DrawPanicText(renderer, PANIC_UI_PADDING, PANIC_UI_PADDING + 24, 1, message ? message : "<no message>", white);
+
             renderer->EndFrame();
         }
     }

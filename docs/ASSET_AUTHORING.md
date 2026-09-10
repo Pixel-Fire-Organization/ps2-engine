@@ -36,7 +36,7 @@ the source at runtime — only the cooked result is shipped.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `type` | string | `TEXTURE` or `MODEL`. `SOUND` and `FONT` are enumerated but unimplemented |
+| `type` | string | `TEXTURE`, `MODEL` or `FONT`. `SOUND` is enumerated but unimplemented. `THEME` assets are not authored per file — they are cooked from the title's theme declaration |
 | `source` | string | The raw source file, in the same directory |
 | `deps` | string[] | Other assets this one needs, up to the format maximum |
 | `format` | string | Preferred texture encoding. A platform cook list may override it |

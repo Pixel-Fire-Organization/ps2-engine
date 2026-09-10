@@ -134,6 +134,38 @@
 #define UI_MAX_QUADS 4096
 #define UI_MAX_FOCUSABLES 96
 
+// How deeply containers may nest their clip rectangles. Panel, scroll region,
+// column, tree and modal is five; eight leaves headroom without being a budget
+// anyone has to think about.
+#define UI_MAX_CLIP_DEPTH 8
+
+// Widgets that remember something between frames: scroll positions, open flags,
+// repeat timers. Only a minority of widgets need one, so this sits well above
+// the focusable count without being a budget anyone has to think about.
+#define UI_MAX_STATES 128
+
+// Content that must draw above the interface - a modal and its backdrop, a
+// notification, the cursor. Its own buffer, so a modal cannot starve the screen
+// underneath it, and appended at submission so draw order is still one list.
+#define UI_MAX_OVERLAY_QUADS 512
+
+// How many containers may open a navigation group, and how deep an identity
+// scope may nest.
+#define UI_MAX_FOCUS_GROUPS 8
+#define UI_MAX_ID_DEPTH 8
+
+// Queued notifications.
+#define UI_MAX_TOASTS 4
+
+// The longest formatted string a widget will build. Deliberately the same on
+// every platform: a smaller console value would let a message fit on desktop and
+// truncate on the console, which is the worst place to discover it.
+#define UI_TEXT_MAX 192
+
+// Headroom above the interface budget in each backend's screen-space queue, for
+// the game's own screen-space primitive and the panic display.
+#define GFX_MAX_2D_EXTRA 256
+
 // Shared clip-plane distances - both backends must build the same frustum so
 // CPU-side culling matches what the GS rasterizes.
 #define GFX_NEAR_PLANE 0.1f
