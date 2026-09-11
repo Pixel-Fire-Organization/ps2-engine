@@ -25,23 +25,6 @@ bool UI::Add(const UiQuad& quad)
 
 namespace
 {
-    int RowHeight()
-    {
-        const UiStyle& style = Ui_GetStyle();
-        return Ui_TextHeight(style.textScale) + style.rowPadding * 2;
-    }
-
-    UiRgba RowBackground(bool focused, bool hovered, bool held)
-    {
-        if (held)
-            return Ui_GetColor(UiColor::ItemActive);
-        if (hovered)
-            return Ui_GetColor(UiColor::ItemHovered);
-        if (focused)
-            return Ui_GetColor(UiColor::Focus);
-        return Ui_GetColor(UiColor::ItemBackground);
-    }
-
     /// Draw the shared body of an activatable row and report what happened to it.
     /// @param label The row text, which also carries its identity.
     /// @param highlight Whether to draw it as the current choice.
@@ -51,50 +34,7 @@ namespace
     /// @return True on the frame the row is activated.
     bool ActivatableRow(const char* label, bool highlight, int* outX, int* outY, int* outW)
     {
-        const UiStyle& style = Ui_GetStyle();
-        const int height = RowHeight();
-        int x = 0;
-        int y = 0;
-        int w = 0;
-        bool visible = false;
-        if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
-            return false;
-
-        *outX = x;
-        *outY = y;
-        *outW = w;
-
-        UiFrameState& state = UiInternal_State();
-        const uint32_t id = UiInternal_Id(label);
-        const bool focused = UiInternal_RegisterFocusable(id);
-        const bool hovered = UiInternal_PointerOver(x, y, w, height);
-
-        if (hovered)
-        {
-            state.hotId = id;
-            if (state.pointerMoved)
-            {
-                state.focusId = id;
-                state.focusIndex = static_cast<int>(state.focusableCount) - 1;
-                state.navDelta = 0;
-            }
-        }
-
-        if (focused)
-        {
-            state.focusRowTop = y;
-            state.focusRowHeight = height;
-            state.focusRowValid = true;
-        }
-
-        const bool held = hovered && state.pointer.down;
-        UiInternal_PushRect(x, y, w, height, RowBackground(focused || highlight, hovered, held));
-        if (focused)
-            UiInternal_PushBorder(x, y, w, height, style.borderWidth, Ui_GetColor(UiColor::Border));
-
-        const bool byFocus = focused && state.accept;
-        const bool byPointer = hovered && state.pointer.pressed;
-        return byFocus || byPointer;
+        return UiInternal_ActivatableRow(UiInternal_Id(label), highlight, outX, outY, outW);
     }
 } // namespace
 
@@ -119,6 +59,9 @@ void Ui_BeginPanel(const char* title, int x, int y, int w, int h)
     state.contentX = x + style.panelPadding;
     state.contentW = w - style.panelPadding * 2;
     state.cursorY = y + style.panelPadding;
+    state.rowOpen = false;
+    state.runActive = false;
+    state.inlineActive = false;
 
     UiInternal_PushRect(x, y, w, h, Ui_GetColor(UiColor::PanelBackground));
     UiInternal_PushBorder(x, y, w, h, style.borderWidth, Ui_GetColor(UiColor::Border));
@@ -150,7 +93,11 @@ void Ui_Spacing(int pixels)
 {
     if (!UiInternal_CanDraw())
         return;
-    UiInternal_State().cursorY += pixels;
+    UiFrameState& state = UiInternal_State();
+    state.cursorY += pixels;
+    state.rowOpen = false;
+    state.runActive = false;
+    state.inlineActive = false;
 }
 
 void Ui_Separator()
@@ -163,6 +110,19 @@ void Ui_Separator()
     if (!UiInternal_CanDraw() || !UiInternal_TakeRow(style.borderWidth, &x, &y, &w, &visible) || !visible)
         return;
     UiInternal_PushRect(x, y, w, style.borderWidth, Ui_GetColor(UiColor::Border));
+}
+
+void Ui_SeparatorVertical(int height)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
+        return;
+    (void)w;
+    UiInternal_PushRect(x, y, style.borderWidth, height, Ui_GetColor(UiColor::Border));
 }
 
 void Ui_Header(const char* text)
@@ -179,6 +139,8 @@ void Ui_Header(const char* text)
     UiFont_Draw(x, y, style.textScale, text, Ui_GetColor(UiColor::Header));
     UiInternal_PushRect(x, y + height + style.rowPadding - style.borderWidth, w, style.borderWidth, Ui_GetColor(UiColor::Border));
 }
+
+int Ui_ContentX() { return UiInternal_CanDraw() ? UiInternal_State().contentX : 0; }
 
 int Ui_ContentWidth() { return UiInternal_CanDraw() ? UiInternal_State().contentW : 0; }
 
@@ -236,7 +198,7 @@ bool Ui_Button(const char* label)
         return false;
 
     const int textWidth = Ui_TextWidth(style.textScale, label);
-    UiFont_Draw(x + (w - textWidth) / 2, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::Text));
+    UiFont_Draw(x + (w - textWidth) / 2, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiInternal_TextRole(UiColor::Text)));
     return activated;
 }
 
@@ -251,9 +213,9 @@ bool Ui_Selectable(const char* label, bool selected)
         return false;
 
     const int caretWidth = Ui_TextWidth(style.textScale, "> ");
-    const UiColor role = selected ? UiColor::TextAccent : UiColor::Text;
+    const UiColor role = UiInternal_TextRole(selected ? UiColor::TextAccent : UiColor::Text);
     if (selected)
-        UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, ">", Ui_GetColor(UiColor::TextAccent));
+        UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, ">", Ui_GetColor(role));
     UiFont_Draw(x + style.rowPadding + caretWidth, y + style.rowPadding, style.textScale, label, Ui_GetColor(role));
     return activated;
 }
@@ -268,10 +230,10 @@ bool Ui_SelectableValue(const char* label, const char* value, bool selected)
     if (w == 0)
         return false;
 
-    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(selected ? UiColor::TextAccent : UiColor::Text));
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiInternal_TextRole(selected ? UiColor::TextAccent : UiColor::Text)));
 
     const int valueWidth = Ui_TextWidth(style.textScale, value);
-    UiFont_Draw(x + w - valueWidth - style.rowPadding, y + style.rowPadding, style.textScale, value, Ui_GetColor(UiColor::TextDim));
+    UiFont_Draw(x + w - valueWidth - style.rowPadding, y + style.rowPadding, style.textScale, value, Ui_GetColor(UiInternal_TextRole(UiColor::TextDim)));
     return activated;
 }
 
@@ -288,7 +250,7 @@ bool Ui_Checkbox(const char* label, bool* value)
     const int box = Ui_TextHeight(style.textScale);
     const int boxX = x + w - box - style.rowPadding;
     const int boxY = y + style.rowPadding;
-    UiFont_Draw(x + style.rowPadding, boxY, style.textScale, label, Ui_GetColor(UiColor::Text));
+    UiFont_Draw(x + style.rowPadding, boxY, style.textScale, label, Ui_GetColor(UiInternal_TextRole(UiColor::Text)));
     UiInternal_PushBorder(boxX, boxY, box, box, style.borderWidth, Ui_GetColor(UiColor::Border));
 
     const bool on = value && *value;
@@ -319,9 +281,9 @@ bool Ui_SliderInt(const char* label, int* value, int minimum, int maximum)
 
     char readout[64];
     snprintf(readout, sizeof(readout), "%d", *value);
-    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::Text));
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiInternal_TextRole(UiColor::Text)));
     const int readoutWidth = Ui_TextWidth(style.textScale, readout);
-    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiColor::TextAccent));
+    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiInternal_TextRole(UiColor::TextAccent)));
 
     if (!focused)
         return false;
@@ -365,9 +327,9 @@ bool Ui_SliderFloat(const char* label, float* value, float minimum, float maximu
 
     char readout[32];
     snprintf(readout, sizeof(readout), "%.3f", static_cast<double>(*value));
-    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::Text));
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiInternal_TextRole(UiColor::Text)));
     const int readoutWidth = Ui_TextWidth(style.textScale, readout);
-    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiColor::TextAccent));
+    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiInternal_TextRole(UiColor::TextAccent)));
 
     if (!focused)
         return false;
@@ -404,9 +366,9 @@ bool Ui_Stepper(const char* label, int* value, int minimum, int maximum, int ste
 
     char readout[32];
     snprintf(readout, sizeof(readout), "< %d >", *value);
-    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiColor::Text));
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiInternal_TextRole(UiColor::Text)));
     const int readoutWidth = Ui_TextWidth(style.textScale, readout);
-    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(focused ? UiColor::TextAccent : UiColor::TextDim));
+    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiInternal_TextRole(focused ? UiColor::TextAccent : UiColor::TextDim)));
 
     if (!focused)
         return false;
@@ -428,6 +390,46 @@ bool Ui_Stepper(const char* label, int* value, int minimum, int maximum, int ste
     return true;
 }
 
+bool Ui_Combo(const char* label, int* index, const char* const* items, int count)
+{
+    const UiStyle& style = Ui_GetStyle();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    const bool activated = ActivatableRow(label, false, &x, &y, &w);
+    if (w == 0 || !index || !items || count <= 0)
+        return false;
+
+    if (*index < 0 || *index >= count)
+        *index = 0;
+
+    UiFrameState& state = UiInternal_State();
+    const bool focused = state.focusId == UiInternal_Id(label);
+
+    char readout[UI_TEXT_MAX];
+    snprintf(readout, sizeof(readout), "< %s >", items[*index]);
+    UiFont_Draw(x + style.rowPadding, y + style.rowPadding, style.textScale, label, Ui_GetColor(UiInternal_TextRole(UiColor::Text)));
+    const int readoutWidth = Ui_TextWidth(style.textScale, readout);
+    UiFont_Draw(x + w - readoutWidth - style.rowPadding, y + style.rowPadding, style.textScale, readout, Ui_GetColor(UiInternal_TextRole(focused ? UiColor::TextAccent : UiColor::TextDim)));
+
+    if (!focused)
+        return false;
+
+    const int direction = state.horizontalRepeat;
+    if (direction == 0)
+        return activated;
+    state.consumedHorizontal = true;
+
+    int next = (*index + direction) % count;
+    if (next < 0)
+        next += count;
+    if (next == *index)
+        return false;
+
+    *index = next;
+    return true;
+}
+
 bool Ui_Radio(const char* label, int* value, int option)
 {
     const UiStyle& style = Ui_GetStyle();
@@ -446,7 +448,7 @@ bool Ui_Radio(const char* label, int* value, int option)
     if (selected)
         UiInternal_PushRect(boxX + 3, boxY + 3, box - 6, box - 6, Ui_GetColor(UiColor::TextAccent));
 
-    UiFont_Draw(boxX + box + style.rowPadding, boxY, style.textScale, label, Ui_GetColor(selected ? UiColor::TextAccent : UiColor::Text));
+    UiFont_Draw(boxX + box + style.rowPadding, boxY, style.textScale, label, Ui_GetColor(UiInternal_TextRole(selected ? UiColor::TextAccent : UiColor::Text)));
 
     if (activated && *value != option)
     {
@@ -600,4 +602,55 @@ void Ui_Rect(int x, int y, int w, int h, UiColor role) { UiInternal_PushRect(x, 
 
 void Ui_RectRgba(int x, int y, int w, int h, UiRgba color) { UiInternal_PushRect(x, y, w, h, color); }
 
+void Ui_RectOutline(int x, int y, int w, int h, int thickness, UiColor role) { UiInternal_PushBorder(x, y, w, h, thickness, Ui_GetColor(role)); }
+
 int Ui_Text(int x, int y, int scale, const char* text, UiColor role) { return UiFont_Draw(x, y, scale, text, Ui_GetColor(role)); }
+
+namespace
+{
+    void ImagePlaceholder(int x, int y, int w, int h)
+    {
+        const UiStyle& style = Ui_GetStyle();
+        UiInternal_PushRect(x, y, w, h, Ui_GetColor(UiColor::ItemBackground));
+        UiInternal_PushBorder(x, y, w, h, style.borderWidth, Ui_GetColor(UiColor::Border));
+    }
+} // namespace
+
+void Ui_ImageAt(int32_t handle, int x, int y, int w, int h, uint16_t u0, uint16_t v0, uint16_t u1, uint16_t v1, UiColor tint)
+{
+    uint32_t texture = 0;
+    int texW = 0;
+    int texH = 0;
+    if (UiInternal_ResolveTexture(handle, &texture, &texW, &texH) != UiTextureState::Ready)
+    {
+        ImagePlaceholder(x, y, w, h);
+        return;
+    }
+    UiInternal_PushTexturedQuad(x, y, w, h, texture, u0, v0, u1, v1, Ui_GetColor(tint));
+}
+
+void Ui_Image(int32_t handle, int height)
+{
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
+        return;
+
+    uint32_t texture = 0;
+    int texW = 0;
+    int texH = 0;
+    if (UiInternal_ResolveTexture(handle, &texture, &texW, &texH) != UiTextureState::Ready || texW <= 0 || texH <= 0)
+    {
+        ImagePlaceholder(x, y, w, height);
+        return;
+    }
+
+    int drawW = (height * texW) / texH;
+    if (drawW > w)
+        drawW = w;
+    if (drawW <= 0)
+        drawW = w;
+    UiInternal_PushTexturedQuad(x, y, drawW, height, texture, 0, 0, 65535, 65535, Ui_GetColor(UiColor::Text));
+}

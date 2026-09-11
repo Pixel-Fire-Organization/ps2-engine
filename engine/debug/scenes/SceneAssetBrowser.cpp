@@ -14,9 +14,9 @@ namespace
 {
     const int PANEL_MARGIN = 16;
     const int COLUMN_GAP = 8;
-    const int ENTRIES_PER_PAGE = 8;
     const float PREVIEW_SIZE = 3.0f;
     const float PREVIEW_SPIN = 0.5f;
+    const int IMAGE_PREVIEW_HEIGHT = 96;
 
     int32_t s_Mount = -1;
     uint32_t s_Entry = 0;
@@ -47,17 +47,6 @@ namespace
             break;
         }
         return "?";
-    }
-
-    /// Show the tail of a key, which is the part that identifies it; a full path
-    /// is wider than a panel on the smallest screen.
-    /// @param key The canonical key.
-    /// @param budget How many characters fit.
-    /// @return A pointer into `key`, at its start when it already fits.
-    const char* Tail(const char* key, int budget)
-    {
-        const int length = static_cast<int>(strlen(key));
-        return (length <= budget) ? key : (key + length - budget);
     }
 
     void ForgetEntry()
@@ -130,7 +119,7 @@ namespace
             char value[48];
             snprintf(value, sizeof(value), "%u KB", static_cast<unsigned>(info.payloadBytes / 1024u));
             Ui_LabelValue("PAYLOAD", value);
-            Ui_LabelColored(Tail(info.path, 28), UiColor::TextDim);
+            Ui_LabelPath(info.path, UiColor::TextDim);
         }
 
         if (mounted == 0)
@@ -156,17 +145,33 @@ namespace
             Ui_EndPanel();
             return;
         }
-        for (uint32_t i = 0; i < info.entryCount; ++i)
-        {
-            ArchiveTocEntry toc;
-            char name[IO_FILE_MAX_PATH];
-            if (!Engine_Archive_GetEntry(s_Mount, i, &toc, name, sizeof(name)))
-                continue;
 
-            char row[64];
-            snprintf(row, sizeof(row), "%.22s  %uK", Tail(name, 22), static_cast<unsigned>(toc.size / 1024u));
-            if (Ui_Selectable(row, s_HaveEntry && i == s_Entry))
-                SelectEntry(s_Mount, i);
+        const UiStyle& style = Ui_GetStyle();
+        const int sizeColumn = Ui_TextWidth(style.textScale, "9999K") + style.rowPadding * 2;
+        const int widths[] = {0, sizeColumn};
+        if (Ui_BeginTable("list", widths, 2))
+        {
+            const char* const headers[] = {"NAME", "SIZE"};
+            Ui_TableHeader(headers);
+            for (uint32_t i = 0; i < info.entryCount; ++i)
+            {
+                ArchiveTocEntry toc;
+                char name[IO_FILE_MAX_PATH];
+                if (!Engine_Archive_GetEntry(s_Mount, i, &toc, name, sizeof(name)))
+                    continue;
+
+                Ui_PushIdIndex(static_cast<int>(i));
+                const bool activated = Ui_TableRow(name, s_HaveEntry && i == s_Entry);
+                Ui_PopId();
+                if (activated)
+                    SelectEntry(s_Mount, i);
+
+                Ui_TableCell(name, UiAlign::Left, UiColor::Text);
+                char size[16];
+                snprintf(size, sizeof(size), "%uK", static_cast<unsigned>(toc.size / 1024u));
+                Ui_TableCell(size, UiAlign::Right, UiColor::TextDim);
+            }
+            Ui_EndTable();
         }
         Ui_EndScroll();
         Ui_EndPanel();
@@ -183,7 +188,7 @@ namespace
             return;
         }
 
-        Ui_LabelColored(Tail(s_EntryName, 28), UiColor::TextAccent);
+        Ui_LabelPath(s_EntryName, UiColor::TextAccent);
 
         char value[48];
         snprintf(value, sizeof(value), "%u", static_cast<unsigned>(s_EntryToc.size));
@@ -211,7 +216,7 @@ namespace
         Ui_LabelValue("DEPS", value);
 
         for (uint8_t d = 0; d < s_Header.depCount && d < RES_MAX_DEPENDENCIES; ++d)
-            Ui_LabelColored(Tail(s_Header.deps[d], 28), UiColor::TextDim);
+            Ui_LabelPath(s_Header.deps[d], UiColor::TextDim);
 
         Ui_Separator();
 
@@ -222,6 +227,8 @@ namespace
             {
                 snprintf(value, sizeof(value), "%dX%d", static_cast<int>(info.width), static_cast<int>(info.height));
                 Ui_LabelValue("LOADED", (info.state == RES_STATE_READY) ? value : "LOADING");
+                if (info.type == RES_TEXTURE)
+                    Ui_Image(s_Preview, IMAGE_PREVIEW_HEIGHT);
             }
             if (Ui_Button("UNLOAD"))
             {
@@ -239,6 +246,11 @@ namespace
         Ui_EndPanel();
     }
 
+    // A texture previews as a flat image in the panel itself (Ui_Image); a
+    // model is not flat, so it gets the 3D viewport and spins to show every
+    // side. This is the cube's original job -- it textured a cube primitive
+    // with whatever was loaded, which only ever made sense for a texture, and
+    // never actually rendered the model geometry a RES_MODEL preview implies.
     void DrawPreview()
     {
         Renderer* renderer = Engine_GetRenderer();
@@ -248,7 +260,7 @@ namespace
         renderer->ClearFrame(Color3{0.06f, 0.07f, 0.10f});
 
         ResourceInfo info;
-        if (s_Preview < 0 || !Engine_Resource_GetInfo(s_Preview, &info) || info.state != RES_STATE_READY || info.type != RES_TEXTURE)
+        if (s_Preview < 0 || !Engine_Resource_GetInfo(s_Preview, &info) || info.state != RES_STATE_READY || info.type != RES_MODEL)
             return;
 
         Camera3D camera;
@@ -260,8 +272,8 @@ namespace
         renderer->SetCamera3D(static_cast<CameraID>(0), camera);
         renderer->SetActiveCamera3D(static_cast<CameraID>(0));
 
-        renderer->AddPrimitiveToDrawList(Primitive3D::Cube, Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.3f, s_Spin, 0.0f},
-                                         Vector3{PREVIEW_SIZE, PREVIEW_SIZE, PREVIEW_SIZE}, Color3{1.0f, 1.0f, 1.0f}, s_Preview);
+        renderer->AddModelToDrawList(s_Preview, Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.3f, s_Spin, 0.0f},
+                                     Vector3{PREVIEW_SIZE, PREVIEW_SIZE, PREVIEW_SIZE});
     }
 } // namespace
 

@@ -52,6 +52,16 @@ content is playable on a desktop — that mapping is a named, disableable layer,
 not something baked into the device queries. With it disabled, the keyboard still
 reports as a keyboard; only the virtual pad disappears.
 
+**The character channel is not a keyboard query.** `Platform::Keyboard_PopCharacters`
+exists for text entry (`PlatformCapability::TextCharacters`) and is drained by
+the UI subsystem's own text-editing widgets, never through the keyboard device
+group above. Pressing A is a `KeyboardKey::A` edge to this subsystem's query
+model and, on a platform that also offers the character channel, an `'a'` byte
+to that separate stream at the same time. The two are never merged, for the
+same reason keyboard and gamepad stay separate device groups: a caller reading
+raw key state should never also be silently consuming bytes meant for whatever
+text field currently has focus.
+
 **Touch positions are normalised, not pixels.** Contacts are reported in [0,1]
 over their own surface. This is not a convenience: a rear touch surface is behind
 the device and has no pixel correspondence to anything on screen, so reporting it

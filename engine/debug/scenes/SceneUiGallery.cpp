@@ -7,14 +7,39 @@
 namespace
 {
     const int PANEL_MARGIN = 16;
-    const int PAGE_COUNT = 2;
+    const int PAGE_COUNT = 3;
     const int PLOT_SAMPLES = 48;
     const int BOX_HEIGHT = 90;
+    const int LIST_BOX_HEIGHT = 70;
 
     bool s_Toggle = true;
     int s_Slider = 32;
     float s_Wave[PLOT_SAMPLES];
     float s_Phase = 0.0f;
+
+    const char* const kChoices[] = {"ALPHA", "BETA", "GAMMA"};
+    const int kChoiceCount = static_cast<int>(sizeof(kChoices) / sizeof(kChoices[0]));
+    int s_ComboIndex = 0;
+    int s_ListIndex = 0;
+    bool s_DisabledDummy = false;
+    const char* s_LastMenuPick = "NONE";
+
+    char s_PlayerName[32] = "PLAYER ONE";
+    bool s_ShowMessage = false;
+    bool s_ShowConfirm = false;
+    bool s_ShowTextDialog = false;
+    char s_TextDialogBuffer[32] = "EDIT ME";
+    const char* s_LastDialogResult = "NONE";
+
+    struct SampleRow
+    {
+        const char* name;
+        int value;
+    };
+    const SampleRow kSampleRows[] = {
+        {"ATTACK", 12}, {"DEFENSE", 8}, {"SPEED", 21},
+    };
+    const int kSampleRowCount = static_cast<int>(sizeof(kSampleRows) / sizeof(kSampleRows[0]));
 
     const char* const kGlyphRows[] = {
         "ABCDEFGHIJKLM",
@@ -34,6 +59,16 @@ namespace
         Ui_LabelColored("WARNING", UiColor::TextWarn);
         Ui_LabelValue("LABEL VALUE", "RIGHT");
         Ui_Separator();
+
+        const int third = Ui_ContentWidth() / 3;
+        const int barHeight = Ui_TextHeight(Ui_GetStyle().textScale) + Ui_GetStyle().rowPadding * 2;
+        Ui_SameLine(third);
+        Ui_Button("LEFT");
+        Ui_SameLine(Ui_GetStyle().itemSpacing * 2 + Ui_GetStyle().borderWidth);
+        Ui_SeparatorVertical(barHeight);
+        Ui_SameLine(0);
+        Ui_Button("RIGHT");
+
         Ui_Button("BUTTON");
         Ui_Selectable("SELECTABLE", false);
         Ui_Selectable("SELECTED", true);
@@ -46,6 +81,117 @@ namespace
         Ui_Point(0.1f, 0.9f, UiColor::BarFill);
         Ui_Point(0.9f, 0.1f, UiColor::TextWarn);
         Ui_EndPointBox();
+    }
+
+    void DrawMore()
+    {
+        if (Ui_BeginMenuBar())
+        {
+            if (Ui_BeginMenu("FILE"))
+            {
+                if (Ui_MenuItem("NEW", ""))
+                    s_LastMenuPick = "NEW";
+                if (Ui_MenuItem("OPEN", ""))
+                    s_LastMenuPick = "OPEN";
+                if (Ui_MenuItem("SAVE", "CTRL+S"))
+                    s_LastMenuPick = "SAVE";
+                Ui_EndMenu();
+            }
+            if (Ui_BeginMenu("VIEW"))
+            {
+                if (Ui_MenuItem("GRID", ""))
+                    s_LastMenuPick = "GRID";
+                if (Ui_MenuItem("LIST", ""))
+                    s_LastMenuPick = "LIST";
+                Ui_EndMenu();
+            }
+            Ui_EndMenuBar();
+        }
+        Ui_LabelValue("MENU PICK", s_LastMenuPick);
+
+        Ui_Separator();
+        Ui_Header("SPLIT BUTTON");
+        if (Ui_SplitButton("EXPORT", UiIcon::ChevronDown))
+            s_LastMenuPick = "EXPORT (PRIMARY)";
+        if (Ui_BeginMenu("EXPORT"))
+        {
+            if (Ui_MenuItem("AS PNG", ""))
+                s_LastMenuPick = "EXPORT AS PNG";
+            if (Ui_MenuItem("AS JSON", ""))
+                s_LastMenuPick = "EXPORT AS JSON";
+            Ui_EndMenu();
+        }
+
+        Ui_Separator();
+        Ui_Header("CHOICE AND LIST");
+        Ui_Combo("COMBO", &s_ComboIndex, kChoices, kChoiceCount);
+        Ui_ListBox("listbox", &s_ListIndex, kChoices, kChoiceCount, LIST_BOX_HEIGHT);
+
+        Ui_Separator();
+        Ui_Header("DISABLED SCOPE");
+        Ui_Button("ENABLED BUTTON");
+        Ui_BeginDisabled(true);
+        Ui_Button("DISABLED BUTTON");
+        Ui_Checkbox("DISABLED CHECKBOX", &s_DisabledDummy);
+        Ui_EndDisabled();
+
+        Ui_Separator();
+        Ui_Header("DIALOGS AND TEXT ENTRY");
+        if (Ui_TextInput("NAME", s_PlayerName, sizeof(s_PlayerName)))
+            s_LastDialogResult = "NAME CHANGED";
+        Ui_LabelValue("DIALOG RESULT", s_LastDialogResult);
+        Ui_SameLine(Ui_ContentWidth() / 3);
+        if (Ui_Button("MESSAGE"))
+            s_ShowMessage = true;
+        Ui_SameLine(Ui_ContentWidth() / 3);
+        if (Ui_Button("CONFIRM"))
+            s_ShowConfirm = true;
+        Ui_SameLine(0);
+        if (Ui_Button("TEXT DIALOG"))
+            s_ShowTextDialog = true;
+
+        Ui_Separator();
+        Ui_Header("TABLE");
+        const int widths[] = {0, 60};
+        if (Ui_BeginTable("stats", widths, 2))
+        {
+            const char* const headers[] = {"STAT", "VALUE"};
+            Ui_TableHeader(headers);
+            for (int i = 0; i < kSampleRowCount; ++i)
+            {
+                Ui_PushIdIndex(i);
+                Ui_TableRow(kSampleRows[i].name, false);
+                Ui_PopId();
+
+                Ui_TableCell(kSampleRows[i].name, UiAlign::Left, UiColor::Text);
+                char value[16];
+                snprintf(value, sizeof(value), "%d", kSampleRows[i].value);
+                Ui_TableCell(value, UiAlign::Right, UiColor::TextAccent);
+            }
+            Ui_EndTable();
+        }
+
+        Ui_Separator();
+        Ui_Header("ICONS");
+        // Same-sized slots for all but the last, which takes what is left --
+        // Ui_SameLine(0) claims the rest of the row, so only one call may use it.
+        const int iconCell = Ui_TextHeight(Ui_GetStyle().textScale) + Ui_GetStyle().iconSpacing * 2;
+        Ui_SameLine(iconCell);
+        Ui_Icon(UiIcon::ButtonSouth, UiColor::TextAccent);
+        Ui_SameLine(iconCell);
+        Ui_Icon(Ui_ButtonIcon(GamepadButton::Circle), UiColor::TextWarn);
+        Ui_SameLine(iconCell);
+        Ui_Icon(UiIcon::DPad, UiColor::Text);
+        Ui_SameLine(iconCell);
+        Ui_Icon(UiIcon::Warning, UiColor::TextWarn);
+        Ui_SameLine(0);
+        Ui_Icon(UiIcon::Check, UiColor::BarFill);
+
+        const UiHint hints[] = {
+            {Ui_ButtonIcon(GamepadButton::Cross), "ACCEPT"},
+            {Ui_ButtonIcon(GamepadButton::Circle), "BACK"},
+        };
+        Ui_HintBar(hints, static_cast<int>(sizeof(hints) / sizeof(hints[0])));
     }
 
     void DrawGlyphs(int x, int y)
@@ -86,7 +232,7 @@ void Scene_UiGallery_Update(float dt)
 
     Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
 
-    static const char* const PAGES[PAGE_COUNT] = {"WIDGETS", "GLYPHS"};
+    static const char* const PAGES[PAGE_COUNT] = {"WIDGETS", "MORE", "GLYPHS"};
 
     Ui_BeginPanelSlot("UI GALLERY", UiPanelSlot::Full);
     const int page = Testbed_Tabs("pages", PAGES, PAGE_COUNT);
@@ -99,6 +245,54 @@ void Scene_UiGallery_Update(float dt)
         snprintf(text, sizeof(text), "%u OF %u", static_cast<unsigned>(Ui_QuadsUsed()), static_cast<unsigned>(Ui_QuadBudget()));
         Ui_LabelValue("QUADS", text);
         Ui_EndPanel();
+        return;
+    }
+
+    if (page == 1)
+    {
+        DrawMore();
+        Ui_EndPanel();
+
+        // Dialogs draw a real modal, so these are called here, outside the
+        // panel DrawMore() drew into -- the same placement Ui_BeginModal
+        // itself requires, and why Ui_TextInput above needs none of this.
+        if (s_ShowMessage)
+        {
+            const UiDialogResult result = Ui_MessageDialog("gallery-message", "MESSAGE", "A one-button acknowledgement, drawn by whichever mechanism this platform offers.");
+            if (result != UiDialogResult::Pending)
+            {
+                s_ShowMessage = false;
+                s_LastDialogResult = "MESSAGE DISMISSED";
+            }
+        }
+        if (s_ShowConfirm)
+        {
+            const UiDialogResult result = Ui_ConfirmDialog("gallery-confirm", "CONFIRM", "Accept or cancel?");
+            if (result == UiDialogResult::Accepted)
+            {
+                s_ShowConfirm = false;
+                s_LastDialogResult = "CONFIRMED";
+            }
+            else if (result == UiDialogResult::Cancelled)
+            {
+                s_ShowConfirm = false;
+                s_LastDialogResult = "CONFIRM CANCELLED";
+            }
+        }
+        if (s_ShowTextDialog)
+        {
+            const UiDialogResult result = Ui_TextDialog("gallery-text", "EDIT VALUE", s_TextDialogBuffer, sizeof(s_TextDialogBuffer));
+            if (result == UiDialogResult::Accepted)
+            {
+                s_ShowTextDialog = false;
+                s_LastDialogResult = "TEXT DIALOG ACCEPTED";
+            }
+            else if (result == UiDialogResult::Cancelled)
+            {
+                s_ShowTextDialog = false;
+                s_LastDialogResult = "TEXT DIALOG CANCELLED";
+            }
+        }
         return;
     }
 

@@ -14,8 +14,6 @@ namespace
     const int PANEL_MARGIN = 16;
     const int COLUMN_GAP = 8;
     const int SLOTS = 4;
-    const uint32_t TABLE_ROWS_SHOWN = 8;
-    const int KEY_CHARS_SHOWN = 18;
     const char* const TEXTURE_PATH = "RASSETS\\BOX.PS2A";
 
     const char* TypeName(ResourceType type)
@@ -34,14 +32,6 @@ namespace
             return "THM";
         }
         return "?";
-    }
-
-    /// @param key The canonical key.
-    /// @return Its tail, which is the part that identifies it in a narrow panel.
-    const char* ShortKey(const char* key)
-    {
-        const int length = static_cast<int>(strlen(key));
-        return (length <= KEY_CHARS_SHOWN) ? key : (key + length - KEY_CHARS_SHOWN);
     }
 
     int32_t s_Handles[SLOTS];
@@ -124,20 +114,36 @@ void Scene_Resources_Update(float dt)
 
     const uint32_t capacity = Engine_Resource_GetCapacity();
     uint32_t live = 0;
-    uint32_t shown = 0;
-    for (uint32_t i = 0; i < capacity; ++i)
-    {
-        ResourceInfo info;
-        if (!Engine_Resource_GetInfo(static_cast<int32_t>(i), &info))
-            continue;
-        ++live;
-        if (shown >= TABLE_ROWS_SHOWN)
-            continue;
-        ++shown;
 
-        char row[64];
-        snprintf(row, sizeof(row), "%s%s R%u", info.pinned ? "PIN " : "", TypeName(info.type), static_cast<unsigned>(info.refCount));
-        Ui_LabelValue(row, ShortKey(info.key));
+    // Leave room below the scroll region for the "SLOTS USED" summary row.
+    const UiStyle& style = Ui_GetStyle();
+    const int trailerHeight = Ui_TextHeight(style.textScale) + style.itemSpacing;
+    const int scrollHeight = Ui_ContentHeight() - trailerHeight;
+
+    if (scrollHeight > 0 && Ui_BeginScroll("live", scrollHeight))
+    {
+        const int scale = style.textScale;
+        for (uint32_t i = 0; i < capacity; ++i)
+        {
+            ResourceInfo info;
+            if (!Engine_Resource_GetInfo(static_cast<int32_t>(i), &info))
+                continue;
+            ++live;
+
+            char tag[24];
+            snprintf(tag, sizeof(tag), "%s%s R%u", info.pinned ? "PIN " : "", TypeName(info.type), static_cast<unsigned>(info.refCount));
+
+            const int room = Ui_ContentWidth() - Ui_TextWidth(scale, tag) - Ui_GetStyle().itemSpacing * 2;
+            const char* tail = (room > 0) ? Ui_TextFitTail(scale, info.key, room) : info.key;
+
+            char value[64];
+            if (tail == info.key)
+                snprintf(value, sizeof(value), "%s", info.key);
+            else
+                snprintf(value, sizeof(value), "...%s", tail);
+            Ui_LabelValue(tag, value);
+        }
+        Ui_EndScroll();
     }
 
     if (live == 0)

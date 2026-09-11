@@ -32,9 +32,11 @@ by hardware varies in the atlas.
 
 ```
 +-----------------------------+
-| font header (24 bytes)      |
+| font header (28 bytes)      |
 +-----------------------------+
 | glyph table                 |  glyphCount entries, 12 bytes each
++-----------------------------+
+| cell table                  |  cellCount entries, 12 bytes each -- optional
 +-----------------------------+
 ```
 
@@ -53,23 +55,46 @@ by hardware varies in the atlas.
 | 18 | `firstCode` | 2 | codepoint of the first glyph in the table |
 | 20 | `glyphCount` | 2 | entries following |
 | 22 | `missingIndex` | 2 | glyph drawn for a codepoint outside the table |
+| 24 | `cellCount` | 2 | cell entries following the glyph table; zero is valid |
+| 26 | `cellOffset` | 2 | byte offset of the cell table from the start of the payload |
 
-### Glyph entry
+`cellOffset` is redundant with `glyphCount` -- it always equals the byte just
+past the glyph table -- and is declared anyway rather than derived, the same
+reasoning `atlasWidth`/`atlasHeight` duplicate the atlas dependency's own
+dimensions: a reader that trusts a derived value catches nothing when the
+writer's derivation and its own disagree, so both sides state it and a reader
+refuses a mismatch instead of silently reading from the wrong offset.
+
+### Glyph entry, and the cell entry that shares its layout
 
 | Offset | Field | Width | Meaning |
 |---|---|---|---|
-| 0 | `u` | 2 | atlas column of the glyph's left edge, in texels |
-| 2 | `v` | 2 | atlas row of the glyph's top edge, in texels |
-| 4 | `w` | 1 | glyph width in texels |
-| 5 | `h` | 1 | glyph height in texels |
-| 6 | `bearingX` | 1, signed | pixels from the pen to the glyph's left edge |
-| 7 | `bearingY` | 1, signed | pixels from the top of the line box to the glyph's top edge |
-| 8 | `advance` | 1 | pixels the pen moves after this glyph |
+| 0 | `u` | 2 | atlas column of the cell's left edge, in texels |
+| 2 | `v` | 2 | atlas row of the cell's top edge, in texels |
+| 4 | `w` | 1 | cell width in texels |
+| 5 | `h` | 1 | cell height in texels |
+| 6 | `bearingX` | 1, signed | pixels from the pen to the cell's left edge |
+| 7 | `bearingY` | 1, signed | pixels from the top of the line box to the cell's top edge |
+| 8 | `advance` | 1 | pixels the pen moves after this cell |
 | 9 | `reserved` | 3 | zero |
 
 Twelve bytes rather than ten so that entries stay four-byte aligned. The
 constrained platform loads the two-byte fields directly out of the mapped
 payload, and an unaligned load there is a fault, not a slow path.
+
+A cell table entry uses the identical twelve-byte layout, addressed by an
+engine-side enumerator rather than a codepoint: icons and controller glyphs,
+alongside the glyph set in the same atlas. It is deliberately a second table
+rather than an extension of the glyph one, because the two are looked up two
+different ways -- a codepoint by subtraction from `firstCode`, a cell by a
+zero-based index the caller already has -- and folding them into one table
+would force one of those lookups to search.
+
+The cell table is genuinely optional: a font with `cellCount` zero is exactly
+as valid as one with some, and every icon this omits falls back to a short
+piece of text at the call site, the same way an unavailable font falls back to
+the built-in one. A game is never blocked on authoring icon art before its text
+can draw.
 
 ## The codepoint range is dense
 
@@ -92,14 +117,15 @@ The atlas dependency carries **coverage only**: how much of each texel the glyph
 covers, and nothing about its colour. Colour comes from the drawing call, which
 is what lets one font serve every colour role and every theme.
 
-**The atlas also reserves one fully-opaque texel**, and the header records where
-it is. Solid fills are drawn from that texel rather than untextured, so a screen
-of panels and text is a single run of one texture instead of alternating between
-textured and untextured state once per row. On the platform that binds textures
-rather than batching them, that is the difference between one bind per frame and
-one per row.
+**A solid fill is never drawn from the atlas.** An earlier version of this
+format reserved a fully-opaque texel so untextured fills could share a texture
+with glyphs, on the theory that it kept the batch to one run. It does the
+opposite on a fill-rate-bound GPU: a solid fill is the majority of the pixels
+the interface draws, and sampling a texture for every one of them costs a
+texture fetch to save a state change at a row boundary that is cheap by
+comparison. Solid fills are untextured; see [subsystems/UI.md](../subsystems/UI.md).
 
-How that coverage is encoded is a platform question, answered by the platform's
+How glyph and cell coverage is encoded is a platform question, answered by the platform's
 cook list:
 
 - Where video memory is scarce, an **indexed** atlas whose colour table is a
@@ -125,9 +151,13 @@ is exact; the same font linearly filtered is blurred at every scale.
 - `atlasWidth` and `atlasHeight` must equal the dependency's actual dimensions.
   They are duplicated here so that metrics can be validated without decoding an
   image, and a disagreement is a cook-time error.
-- Every glyph must lie entirely within the atlas.
-- An advance of zero is refused. It is almost always an authoring mistake, and
-  it produces a line of glyphs stacked on one another.
+- Every glyph and every cell must lie entirely within the atlas.
+- `cellOffset` must equal the byte just past the glyph table; a payload that
+  declares otherwise is refused rather than trusted.
+- A glyph advance of zero is refused, except the first glyph in the table --
+  almost always an authoring mistake, producing a line of glyphs stacked on one
+  another. A **cell** advance of zero is not refused: a cell is never stacked in
+  a run of its own the way glyphs are, so the same value is unremarkable there.
 - **No kerning table.** Advances are per glyph.
 - **No colour, no outline, no shadow, no signed-distance encoding.** A shadow is
   drawn by the caller as a second, offset draw.
@@ -136,3 +166,11 @@ is exact; the same font linearly filtered is blurred at every scale.
   into live state, so parsing catches malformed content as a side effect. The
   theme payload, which is *not* parsed, carries a checksum for exactly that
   reason — see [THEME_FORMAT.md](THEME_FORMAT.md).
+
+## Version history
+
+- **1** — the original layout: a glyph table, and a header field pair naming a
+  reserved fully-opaque texel for solid fills to sample.
+- **2** — replaced that field pair, now unused, with `cellCount` and
+  `cellOffset` naming an optional second table: icons and controller glyphs. A
+  version-1 payload is refused, never migrated.

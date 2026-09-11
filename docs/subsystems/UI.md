@@ -64,6 +64,14 @@ the current clip is dropped before it is submitted, and the rectangles making up
 a single glyph are merged where they are vertically adjacent and identical.
 Neither can change what is drawn, only how many quads say it.
 
+**A solid fill never samples a font atlas.** A panel, a row background, a border
+or a bar is untextured, even while a cooked font is loaded — it costs one vertex
+quad and no texture fetch, which matters on a fill-rate-bound GPU where a solid
+fill is the majority of the pixels drawn. The consequence is that a row of solid
+fill next to glyph text is two runs, not one, so the buffer that groups quads by
+texture for submission is sized with that alternation in mind rather than for a
+batch that never splits.
+
 **The interface clips itself.** Containers establish a clip rectangle, and
 content is clipped against it before it is submitted rather than by the renderer
 afterwards. Clipped-away content therefore costs nothing at all — not to submit,
@@ -93,10 +101,28 @@ content pipeline exists.
 from the widget, so one font serves every colour role at no extra cost, and a
 theme change recolours all text without touching any content.
 
+**Icons and controller glyphs are cells in the same atlas as the glyphs, and
+they are optional the same way a cooked font itself is.** A font may declare a
+set of them, addressed by an interface-defined identifier rather than a
+codepoint; an icon the active font has no cell for draws as a short piece of
+text instead, so a hint bar never goes silent for a button the atlas has not
+been taught to draw. Which shape a button prompt draws for a given pad button
+is a platform fact resolved once per query, never a theme choice — a theme has
+no way to know what hardware it is running on, and getting it wrong would show
+the player a button that is not on the pad in front of them.
+
 **Styling is by role, not by call site.** Colours and metrics are named for what
 they mean — surface, text, accent, focus, and so on — and a widget asks for a
 role rather than a colour. A theme is therefore one value that can be replaced
 whole, and a widget cannot quietly opt out of it.
+
+**A theme is colours and metrics together, not colours alone.** A theme built
+for a small or low-quality display can declare a larger text scale and wider
+borders as part of *being* that theme, rather than a caller composing a colour
+theme with a metrics theme by hand. A declaration names a set of default
+metrics and each theme may override any of them; what it does not name it
+inherits. The style block itself always holds one complete, resolved set — the
+composition happens before a theme is built or cooked, never at draw time.
 
 **Themes are selectable, and loadable.** A set of themes is built in and
 selectable with no I/O, which is what makes the interface drawable before any
@@ -115,10 +141,89 @@ control reachable only by focus wastes a touchscreen.
 **Navigation is grouped.** Containers form navigation groups: directional
 movement along one axis cycles within the active group, and along the other
 moves between groups. Without this a single flat order walks out of one panel
-and into the next one that happened to be built after it. A focused widget that
-consumes an axis — a slider, a stepper, a tab strip — takes precedence over
-group movement on that axis, so a control's own editing gesture is never stolen
-by navigation.
+and into the next one that happened to be built after it.
+
+Widgets placed on the same row form a navigation run, one level narrower than a
+group: directional movement across the row's axis moves within the run before
+it moves between groups, and movement along the other axis steps over the whole
+run to the row above or below rather than through it one widget at a time. A
+row holding a single widget, which is every row that never asked to share one,
+is a run of one and behaves exactly as if runs did not exist.
+
+Left and right therefore have three claimants, tried in order: **the focused
+widget itself**, when it consumes that axis to edit — a slider, a stepper, a tab
+strip — which takes precedence so a control's own editing gesture is never
+stolen by navigation; **the run**, when the focused widget shares its row with
+another; and only then **the group**, moving to an adjacent one. Without the run
+tier, two widgets placed side by side would be reachable only by pointing at
+them, on a console that may have no pointer at all.
+
+**A choice cycles in place; it does not drop down.** A row of options is edited
+the same way a slider or a stepper is, with Left and Right, rather than opening
+a floating list. On a pad, cycling is a strictly better gesture than navigating
+into and back out of a popup, and it keeps every option's draw order exactly
+where the caller put it rather than in a layer the interface would have to
+manage. A choice with too many options to cycle through comfortably is a
+scrolling list of selectable rows, which already exists and needs no popup
+either.
+
+**A disabled scope greys out and disconnects, without moving anything.** A
+widget inside one still draws, in the same place, at the same size, so the
+layout around it is stable whether or not it can be used right now — nothing
+before or after it shifts. It is simply unreachable: not registered for
+directional navigation, not responsive to the pointer, and reporting no
+activation regardless of what a player does to it. Scopes nest, and an inner
+scope that does not itself ask to disable cannot re-enable one an outer scope
+already established — only closing that outer scope can.
+
+**A budget is prevented, not reported after the fact.** `Ui_BeginBudget` caps
+what the widgets before its matching `Ui_EndBudget` may add to the frame's
+quad count; past the cap, a widget still runs — it still reads and writes
+whatever state it owns — but draws nothing, the same shape *Buffer exhausted*
+already has at the whole-frame level, narrowed to one block. `Ui_RunsUsed`
+answers a related but different question: not how many quads this frame
+holds, but how many draw-call runs they would coalesce into, since C1 made
+solid fills untextured — a row alternating solid and glyph content opens one
+run per alternation, which is invisible in a quad count alone.
+
+**A menu bar docks to the top of a frame, and an open menu's items are still
+exactly one submission.** Inside a panel it takes the panel's own top edge;
+outside one, the top of the screen. Its titles share one navigation run, so
+Left and Right move between them the same way they would between any other
+widgets sharing a row. An open menu's item list cannot know its own size before
+every item in it has been asked for — the same problem a scrolling region's
+thumb has — so it is sized from what was measured the frame before, the same
+answer that problem already has elsewhere in this contract: exact once a menu's
+item count has settled, which is the ordinary case, and off by at most one
+frame on the one it opens or changes.
+
+**A dialog and a text field pick their own mechanism, and the caller never
+branches on which one ran.** A message box, a confirmation and a text entry
+are one request shape (`DialogKind`/`DialogRequest` in the platform contract),
+served first by the host's own dialog where `PlatformCapability::SystemDialog`
+answers for it, then — for text specifically — by a direct character channel
+where `PlatformCapability::TextCharacters` answers instead, and always,
+failing both, by the interface's own drawn modal: a message box built from
+`Ui_BeginModal`, and an on-screen keyboard built from the same row/run
+navigation a menu bar's titles already share. The floor is unconditional the
+same way the built-in font and the built-in themes are — nothing above it
+needs to know which of the three ran, because every one of them resolves to
+the same `Ui_MessageDialog`/`Ui_ConfirmDialog`/`Ui_TextDialog` result. A host
+dialog that blocks the calling thread (Win32's `MessageBox`) and one that
+cannot (Vita's, which renders into the title's own frame and only advances
+while it keeps presenting) are both reachable through the same non-blocking
+poll for exactly this reason — the contract is shaped for the stricter of the
+two.
+
+**A field being edited still holds only a draft, never a second copy of the
+truth.** *Nothing displayed is retained* still holds: the text shown while
+editing is the caller's own buffer, written in place as the player types, not
+a value the interface keeps and later hands back. The interface retains only
+which field is being edited and, where a cancel needs to restore what was
+there before, a bounded snapshot taken at the moment editing opened — interaction
+state, in the same sense a scroll position or a held-open tree node already is,
+not displayed content. Text entry supports appending and backspacing from the
+end only; there is no mid-string caret placement, on any mechanism.
 
 **Held directions repeat, in real time.** A direction held down repeats after a
 delay and then at an interval, both measured in seconds. They are never measured
@@ -170,9 +275,11 @@ assumptions, which are the part that does not port.
 
 **Optionally**, and never as a dependency row:
 
-- **Resource** — supplies the cooked font and any cooked theme. Without it the
-  interface runs on its built-in font and its built-in themes, which is a
-  supported configuration rather than a degraded one.
+- **Resource** — supplies the cooked font and any cooked theme, and is what a
+  caller's own handle to a loaded texture resolves against for Ui_Image. The
+  interface never loads that handle itself, only draws whatever it names, so
+  Ui_Image is exactly as optional as the caller's own use of Resource: without
+  it every handle resolves as absent and a placeholder draws.
 
 ## Depended on by
 
@@ -220,7 +327,15 @@ nothing else. This is what a release build and a headless host both look like.
   and the frame is discarded, for the same reason.
 - **Clip stack or scope stack exhausted** — reported once for the frame; the
   offending container is not opened. Nesting deeper than the interface supports
-  is a caller error, not a condition to absorb silently.
+  is a caller error, not a condition to absorb silently. A disabled scope past
+  its own nesting ceiling is the one exception that still opens: since
+  Ui_BeginDisabled reports nothing a caller could react to, the level past
+  capacity is conservatively treated as disabling rather than dropped, so a
+  widget can end up wrongly disabled but never wrongly left reachable.
+- **Nested scrolling region** — a scrolling region opened inside another,
+  including a list box inside either, is refused and reported once; the inner
+  one is not opened. Not a depth limit like the clip and scope stacks above: one
+  level is the limit regardless of how much of either budget remains.
 - **Interaction state store full** — reported once for the frame. Widgets past
   the ceiling still draw and still respond to focus and pointing; they lose only
   what they would have remembered between frames, so a screen degrades rather
@@ -232,6 +347,12 @@ nothing else. This is what a release build and a headless host both look like.
   a bad theme file survivable rather than fatal.
 - **No pointing device and no directional input** — the interface still draws and
   is simply not navigable. It is never a failure to report.
+- **Container budget exhausted** — a widget drawn inside an open `Ui_BeginBudget`
+  scope past the cap that scope was given is dropped and reported once when
+  the scope closes, with a count; the widgets before the cap was reached still
+  drew. This is a narrower version of *Buffer exhausted* above, scoped to one
+  block rather than the whole frame, for a caller that wants a single runaway
+  list to degrade on its own instead of spending the entire screen's budget.
 
 ## Limits
 
@@ -242,17 +363,40 @@ nothing else. This is what a release build and a headless host both look like.
 - **Layout is a cursor, not a solver.** Widgets stack in the order they are asked
   for, within an explicitly placed container or a named screen region. There is
   automatic wrapping and equal division into columns, but no automatic sizing and
-  no constraint solving.
-- **No text entry.** No platform in this engine exposes a key-level keyboard, and
-  the one that offers a system text dialog does not have it wired up.
+  no constraint solving. The cursor moves on a second axis when a caller asks for
+  it: the next widget can be placed beside the previous one instead of below it,
+  at an explicit width the caller gives, rather than one the interface computes.
+  Widgets placed this way form a navigation run, described under *Navigation is
+  grouped* below.
+- **Text entry has no mid-string caret.** `Ui_TextInput` and `Ui_TextDialog`
+  append and backspace from the end of the buffer only; a value cannot be
+  edited in the middle without retyping the tail. This holds on every
+  mechanism, including the platforms with a real keyboard.
+- **At most one dialog or text field is open at once.** Opening a second while
+  one is already open abandons the first rather than queuing it, the same
+  restriction Vita's own dialog service and Win32's blocking `MessageBox`
+  already impose; this interface does not relax it for the platforms that
+  could support more.
 - **No animation.** Nothing moves, fades or eases; a value changes between one
   frame and the next. A notification appears and disappears rather than sliding.
 - **No nested scrolling containers**, and a scrolling region may not contain a
-  column set. One level of each is what the layout cursor supports.
+  column set. One level of each is what the layout cursor supports. A list box
+  is a scrolling region under its own name, so the same limit reaches it: one
+  cannot be placed inside another scrolling region either, and the attempt is
+  refused and reported the same way. A table is not a scrolling region itself
+  and nests inside one freely.
 - **No drag-and-drop, and no movable, overlapping or dockable windows.** This is
   a decision, not a gap: containers are placed explicitly because a window the
   player must drag is unusable with a pad at television distance, and because
   overlapping windows would make draw order something the interface decides
-  rather than something the caller can read off its own calls.
+  rather than something the caller can read off its own calls. A menu bar is
+  not an exception to this: it docks to the top of a frame and nowhere else,
+  which is placement, not the free movement the decision excludes. An open
+  menu's items draw in the overlay layer -- one layer, concatenated after the
+  base one in call order within itself, exactly like a modal or a toast -- so
+  the menu's own draw order is still something the calls that built it
+  determine, not something the interface is deciding on its own.
+- **Submenus are not supported.** A menu opened from inside another menu's
+  items is refused. One level is what exists today.
 - **One font in use at a time per text role**, and role assignment is part of the
   theme rather than a per-call choice.

@@ -102,7 +102,29 @@ changed:
   conversion fails — with the link having succeeded, on a build that worked
   yesterday. Separating the segments keeps the gap a page rather than a
   remainder. The symptom is `vita-elf-create: Cannot allocate N bytes for SCE
-  data at end of segment 0`.
+  data at end of segment 0` (or, once the gap itself is exhausted rather than
+  merely tight, `segment 1 overlaps`).
+- **The page that separation buys is also sized explicitly**, at 64 KB rather
+  than the linker's own 4 KB default, raised once the debug image grew enough
+  during this engine's UI work that the default stopped being reliably
+  enough.
+- **This was chased through several mitigations before the actual cause was
+  found.** A larger page size and `-fno-unwind-tables
+  -fno-asynchronous-unwind-tables` (kept — this project has no use for ARM
+  unwind metadata on top of the exceptions it already disables) each looked
+  like the fix in isolation before failing again under further testing. What
+  those addressed was the *available* side of the margin — alignment padding
+  and dead metadata — without touching *why* the requirement was as large as
+  it was. `vita-elf-create -vvv` names that directly: `Total SCE data size`,
+  the bytes it needs to place, driven by the ELF's own NID import count. This
+  project's native Vita trophy integration (`sceNpTrophy`/`sceNp`/`sceNet`)
+  pulled in four stub libraries' worth of imports for a service that could
+  never work in the first place — see [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md)'s
+  off-the-shelf evaluation for why — and removing it (the code, not just the
+  packaging flag) dropped the requirement from 3780 to 3436 bytes. Confirmed
+  across five consecutive clean rebuilds of both variants plus a full sweep
+  of every platform and configuration, where every earlier mitigation had
+  eventually failed again.
 
 ## Packaging
 

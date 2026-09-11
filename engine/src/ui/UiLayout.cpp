@@ -109,6 +109,98 @@ void Ui_PushIdIndex(int index) { UiInternal_PushIdIndex(index); }
 
 void Ui_PopId() { UiInternal_PopId(); }
 
+void Ui_BeginDisabled(bool disabled)
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (state.disabledStackDepth >= UI_MAX_CLIP_DEPTH)
+    {
+        // Past the array's capacity, so there is nowhere to remember whether
+        // this specific level asked to disable. Ui_BeginDisabled returns
+        // nothing a caller could react to (unlike the internal clip stack, whose
+        // callers check its bool and do not open the container), so the matching
+        // Ui_EndDisabled is coming regardless: count it conservatively as
+        // disabling, and unwind it before touching the real stack, in the same
+        // LIFO order it was pushed.
+        ++state.disabledOverflowCount;
+        ++state.disabledDepth;
+        if (!state.disabledOverflowReported)
+        {
+            state.disabledOverflowReported = true;
+            Engine_LogError("Ui: disabled scopes nested deeper than %u.", static_cast<unsigned>(UI_MAX_CLIP_DEPTH));
+        }
+        return;
+    }
+
+    state.disabledStack[state.disabledStackDepth++] = disabled ? 1 : 0;
+    if (disabled)
+        ++state.disabledDepth;
+}
+
+void Ui_EndDisabled()
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (state.disabledOverflowCount > 0)
+    {
+        --state.disabledOverflowCount;
+        --state.disabledDepth;
+        return;
+    }
+    if (state.disabledStackDepth == 0)
+        return;
+
+    --state.disabledStackDepth;
+    if (state.disabledStack[state.disabledStackDepth])
+        --state.disabledDepth;
+}
+
+// ---------------------------------------------------------------------------
+// The horizontal axis
+// ---------------------------------------------------------------------------
+
+void Ui_SameLine(int width)
+{
+    if (!UiInternal_CanDraw())
+        return;
+
+    UiFrameState& state = UiInternal_State();
+    if (!state.inPanel)
+        return;
+
+    const UiStyle& style = Ui_GetStyle();
+
+    if (state.runActive)
+    {
+        // Continuing a row that already has an inline-placed widget on it:
+        // rewind past its tentative advance and place the pen after its edge.
+        state.cursorY = state.lastRowTop;
+        state.inlineX = state.lastRowRight + style.itemSpacing;
+    }
+    else
+    {
+        // Starting a run. Whatever was drawn last, if anything, took the
+        // row's full width and has nothing to share it with, so the first
+        // widget of the run starts fresh, at the panel's own left edge, where
+        // the cursor already sits.
+        state.lastRowTop = state.cursorY;
+        state.lastRowHeight = 0;
+        state.inlineX = state.contentX;
+        state.rowOpen = true;
+    }
+
+    const int remaining = state.contentX + state.contentW - state.inlineX;
+    state.inlineWidth = (width > 0) ? width : remaining;
+    if (state.inlineWidth < 0)
+        state.inlineWidth = 0;
+    state.inlineActive = true;
+    state.runActive = true;
+}
+
 // ---------------------------------------------------------------------------
 // Scrolling
 // ---------------------------------------------------------------------------
@@ -119,8 +211,17 @@ bool Ui_BeginScroll(const char* id, int height)
         return false;
 
     UiFrameState& state = UiInternal_State();
-    if (!state.inPanel || state.inScroll)
+    if (!state.inPanel)
         return false;
+    if (state.inScroll)
+    {
+        if (!state.scrollNestingReported)
+        {
+            state.scrollNestingReported = true;
+            Engine_LogError("Ui: a scrolling region ('%s') was opened inside another; nesting is not supported, the inner one is not opened.", id ? id : "");
+        }
+        return false;
+    }
 
     int x = 0;
     int y = 0;
@@ -147,6 +248,9 @@ bool Ui_BeginScroll(const char* id, int height)
 
     UiInternal_PushId(id);
     state.cursorY = y - state.scrollY;
+    state.rowOpen = false;
+    state.runActive = false;
+    state.inlineActive = false;
     return true;
 }
 
@@ -204,6 +308,32 @@ void Ui_EndScroll()
 
     state.inScroll = false;
     state.cursorY = state.scrollBottom + Ui_GetStyle().itemSpacing;
+    state.rowOpen = false;
+    state.runActive = false;
+    state.inlineActive = false;
+}
+
+bool Ui_ListBox(const char* id, int* index, const char* const* items, int count, int height)
+{
+    if (!UiInternal_CanDraw() || !index || !items || count <= 0)
+        return false;
+    if (!Ui_BeginScroll(id, height))
+        return false;
+
+    bool changed = false;
+    for (int i = 0; i < count; ++i)
+    {
+        Ui_PushIdIndex(i);
+        if (Ui_Selectable(items[i], i == *index))
+        {
+            *index = i;
+            changed = true;
+        }
+        Ui_PopId();
+    }
+
+    Ui_EndScroll();
+    return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +383,9 @@ void Ui_NextColumn()
     const int gap = Ui_GetStyle().panelGap;
     state.contentX = state.columnX + state.columnIndex * (state.contentW + gap);
     state.cursorY = state.columnStartY;
+    state.rowOpen = false;
+    state.runActive = false;
+    state.inlineActive = false;
 }
 
 void Ui_EndColumns()
@@ -272,6 +405,9 @@ void Ui_EndColumns()
     state.contentX = state.columnX;
     state.contentW = state.columnWidth;
     state.cursorY = state.columnMaxY;
+    state.rowOpen = false;
+    state.runActive = false;
+    state.inlineActive = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +616,29 @@ void Ui_LabelEllipsized(const char* text, UiColor role)
     memcpy(line, text, static_cast<size_t>(take));
     line[take] = '\0';
     strncat(line, ELLIPSIS, sizeof(line) - strlen(line) - 1);
+    Ui_LabelColored(line, role);
+}
+
+void Ui_LabelPath(const char* path, UiColor role)
+{
+    if (!UiInternal_CanDraw() || !path)
+        return;
+
+    const int scale = Ui_GetStyle().textScale;
+    const int width = Ui_ContentWidth();
+    if (Ui_TextWidth(scale, path) <= width)
+    {
+        Ui_LabelColored(path, role);
+        return;
+    }
+
+    const int room = width - Ui_TextWidth(scale, ELLIPSIS);
+    const char* tail = (room > 0) ? Ui_TextFitTail(scale, path, room) : (path + strlen(path));
+
+    char line[UI_TEXT_MAX];
+    strncpy(line, ELLIPSIS, sizeof(line) - 1);
+    line[sizeof(line) - 1] = '\0';
+    strncat(line, tail, sizeof(line) - strlen(line) - 1);
     Ui_LabelColored(line, role);
 }
 

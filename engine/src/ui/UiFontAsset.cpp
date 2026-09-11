@@ -93,23 +93,14 @@ void UiInternal_UpdateFont()
     // it arrives later than the metrics and can still be refused. Waiting and
     // failing look the same from a handle alone, so ask the slot which it is:
     // a slot that is gone means the load failed, and only that is terminal.
-    ResourceInfo info;
-    if (!Engine_Resource_GetInfo(s_Font->atlasResourceId, &info))
+    int atlasW = 0;
+    int atlasH = 0;
+    const UiTextureState atlasState = UiInternal_ResolveTexture(s_Font->atlasResourceId, &s_Atlas, &atlasW, &atlasH);
+    if (atlasState == UiTextureState::Loading)
+        return;
+    if (atlasState != UiTextureState::Ready)
     {
         Unavailable("its atlas could not be loaded");
-        return;
-    }
-    if (info.state != RES_STATE_READY)
-    {
-        s_Atlas = 0;
-        return;
-    }
-
-    const Texture2D* atlas = static_cast<const Texture2D*>(Engine_Resource_Get(s_Font->atlasResourceId));
-    s_Atlas = atlas ? atlas->id : 0u;
-    if (s_Atlas == 0)
-    {
-        Unavailable("its atlas was refused by the renderer");
         return;
     }
 
@@ -151,3 +142,27 @@ const Font* UiInternal_CookedFont() { return (s_State == FontState::Ready && s_A
 uint32_t UiInternal_AtlasTexture() { return s_Atlas; }
 
 bool Ui_FontIsCooked() { return UiInternal_CookedFont() != nullptr; }
+
+UiTextureState UiInternal_ResolveTexture(int32_t handle, uint32_t* outTexture, int* outWidth, int* outHeight)
+{
+    *outTexture = 0;
+    *outWidth = 0;
+    *outHeight = 0;
+    if (handle < 0)
+        return UiTextureState::Absent;
+
+    ResourceInfo info;
+    if (!Engine_Resource_GetInfo(handle, &info) || info.type != RES_TEXTURE)
+        return UiTextureState::Absent;
+    if (info.state != RES_STATE_READY)
+        return UiTextureState::Loading;
+
+    const Texture2D* texture = static_cast<const Texture2D*>(Engine_Resource_Get(handle));
+    if (!texture || texture->id == 0)
+        return UiTextureState::Absent;
+
+    *outTexture = texture->id;
+    *outWidth = info.width;
+    *outHeight = info.height;
+    return UiTextureState::Ready;
+}

@@ -84,6 +84,23 @@ enum class PlatformConstant : uint16_t
     // Input
     MaxGamepadPorts,
 
+    // Which controller glyph family a button prompt should draw. Answers as a
+    // ButtonIconFamily value; see its declaration below. A platform fact, not a
+    // theme choice -- a theme has no way to know what hardware it is running on.
+    ButtonIconFamily,
+
+    Count
+};
+
+/// Which controller glyph family a button prompt should draw. What a platform
+/// answers for PlatformConstant::ButtonIconFamily, cast from the GetConstant
+/// result.
+enum class UiButtonIconFamily : uint8_t
+{
+    PlayStation = 0,
+    Xbox,
+    Keyboard,
+
     Count
 };
 
@@ -99,6 +116,17 @@ enum class PlatformCapability : uint8_t
     AsyncIo,
     FileWrite,
     Touch,
+
+    // Whether Platform::Dialog_Open answers with a host-owned system dialog for
+    // every DialogKind, message boxes and text input alike, rather than the
+    // interface's own drawn fallback.
+    SystemDialog,
+
+    // Whether Platform::Keyboard_PopCharacters ever returns anything: a direct
+    // typing channel, as opposed to a system dialog handling text entry on the
+    // platform's behalf. A platform may have neither, in which case the
+    // interface's own on-screen keyboard is what draws.
+    TextCharacters,
 
     Count
 };

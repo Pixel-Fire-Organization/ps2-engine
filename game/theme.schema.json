@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Theme declaration",
+  "description": "The interface's look, declared once. Every theme here is compiled into the binary and cooked as a loadable asset from the same entry. A theme is a whole style -- colours and metrics together -- so a theme built for a smaller or poorer display can ask for larger text and wider borders, not only different colours. See docs/subsystems/UI.md and docs/formats/THEME_FORMAT.md.",
+  "type": "object",
+  "required": ["themes", "metrics"],
+  "additionalProperties": false,
+
+  "definitions": {
+    "rgba": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+      "description": "Red, green, blue, alpha, 0..255."
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Whole-pixel measurements and repeat timing. Every field is required in the declaration's top-level metrics, which are the defaults a theme falls back to for any field it does not name in its own metrics override.",
+      "properties": {
+        "panelPadding": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "itemSpacing": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "borderWidth": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "textScale": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "rowPadding": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "barHeight": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "cursorSize": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "screenMargin": { "type": "integer", "minimum": 0, "maximum": 512 },
+        "panelGap": { "type": "integer", "minimum": 0, "maximum": 512 },
+        "scrollBarWidth": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "menuBarHeight": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "caretWidth": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "iconSpacing": { "type": "integer", "minimum": 0, "maximum": 128 },
+        "repeatDelaySeconds": { "type": "number", "minimum": 0.01, "maximum": 5.0 },
+        "repeatIntervalSeconds": { "type": "number", "minimum": 0.01, "maximum": 5.0 }
+      }
+    }
+  },
+
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "themes": {
+      "type": "array",
+      "description": "Compiled into the binary as UiBuiltinTheme, and cooked as a loadable THEME_<NAME> asset from the same entry.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "colors"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "Upper snake case. Becomes UiBuiltinTheme::<name> and the cooked asset key THEME_<name>."
+          },
+          "description": { "type": "string" },
+          "colors": {
+            "type": "object",
+            "description": "One entry per UiColor role. The generator checks this against the engine's own enum, so a role added there and forgotten here fails the build rather than drawing black.",
+            "additionalProperties": { "$ref": "#/definitions/rgba" }
+          },
+          "metrics": {
+            "allOf": [{ "$ref": "#/definitions/metrics" }],
+            "description": "Overrides the declaration's top-level metrics field by field; anything not named here is inherited from those defaults."
+          }
+        }
+      }
+    },
+
+    "metrics": { "$ref": "#/definitions/metrics" },
+
+    "fonts": {
+      "type": "object",
+      "description": "Which cooked font asset serves each text role. A role left unset falls through to the built-in font.",
+      "additionalProperties": false,
+      "properties": {
+        "Body": { "type": "string" },
+        "Header": { "type": "string" },
+        "Value": { "type": "string" }
+      }
+    }
+  }
+}

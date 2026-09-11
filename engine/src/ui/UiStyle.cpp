@@ -6,7 +6,7 @@ namespace
 
     const char* const s_ColorNames[static_cast<uint8_t>(UiColor::Count)] = {
         "WINDOW BG", "PANEL BG",   "BORDER",     "HEADER",     "TEXT",     "TEXT DIM",
-        "TEXT ACCENT", "TEXT WARN", "ITEM BG",   "ITEM HOVER", "ITEM ACTIVE", "FOCUS",
+        "TEXT ACCENT", "TEXT WARN", "TEXT DISABLED", "ITEM BG",   "ITEM HOVER", "ITEM ACTIVE", "FOCUS",
         "BAR TRACK", "BAR FILL",   "BAR WARN",   "CURSOR",     "CURSOR EDGE",
     };
 } // namespace

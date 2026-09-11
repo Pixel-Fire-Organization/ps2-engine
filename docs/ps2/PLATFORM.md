@@ -41,6 +41,8 @@ differently per region.
 | Resizable window | No | Framebuffer is fixed at build time |
 | Async IO | Yes | |
 | File write | Yes | To a memory card. The boot device is read-only |
+| System dialog | No | No host dialog service; the UI subsystem's drawn modal covers dialogs and text entry here |
+| Text characters | No | No key-level device to drive one from |
 
 ## Memory
 
@@ -125,6 +127,18 @@ the debug combinations with the full-pad set. See
 | Performance snapshot | L1 + L2 + R1 + R2 |
 | Overlay toggle | L1 + L2 + L3 + R3 |
 | Debug menu | Select + Start |
+
+Button prompts draw PlayStation shapes — this platform's pad is a DualShock 2,
+and the interface's icon set draws accordingly. See
+[subsystems/UI.md](../subsystems/UI.md).
+
+**Text entry has no platform mechanism at all on this console** — neither
+`PlatformCapability::SystemDialog` nor `PlatformCapability::TextCharacters` is
+present — so the UI subsystem's own drawn modal is the only path: a message
+box built from `Ui_BeginModal`, and an on-screen keyboard driven entirely by
+the pad through the same row/run navigation a menu bar already uses. This is
+the floor every platform can fall back to, not a console-specific feature, but
+it is the *only* mechanism this console ever reaches.
 
 ## Threads and synchronisation
 

@@ -23,34 +23,7 @@
   },
 
   "trophies": {
-    "enabled": true,
-    "np_communication_id": "NPWR00001_00",
-    "list": [
-      {
-        "id": 0,
-        "grade": "platinum",
-        "name": "Engine Complete",
-        "detail": "Unlock every other trophy.",
-        "hidden": false,
-        "icon": "trophy/icons/TROP000.PNG"
-      },
-      {
-        "id": 1,
-        "grade": "gold",
-        "name": "World Traveller",
-        "detail": "Load a streamed world and return to the menu.",
-        "hidden": false,
-        "icon": "trophy/icons/TROP001.PNG"
-      },
-      {
-        "id": 2,
-        "grade": "bronze",
-        "name": "First Frame",
-        "detail": "Render the scene menu.",
-        "hidden": false,
-        "icon": "trophy/icons/TROP002.PNG"
-      }
-    ]
+    "enabled": false
   },
 
   "variants": {

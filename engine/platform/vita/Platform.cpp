@@ -18,12 +18,21 @@ extern "C" {
 #define VITA_TITLE_ID_STR "PSEN00001"
 #endif
 
-VitaPlatform::VitaPlatform() : m_startupArgs(), m_logInput(false), m_padReported(false), m_resourceToken("app0:"), m_memory(this), m_trophies(this), m_initialised(false)
+VitaPlatform::VitaPlatform() : m_startupArgs(), m_logInput(false), m_padReported(false), m_resourceToken("app0:"), m_memory(this), m_initialised(false)
 {
     memset(m_pads, 0, sizeof(m_pads));
     memset(m_padsPrev, 0, sizeof(m_padsPrev));
     memset(m_touch, 0, sizeof(m_touch));
     m_writableRoot[0] = '\0';
+
+    m_dialogKind = DialogKind::Count;
+    m_dialogBody[0] = '\0';
+    memset(&m_msgUserParam, 0, sizeof(m_msgUserParam));
+    memset(m_imeTitle, 0, sizeof(m_imeTitle));
+    memset(m_imeInitial, 0, sizeof(m_imeInitial));
+    memset(m_imeInput, 0, sizeof(m_imeInput));
+    m_dialogResultBuffer = nullptr;
+    m_dialogResultBufferSize = 0;
 
     m_startupArgs.commandLine = nullptr;
     m_startupArgs.argv = nullptr;
@@ -108,6 +117,9 @@ uint32_t VitaPlatform::GetConstant(PlatformConstant key) const
     case PlatformConstant::MaxGamepadPorts:
         return MAX_GAME_PAD_PORTS;
 
+    case PlatformConstant::ButtonIconFamily:
+        return static_cast<uint32_t>(UiButtonIconFamily::PlayStation);
+
     case PlatformConstant::Count:
         break;
     }
@@ -140,6 +152,15 @@ bool VitaPlatform::HasCapability(PlatformCapability key) const
 
     case PlatformCapability::Touch:
         return HasTouchSurfaces();
+
+    // sceMsgDialog and sceImeDialog cover every DialogKind this contract has,
+    // through the same sceCommonDialog service the trophy setup dialog already
+    // drives. No character channel: typed text only ever arrives through the
+    // IME dialog, not key by key.
+    case PlatformCapability::SystemDialog:
+        return true;
+    case PlatformCapability::TextCharacters:
+        return false;
 
     case PlatformCapability::Count:
         break;

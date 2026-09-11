@@ -84,8 +84,17 @@ Two engine subsystems arrived together and are easiest to understand as a pair.
   allocated. It fills in `class UI` and `Renderer::AddUIToDrawList`, which had been reserved and empty. Text is drawn
   from a cooked font atlas as **one quad per glyph**, falling back to a built-in 5x7 bitmap font that costs several
   quads per glyph where no cooked font is available. Either way a screen is budgeted in quads (`UI_MAX_QUADS`, a
-  platform constant) and a dense screen is paged rather than allowed to overflow. `AddUIToDrawList` is implemented
-  once in the base class so every backend draws an identical interface.
+  platform constant); a container too tall for its budget is scrolled rather than paged, and work past the frame's
+  own quad ceiling is dropped and reported once, never per item. `AddUIToDrawList` is implemented once in the base
+  class so every backend draws an identical interface. A font's atlas may also carry a cell set of icons and
+  controller glyphs, addressed by `UiIcon` rather than by codepoint (`Ui_Icon`/`Ui_HintBar`); an icon the atlas has
+  no cell for falls back to a short piece of text, and `PlatformConstant::ButtonIconFamily` is what a controller
+  prompt reads to draw the shape or letter the hardware in front of the player actually has. Dialogs and text entry
+  (`Ui_MessageDialog`/`Ui_ConfirmDialog`/`Ui_TextDialog`/`Ui_TextInput`) pick their mechanism from the platform
+  contract in order — `PlatformCapability::SystemDialog`, then (text only) `PlatformCapability::TextCharacters`, then
+  the interface's own drawn modal, which is unconditional and is what PS2 always uses; the two capabilities and
+  `Keyboard_PopCharacters`/`Dialog_Open`/`Dialog_Poll`/`Dialog_Cancel` are platform-contract additions every platform
+  must answer honestly, the same as every other `PlatformCapability` key.
 - **Testbed** (`engine/debug/**`) is the scene catalogue reached by the `DebugChord::DebugMenu` chord. It is
   engine-owned: `game/**` does not know it exists, and the engine turns both subsystems on itself regardless of the
   game's list. Every transition through it calls `Engine_ResetRuntimeState()`, so a scene starts from a known state.
@@ -208,9 +217,12 @@ new platform boot and be validated before any graphics code exists.
   `tools/title.py`) holds who made the title, what it is called, and what each platform files it under. Every
   platform's packaging and every platform's writable-storage location are built from it, so the identity a console
   shows and the identity a save is filed under cannot disagree. `game/achievements.json` (schema and reader
-  alongside) is the same idea for the achievement set, and `game/theme.json` for the interface's look — its
-  themes are generated into the binary *and* cooked as loadable assets from one declaration, and the generator
-  checks it against `UiColor` so a colour role cannot exist in the engine without one.
+  alongside) is the same idea for the achievement set, and `game/theme.json` (schema and reader alongside) for
+  the interface's look — its themes are generated into the binary *and* cooked as loadable assets from one
+  declaration, and the generator checks it against `UiColor` so a colour role cannot exist in the engine without
+  one. A theme is colours *and* metrics together: the declaration's top-level `metrics` are defaults, and any
+  theme may override individual fields, so a theme built for a smaller or poorer display can ask for larger text
+  without every other theme paying for it.
   The PS2 memory card save icon is generated from the same title declaration (`tools/ps2/save_icon.py`): a save
   directory without it is reported as corrupted by the console browser even though its data is intact. A platform config — `game/platform/<name>/package.json`,
   validated against `game/platform/package.schema.json` — carries only what is *specific* to that platform's

@@ -100,6 +100,9 @@ uint32_t Ps2Platform::GetConstant(PlatformConstant key) const
     case PlatformConstant::MaxGamepadPorts:
         return MAX_GAME_PAD_PORTS;
 
+    case PlatformConstant::ButtonIconFamily:
+        return static_cast<uint32_t>(UiButtonIconFamily::PlayStation);
+
     case PlatformConstant::Count:
         break;
     }
@@ -130,6 +133,13 @@ bool Ps2Platform::HasCapability(PlatformCapability key) const
     case PlatformCapability::Mouse:
     case PlatformCapability::AnalogTriggers:
     case PlatformCapability::ResizableWindow:
+        return false;
+
+    // No keyboard means no character channel, and there is no system dialog
+    // service on this hardware: text entry is the interface's own drawn
+    // on-screen keyboard, unconditionally.
+    case PlatformCapability::SystemDialog:
+    case PlatformCapability::TextCharacters:
         return false;
 
     // Writing to the boot device is not supported: cdrom0 is read-only and

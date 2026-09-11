@@ -6,6 +6,7 @@
 #include "UiThemeIds.h"
 #include "graphics/ThemeFormat.h"
 #include "graphics/UI.h"
+#include "platform/PlatformKeys.h"
 
 /// A colour role. Widgets ask for a role, never for a literal colour, so a theme
 /// is one value that can be replaced whole. See docs/subsystems/UI.md.
@@ -19,6 +20,7 @@ enum class UiColor : uint8_t
     TextDim,
     TextAccent,
     TextWarn,
+    TextDisabled,
     ItemBackground,
     ItemHovered,
     ItemActive,
@@ -61,7 +63,10 @@ struct UiStyle
     int16_t screenMargin;
     int16_t panelGap;
     int16_t scrollBarWidth;
-    int16_t reserved[2];
+    int16_t menuBarHeight;
+    int16_t caretWidth;
+    int16_t iconSpacing;
+    int16_t reserved[1];
 };
 
 /// Which device last moved the cursor. The stick source exists on every
@@ -173,8 +178,33 @@ void Ui_EndPanel();
 /// @param pixels How far down to move.
 void Ui_Spacing(int pixels);
 
+/// Place the next widget at an explicit width instead of the panel's full
+/// content width, continuing the current row rather than starting a new one.
+///
+/// Called before the widget it positions, as many times in a row as the row
+/// has widgets: the first call starts a run at the row's left edge -- whatever
+/// was drawn immediately before, if anything, already took the full row and is
+/// not part of it -- and each further call continues it, one widget-width to
+/// the right of the last. A widget call with no Ui_SameLine before it always
+/// starts its own fresh, full-width row and ends the run above it, so leaving
+/// a call off is how a run closes.
+///
+/// Widgets sharing a row this way form a navigation run: Left and Right move
+/// within it before they move between containers, and Up and Down step over
+/// the whole run to the row above or below rather than through it one widget
+/// at a time.
+/// @param width Width in pixels for the next widget; zero or less gives it
+///        whatever is left of the row, which is what the *last* widget of a
+///        run should ask for. Passing zero for one that is not last claims the
+///        whole remainder for it instead, leaving nothing for the calls after.
+void Ui_SameLine(int width);
+
 /// A full-width rule.
 void Ui_Separator();
+
+/// A vertical rule, for dividing cells placed with Ui_SameLine.
+/// @param height Rule height in pixels.
+void Ui_SeparatorVertical(int height);
 
 /// A non-selectable category heading, used to group the rows under it.
 /// @param text The heading.
@@ -206,6 +236,18 @@ bool Ui_BeginScroll(const char* id, int height);
 
 void Ui_EndScroll();
 
+/// A bordered, fixed-height scrolling list of choices -- Ui_BeginScroll and a
+/// Ui_Selectable loop in one call, for a list too long to lay out one row at a
+/// time. Inherits the no-nested-scrolling limit: opening one inside an already
+/// open scrolling region is refused and reported, the same as Ui_BeginScroll.
+/// @param id Identity of the region, which is where its scroll position is filed.
+/// @param index Read for the current choice, written when it changes.
+/// @param items The choices.
+/// @param count How many entries `items` has.
+/// @param height Region height in pixels.
+/// @return True on the frame the value changed.
+bool Ui_ListBox(const char* id, int* index, const char* const* items, int count, int height);
+
 /// Divide the remaining panel width into equal columns.
 /// @param count How many columns; one or fewer does nothing.
 void Ui_BeginColumns(int count);
@@ -215,6 +257,33 @@ void Ui_NextColumn();
 
 /// Close the column set, leaving the cursor below the tallest column.
 void Ui_EndColumns();
+
+/// Open a set of named, fixed-width columns for the rows that follow, laid out
+/// with Ui_SameLine under the hood so a table is not a parallel layout system.
+/// @param id Identity of the table, which the id scope for its rows nests in.
+/// @param widths One entry per column; zero or less shares the width left
+///        after the explicit ones equally among the columns that asked for it.
+/// @param count How many entries `widths` has.
+/// @return False when no panel is open, in which case nothing is drawn.
+bool Ui_BeginTable(const char* id, const int* widths, int count);
+
+/// A non-selectable row naming each column, in the header colour role.
+/// @param labels One entry per column; a null entry leaves that column blank.
+void Ui_TableHeader(const char* const* labels);
+
+/// Open one selectable row and reset the column cursor Ui_TableCell advances.
+/// @param id Identity of the row, which is also its widget identity.
+/// @param selected Whether to draw it as the current choice.
+/// @return True on the frame it is activated.
+bool Ui_TableRow(const char* id, bool selected);
+
+/// One cell of the open row, at the next column.
+/// @param text The cell's text.
+/// @param align How to sit it within the column's width.
+/// @param role Which colour role to draw it in.
+void Ui_TableCell(const char* text, UiAlign align, UiColor role);
+
+void Ui_EndTable();
 
 /// A row that opens and closes a nested group of rows.
 /// @param label The name, which is also the widget identity.
@@ -243,6 +312,21 @@ void Ui_PushId(const char* text);
 void Ui_PushIdIndex(int index);
 
 void Ui_PopId();
+
+/// Open a scope that greys out and disables every activatable widget inside
+/// it, without changing the layout: a disabled row still draws and still takes
+/// its row, but is not reachable by focus or the pointer and always reports no
+/// activation. Nests: an inner Ui_BeginDisabled(false) inside an active
+/// disable cannot re-enable it, only an enclosing Ui_EndDisabled can.
+/// @param disabled Whether this scope disables its contents.
+void Ui_BeginDisabled(bool disabled);
+
+void Ui_EndDisabled();
+
+/// @return The left edge of the open panel's content, in screen pixels. Pairs
+///         with Ui_ContentWidth for a raw draw call positioned exactly like a
+///         row, without a Ui_BeginPanel(x,y,w,h) call recomputing it by hand.
+int Ui_ContentX();
 
 /// @return The width in pixels available inside the open panel.
 int Ui_ContentWidth();
@@ -318,6 +402,16 @@ bool Ui_SliderFloat(const char* label, float* value, float minimum, float maximu
 /// @return True on the frame the value changed.
 bool Ui_Stepper(const char* label, int* value, int minimum, int maximum, int step);
 
+/// A choice cycled in place with Left and Right, rather than dropped down: on a
+/// pad, cycling is a better gesture than opening a list, and a genuinely long
+/// set belongs in Ui_ListBox instead.
+/// @param label The name, which is also the widget identity.
+/// @param index Read for the current choice, written when it changes.
+/// @param items The choices; cycling wraps from the last back to the first.
+/// @param count How many entries `items` has.
+/// @return True on the frame the value changed.
+bool Ui_Combo(const char* label, int* index, const char* const* items, int count);
+
 /// One of a set of mutually exclusive choices.
 /// @param label The name, which is also the widget identity.
 /// @param value Read for the current choice, written when this one is picked.
@@ -374,6 +468,13 @@ void Ui_LabelAligned(const char* text, UiAlign align, UiColor role);
 /// @param role Which colour role to draw it in.
 void Ui_LabelEllipsized(const char* text, UiColor role);
 
+/// A line cut short from the **front**, keeping the tail, with a leading
+/// marker when it does not fit -- for a path or a key, where the identifying
+/// part is the end rather than the start.
+/// @param path The line to draw.
+/// @param role Which colour role to draw it in.
+void Ui_LabelPath(const char* path, UiColor role);
+
 /// @param format A printf-style format string.
 void Ui_LabelFormat(const char* format, ...) __attribute__((format(printf, 1, 2)));
 
@@ -424,6 +525,15 @@ void Ui_Rect(int x, int y, int w, int h, UiColor role);
 /// @param color The exact colour to fill with.
 void Ui_RectRgba(int x, int y, int w, int h, UiRgba color);
 
+/// A one-pixel-thick frame around a rectangle.
+/// @param x Left edge in screen pixels.
+/// @param y Top edge in screen pixels.
+/// @param w Width in pixels.
+/// @param h Height in pixels.
+/// @param thickness Border width in pixels.
+/// @param role Which colour role to draw the border in.
+void Ui_RectOutline(int x, int y, int w, int h, int thickness, UiColor role);
+
 /// @param x Left edge in screen pixels.
 /// @param y Top edge in screen pixels.
 /// @param scale Whole-pixel size of one font dot.
@@ -441,6 +551,30 @@ int Ui_Text(int x, int y, int scale, const char* text, UiColor role);
 /// @param role Which colour role to draw in.
 /// @return The x position just past the string.
 int Ui_TextAligned(int x, int y, int w, int scale, const char* text, UiAlign align, UiColor role);
+
+/// A loaded texture as a row of the given height, width following its own
+/// aspect. Requires Resource; without it, or for a handle that is loading,
+/// absent, or not a texture, draws a placeholder frame rather than nothing, so
+/// a missing image is visible rather than silently skipped.
+/// @param handle Resource handle of the texture, owned by the caller: this
+///        neither loads, pins nor releases it.
+/// @param height Row height in pixels.
+void Ui_Image(int32_t handle, int height);
+
+/// The same texture, placed exactly and optionally cropped to a sub-rectangle.
+/// @param handle Resource handle, as Ui_Image.
+/// @param x Left edge in screen pixels.
+/// @param y Top edge in screen pixels.
+/// @param w Width in pixels.
+/// @param h Height in pixels.
+/// @param u0 Left texture coordinate, normalised over the full unsigned range.
+/// @param v0 Top texture coordinate.
+/// @param u1 Right texture coordinate; pass 65535 for the texture's own edge.
+/// @param v1 Bottom texture coordinate; pass 65535 for the texture's own edge.
+/// @param tint Modulates the texture; UiColor::Text draws it unmodified against
+///        a light theme, so a genuinely neutral draw should read from a role
+///        that resolves to white.
+void Ui_ImageAt(int32_t handle, int x, int y, int w, int h, uint16_t u0, uint16_t v0, uint16_t u1, uint16_t v1, UiColor tint);
 
 // ---------------------------------------------------------------------------
 // Input and navigation
@@ -547,6 +681,14 @@ bool Ui_FontIsCooked();
 /// @return How many bytes of `text` fit within maxWidth.
 int Ui_TextFit(int scale, const char* text, int maxWidth);
 
+/// The mirror of Ui_TextFit: finds how much may be dropped from the **front**
+/// rather than the back.
+/// @param scale Whole-pixel size of one font dot.
+/// @param text The string to measure.
+/// @param maxWidth The width to fit within, in screen pixels.
+/// @return A pointer into `text` at the longest tail that fits `maxWidth`.
+const char* Ui_TextFitTail(int scale, const char* text, int maxWidth);
+
 /// @param scale Whole-pixel size of one font dot.
 /// @param text The string to measure.
 /// @return Its width in screen pixels.
@@ -561,6 +703,204 @@ int Ui_TextHeight(int scale);
 /// @return How many quads drawing it would cost, so a caller can check itself
 ///         against the per-frame budget before committing to a layout.
 int Ui_MeasureTextQuads(int scale, const char* text);
+
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
+/// One entry in the atlas's icon and controller-glyph cell set. Drawn from the
+/// cooked font's atlas alongside its glyphs when the font declares a cell for
+/// it; drawn as a short ASCII stand-in otherwise, so a hint bar stays readable
+/// with the fallback font or an atlas that predates a given icon.
+enum class UiIcon : uint8_t
+{
+    None = 0,
+
+    ButtonSouth,
+    ButtonEast,
+    ButtonWest,
+    ButtonNorth,
+
+    // The Xbox family's face-button letters. Distinct cells rather than a
+    // family flag on the four above, because they are genuinely different
+    // glyphs, not a recolouring: Ui_ButtonIcon is the only thing that chooses
+    // between them, so a caller asking by icon rather than by button still
+    // gets exactly the cell it names.
+    ButtonA,
+    ButtonB,
+    ButtonX,
+    ButtonY,
+
+    L1,
+    R1,
+    L2,
+    R2,
+    DPad,
+    StickLeft,
+    StickRight,
+
+    Check,
+    Cross,
+    Warning,
+    Info,
+    Folder,
+    File,
+    ChevronDown,
+    ChevronRight,
+
+    Count
+};
+
+/// @param icon The icon to draw; UiIcon::None draws nothing.
+/// @param role Which colour role to draw it in.
+void Ui_Icon(UiIcon icon, UiColor role);
+
+/// @param x Left edge in screen pixels.
+/// @param y Top edge in screen pixels.
+/// @param scale Whole-pixel size of one font dot; matches Ui_Text's scale.
+/// @param icon The icon to draw; UiIcon::None draws nothing and returns `x`.
+/// @param role Which colour role to draw it in.
+/// @return The x position just past the icon.
+int Ui_IconAt(int x, int y, int scale, UiIcon icon, UiColor role);
+
+/// A button labelled with both an icon and text.
+/// @param label The name, which is also the widget identity.
+/// @param icon Drawn before the label; UiIcon::None omits it.
+/// @return True on the frame it is activated.
+bool Ui_IconButton(const char* label, UiIcon icon);
+
+/// @param icon The icon to check.
+/// @return Whether the active font's atlas declares a cell for it. False means
+///         Ui_Icon falls back to an ASCII stand-in rather than drawing nothing.
+bool Ui_IconExists(UiIcon icon);
+
+/// @param button The pad button a prompt is naming.
+/// @return The icon this platform draws for it -- PlayStation shapes, Xbox
+///         letters or a keyboard key, per PlatformConstant::ButtonIconFamily --
+///         so a prompt shows the symbol the player is looking at rather than a
+///         name that may not match the hardware. UiIcon::None for a button with
+///         no icon in the active set.
+UiIcon Ui_ButtonIcon(GamepadButton button);
+
+/// One entry in a Ui_HintBar strip: an icon or a short label, and the action it
+/// names.
+struct UiHint
+{
+    UiIcon icon;
+    const char* text;
+};
+
+/// A centred strip of icon-and-text prompts along the bottom of the screen,
+/// drawn in the overlay layer so a scene cannot paint over it.
+/// @param hints The prompts to show, left to right.
+/// @param count How many entries `hints` has.
+void Ui_HintBar(const UiHint* hints, int count);
+
+// ---------------------------------------------------------------------------
+// Menus
+// ---------------------------------------------------------------------------
+
+/// Open a strip of menu titles docked to the top of a frame: inside an open
+/// panel it takes the panel's own top edge, outside one it takes the top of
+/// the screen. Everything between this and Ui_EndMenuBar must be Ui_BeginMenu.
+/// @return False when a menu bar is already open.
+bool Ui_BeginMenuBar();
+
+void Ui_EndMenuBar();
+
+/// One title on an open menu bar. An open menu's items draw in the overlay
+/// layer, below the title, so a menu's own draw order is still readable from
+/// the calls that built it even though it draws above the rest of the frame.
+/// Submenus are not supported: called while another menu is already open, this
+/// always returns false.
+///
+/// May also be called right after Ui_SplitButton, with the same id the split
+/// button was given, instead of from inside a menu bar: the chevron opens the
+/// same kind of dropdown a menu bar title does, anchored under the button
+/// rather than under a title cell.
+/// @param id The menu's identity, and the title text when opened from a menu
+///        bar.
+/// @return True while this menu is open, so its items should follow.
+bool Ui_BeginMenu(const char* id);
+
+/// One row of an open menu. Selecting it closes the menu.
+/// @param label The item's text.
+/// @param shortcut Drawn right-aligned as a hint; pass an empty string for none.
+/// @return True on the frame it is selected.
+bool Ui_MenuItem(const char* label, const char* shortcut);
+
+void Ui_EndMenu();
+
+/// A button with a second, narrow zone next to it that opens a menu -- the
+/// primary action and a set of related ones in one control. Follow with
+/// Ui_BeginMenu(label) to draw the menu's items; the chevron zone is what
+/// opens it.
+/// @param label The name, which is also the widget identity and the id
+///        Ui_BeginMenu must be given to draw this button's menu.
+/// @param icon Drawn in the chevron zone; UiIcon::ChevronDown is conventional.
+/// @return True on the frame the primary zone is activated.
+bool Ui_SplitButton(const char* label, UiIcon icon);
+
+// ---------------------------------------------------------------------------
+// Dialogs and text entry
+// ---------------------------------------------------------------------------
+//
+// Three mechanisms serve these, first that the platform offers: the host's own
+// dialog (PlatformCapability::SystemDialog), a direct character channel
+// (PlatformCapability::TextCharacters, text entry only), or the interface's own
+// drawn modal, which is always available and is what PS2 draws. Which one ran
+// is not observable from the return value -- the contract is the same either
+// way. Text entry supports appending and backspacing from the end only; there
+// is no mid-string caret placement.
+
+/// How a dialog opened by this API currently stands.
+enum class UiDialogResult : uint8_t
+{
+    None = 0, ///< Not open; the identity has never been asked for, or already resolved.
+    Pending, ///< Open. Call again next frame with the same id to keep driving it.
+    Accepted,
+    Cancelled,
+
+    Count
+};
+
+/// A one-button acknowledgement. Call every frame while a caller-owned flag
+/// says it should be open, outside any panel -- the placement Ui_BeginModal
+/// already requires, since the drawn fallback is exactly that modal.
+/// @param id Identity; distinguishes this dialog from any other open at once.
+/// @param title Drawn as the dialog's header.
+/// @param body The message.
+/// @return Pending while open; Accepted exactly once, the frame it closes.
+UiDialogResult Ui_MessageDialog(const char* id, const char* title, const char* body);
+
+/// As Ui_MessageDialog, with an accept and a cancel action.
+/// @return Accepted or Cancelled exactly once, the frame one is chosen.
+UiDialogResult Ui_ConfirmDialog(const char* id, const char* title, const char* body);
+
+/// As Ui_ConfirmDialog, editing a caller-owned string instead of showing a
+/// fixed message. `buffer` holds the value shown on open; on the frame this
+/// returns Accepted it holds what the player entered; on Cancelled it is left
+/// exactly as it was, so the caller never keeps a second copy to restore.
+/// @param buffer The text, edited in place; always NUL-terminated.
+/// @param size Capacity of buffer, including the terminator; at most
+///        UI_TEXT_INPUT_MAX is ever held open for editing.
+UiDialogResult Ui_TextDialog(const char* id, const char* title, char* buffer, size_t size);
+
+/// A row that edits a caller-owned string in place, like any other value
+/// widget: click or Accept starts editing, Accept commits, Back cancels and
+/// restores what was there before. Unlike Ui_TextDialog this is not a modal --
+/// on a platform with a character channel it edits inline, in the row, with no
+/// dialog at all.
+/// @param label The field's name, and its identity.
+/// @param buffer The text, edited in place; always NUL-terminated.
+/// @param size Capacity of buffer, including the terminator; at most
+///        UI_TEXT_INPUT_MAX is ever held open for editing.
+/// @return True on the frame the buffer's content changed.
+bool Ui_TextInput(const char* label, char* buffer, size_t size);
+
+// ---------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------
 
 /// @return How many focusable widgets were registered this frame.
 uint32_t Ui_FocusablesUsed();
@@ -591,3 +931,41 @@ uint32_t Ui_QuadsUsed();
 
 /// @return The per-frame quad budget on this platform.
 uint32_t Ui_QuadBudget();
+
+/// Check a layout against the operative quad ceiling before committing to it
+/// -- pairs with Ui_MeasureTextQuads, so a caller can measure a string and
+/// decide whether to draw it in full or fall back to something shorter.
+/// @param quads How many more quads the caller is about to draw.
+/// @return Whether they would fit: inside an open Ui_BeginBudget scope,
+///         against what that scope has left; otherwise against the frame's
+///         own quad budget.
+bool Ui_WouldFit(int quads);
+
+/// Cap what the widgets between this and Ui_EndBudget may add to the frame's
+/// quad count, so one runaway block -- a list with no length limit of its
+/// own -- cannot blank the rest of the screen. The excess is dropped and
+/// reported once, naming the container. Does not apply to the overlay layer,
+/// which already has its own separate, protected budget. At most one scope
+/// is open at a time; a nested call is refused.
+/// @param quads The most this scope may add.
+void Ui_BeginBudget(int quads);
+
+void Ui_EndBudget();
+
+/// @return How many quads the most recently closed Ui_BeginBudget scope
+///         actually added -- which container is eating the budget, observable
+///         instead of guessed.
+uint32_t Ui_ContainerQuadsUsed();
+
+/// @return How many draw-call runs this frame's quads would coalesce into: a
+///         run opens at the first quad and at every quad after whose texture
+///         differs from the one before it. A solid fill samples no texture
+///         (see the *A solid fill never samples a font atlas* contract), so a
+///         row alternating solid and glyph content opens one run per
+///         alternation -- this is what C1 made worth watching.
+uint32_t Ui_RunsUsed();
+
+/// @return The run ceiling the desktop and Vita renderers enforce. PS2's
+///         GIFTAG path has no equivalent limit of its own, so there this is a
+///         guide rather than an enforced ceiling.
+uint32_t Ui_RunBudget();

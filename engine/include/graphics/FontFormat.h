@@ -6,9 +6,15 @@
 // --- PSFN on-disc format (written by tools/ps2lib/font.py) ----------------
 // FORMAT CONSTANTS - mirrored by the cooker, identical on every platform.
 #define FONT_MAGIC 0x4E465350 /* "PSFN" in little-endian */
-#define FONT_VERSION 1
+#define FONT_VERSION 2
 #define FONT_HEADER_SIZE 28
 #define FONT_GLYPH_SIZE 12
+
+// Version 2 reclaimed the header's whiteU/whiteV texel fields -- the solid-fill
+// path they served stopped sampling the atlas -- as cellCount and cellOffset, a
+// second, optional table of the same 12-byte record after the glyph table:
+// icons and controller glyphs, addressed by an engine-side enumerator rather
+// than a codepoint. A version-1 payload is refused, never migrated.
 
 #define FONT_FLAG_MONOSPACED 0x0001
 
@@ -34,14 +40,14 @@ struct FontGlyph
 struct Font
 {
     const FontGlyph* glyphs;
+    const FontGlyph* cells;
     int32_t atlasResourceId;
     uint16_t glyphCount;
     uint16_t firstCode;
     uint16_t missingIndex;
     uint16_t atlasWidth;
     uint16_t atlasHeight;
-    uint16_t whiteU;
-    uint16_t whiteV;
+    uint16_t cellCount;
     uint8_t lineHeight;
     uint8_t baseline;
     uint8_t spaceAdvance;
@@ -69,3 +75,10 @@ void Font_FreeBaked(Font* font);
 /// @return Its glyph, or the font's substitute glyph when it has no such
 ///         codepoint. Never null for a loaded font.
 const FontGlyph* Font_GetGlyph(const Font* font, uint32_t codepoint);
+
+/// @param font The font to read.
+/// @param index Zero-based cell index.
+/// @return The cell, or null when the font carries no cell at that index --
+///         unlike a codepoint, a missing icon is an expected case with its own
+///         fallback, not a substitute glyph.
+const FontGlyph* Font_GetCell(const Font* font, uint8_t index);

@@ -52,6 +52,23 @@ struct UiFrameState
     int contentW;
     int cursorY;
 
+    // The row a widget last took, so Ui_SameLine can rewind onto it and a
+    // fresh row knows how tall the one it is closing turned out to be. rowOpen
+    // is what tells a fresh row apart from one continued by Ui_SameLine: every
+    // direct write to cursorY outside UiInternal_TakeRow clears it. runActive
+    // is narrower: whether the row already has an inline-placed widget on it,
+    // which is what tells Ui_SameLine continuing a run apart from Ui_SameLine
+    // starting one -- the widget drawn just before it may have taken the row's
+    // full width and have nothing to share it with.
+    int lastRowTop;
+    int lastRowHeight;
+    int lastRowRight;
+    int inlineX;
+    int inlineWidth;
+    bool inlineActive;
+    bool rowOpen;
+    bool runActive;
+
     int boxX;
     int boxY;
     int boxW;
@@ -62,6 +79,10 @@ struct UiFrameState
     uint32_t hotId;
 
     uint32_t focusables[UI_MAX_FOCUSABLES];
+    // The row each focusable was taken on (UiFrameState::lastRowTop at
+    // registration), so navigation can tell a multi-widget run apart from a
+    // column of single-widget rows without a second registration call.
+    int16_t focusRows[UI_MAX_FOCUSABLES];
     uint16_t focusableCount;
     int focusIndex;
     int navDelta;
@@ -70,6 +91,20 @@ struct UiFrameState
     uint8_t clipDepth;
     uint8_t clipHighWater;
     bool clipOverflowReported;
+
+    // Whether an enclosing scope disabled the widgets inside it. A stack of
+    // per-level markers rather than a plain toggle, so Ui_BeginDisabled(false)
+    // inside an active disable cannot re-enable it: the marker for that level
+    // is simply "contributed nothing", and popping it leaves the level below
+    // in charge.
+    int disabledDepth;
+    uint8_t disabledStack[UI_MAX_CLIP_DEPTH];
+    uint8_t disabledStackDepth;
+    // Levels nested past the array's capacity: conservatively counted as
+    // disabled (never as the level that re-enables), since Ui_BeginDisabled
+    // returns nothing a caller could react to, unlike the internal clip stack.
+    uint8_t disabledOverflowCount;
+    bool disabledOverflowReported;
 
     uint32_t idStack[UI_MAX_ID_DEPTH];
     uint8_t idDepth;
@@ -89,6 +124,7 @@ struct UiFrameState
     uint32_t scrollId;
     int scrollContentStart;
     bool inScroll;
+    bool scrollNestingReported;
 
     int columnCount;
     int columnIndex;
@@ -101,6 +137,18 @@ struct UiFrameState
     bool inOverlay;
     bool modalOpen;
     uint32_t modalId;
+
+    // An open menu is reading Up/Down/Accept/Back itself this frame, to move
+    // its own highlighted item, rather than letting the ordinary focus
+    // resolution in Ui_EndFrame touch focusId: groups are strictly sequential
+    // and never reopen once left, which a menu's transient, conditionally-open
+    // item list cannot be expressed as.
+    bool menuCapturing;
+
+    // A Ui_TextInput row is being edited this frame: focus must hold on that
+    // row rather than let Up/Down move it elsewhere mid-edit, the same
+    // suppression an open menu already needs and for the same reason.
+    bool textEditCapturing;
 
     // Where the focused row sits this frame, so a scrolling region can pull it
     // into view without the row having to know it is inside one.
@@ -123,6 +171,15 @@ UiFrameState& UiInternal_State();
 
 /// @return Whether the subsystem is up and a frame is open, so a widget may draw.
 bool UiInternal_CanDraw();
+
+/// @return Whether an enclosing Ui_BeginDisabled scope is active. An
+///         activatable widget checks this to draw dimmed, skip registering
+///         itself focusable, and return false unconditionally.
+bool UiInternal_Disabled();
+
+/// @param normal The role a widget would use if nothing disabled it.
+/// @return UiColor::TextDisabled when a disabled scope is active, else `normal`.
+UiColor UiInternal_TextRole(UiColor normal);
 
 /// Append one solid screen-space rectangle to this frame's quads.
 /// @param x Left edge in screen pixels.
@@ -222,6 +279,19 @@ void UiInternal_DrawToasts(float dt);
 /// Drop every queued notification.
 void UiInternal_ToastsReset();
 
+/// Draw the drawn-fallback keyboard for whichever Ui_TextInput row is mid-edit
+/// through it, if one is. Called once per frame after every panel has closed,
+/// the same placement UiInternal_DrawToasts already has, because a
+/// Ui_TextInput row is registered from inside the caller's own panel and the
+/// modal this draws cannot open while one is still on the stack.
+void UiInternal_DrawTextEditOverlay();
+
+/// Abandon whatever dialog or Ui_TextInput field is open, cancelling a
+/// platform dialog if one was. Called on a runtime reset, because the buffer
+/// pointer a mid-edit Ui_TextInput session holds belongs to the scene being
+/// torn down and must not be written to once it is.
+void UiInternal_DialogReset();
+
 /// Append a quad to whichever buffer the open layer writes to.
 void UiInternal_PushOverlayQuad(const UiQuad& quad);
 
@@ -234,6 +304,21 @@ bool UiInternal_InOverlay();
 /// @param id The widget identity.
 /// @return Whether this widget currently holds focus.
 bool UiInternal_RegisterFocusable(uint32_t id);
+
+/// The shared body of a full-width activatable row: takes the row, handles
+/// focus, hover and press against the id given, and draws its background and
+/// (when focused) border -- dimmed and unregistered when a Ui_BeginDisabled
+/// scope is active. Every widget built from one row -- a button, a selectable,
+/// an icon button, a table row -- is this plus whatever it draws inside the
+/// rectangle it returns.
+/// @param id The row's identity, already hashed.
+/// @param highlight Whether to draw it as the current choice even when it is
+///        not focused.
+/// @param outX Receives the row's left edge.
+/// @param outY Receives the row's top edge.
+/// @param outW Receives the row's width; zero means nothing was drawn.
+/// @return True on the frame the row is activated.
+bool UiInternal_ActivatableRow(uint32_t id, bool highlight, int* outX, int* outY, int* outW);
 
 /// @param x Left edge in screen pixels.
 /// @param y Top edge in screen pixels.
@@ -276,6 +361,27 @@ const Font* UiInternal_CookedFont();
 /// @return The backend texture handle of the cooked font's atlas; zero when
 ///         there is no cooked font.
 uint32_t UiInternal_AtlasTexture();
+
+/// Where a resource handle stands, for a caller that only needs to know
+/// whether to draw it, wait, or give up -- not why.
+enum class UiTextureState : uint8_t
+{
+    Absent, ///< No such handle, the wrong resource type, or the renderer refused it.
+    Loading,
+    Ready
+};
+
+/// Resolve a resource handle to a backend texture handle and its pixel
+/// dimensions, without touching its lifecycle. The caller owns the handle:
+/// this neither loads, pins nor releases it, so it is safe to call every
+/// frame against a handle a scene is loading in its own time.
+/// @param handle Resource handle, as returned by Engine_Resource_Load or
+///        Engine_Resource_LoadAuto; a negative handle is always Absent.
+/// @param outTexture Receives the backend handle; zero unless the result is Ready.
+/// @param outWidth Receives the texture's pixel width; zero unless Ready.
+/// @param outHeight Receives the texture's pixel height; zero unless Ready.
+/// @return Where the handle stands.
+UiTextureState UiInternal_ResolveTexture(int32_t handle, uint32_t* outTexture, int* outWidth, int* outHeight);
 
 /// Draw a string with whichever font is active.
 /// @param x Left edge in screen pixels.

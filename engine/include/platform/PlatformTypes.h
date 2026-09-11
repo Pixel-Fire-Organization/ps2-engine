@@ -88,3 +88,44 @@ struct WindowDesc
     bool resizable;
     bool vsync;
 };
+
+// --- System dialogs -----------------------------------------------------
+// One host facility serves a message box and a text field alike: both are a
+// modal request the platform may own outright. The contract is shaped for the
+// stricter of the two hosts that implement it -- a Vita dialog renders into
+// the title's own frame and only advances while the title keeps presenting,
+// so Dialog_Open must never block. A host that blocks internally (Win32's
+// MessageBox) simply returns having already decided the result, and the first
+// Dialog_Poll reports it.
+
+enum class DialogKind : uint8_t
+{
+    Message = 0, // one dismiss action; Accepted is the only non-Cancelled result
+    Confirm, // accept or cancel
+    TextInput, // edits request.textBuffer in place
+
+    Count
+};
+
+enum class DialogStatus : uint8_t
+{
+    Idle = 0, // nothing open; also what a platform with no dialog facility always answers
+    Pending, // still open, keep presenting frames and polling
+    Accepted,
+    Cancelled,
+
+    Count
+};
+
+// What Dialog_Open is asked to show. For TextInput, textBuffer is read for the
+// value shown on open and, on an Accepted poll, holds what the player entered;
+// on Cancelled it is left exactly as it was passed in, so a caller never has
+// to keep its own copy to restore.
+struct DialogRequest
+{
+    DialogKind kind;
+    const char* title;
+    const char* body; // Message, Confirm
+    char* textBuffer; // TextInput; null for the other kinds
+    size_t textBufferSize;
+};

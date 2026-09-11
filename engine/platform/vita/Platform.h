@@ -3,6 +3,12 @@
 #include "PlatformConstants.h"
 #include "platform/Platform.h"
 
+extern "C"
+{
+#include <psp2/ime_dialog.h>
+#include <psp2/message_dialog.h>
+}
+
 /// Abstract base for the PlayStation Vita family. Concrete variants live in
 /// handheld/ and tv/ and supply identity plus their touch answer.
 class VitaPlatform : public Platform
@@ -31,8 +37,9 @@ public:
     /// @return Whether this variant provides it.
     bool HasCapability(PlatformCapability key) const override;
 
-    /// @return The trophy contract; never null on this platform.
-    AchievementContract* GetAchievements() override { return &m_trophies; }
+    /// @return Null. This platform does not integrate the native trophy
+    ///         service; see docs/vita/PLATFORM.md.
+    AchievementContract* GetAchievements() override { return nullptr; }
 
     MemoryContract& GetMemory() override { return m_memory; }
     const MemoryContract& GetMemory() const override { return m_memory; }
@@ -121,6 +128,15 @@ public:
     /// @param outContact Receives the contact, position normalised to [0,1].
     /// @return False when index is past the count, leaving outContact untouched.
     bool Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const override;
+    uint32_t Keyboard_PopCharacters(char* outBuffer, uint32_t bufferSize) override;
+
+    // See Dialog.cpp. sceMsgDialog serves Message/Confirm; sceImeDialog serves
+    // TextInput. Both go through the same sceCommonDialog service the trophy
+    // setup dialog already uses, so PollInput's per-frame drive of it (see
+    // CommonDialog.h) covers these too with no change there.
+    bool Dialog_Open(const DialogRequest& request) override;
+    DialogStatus Dialog_Poll() override;
+    void Dialog_Cancel() override;
 
     bool WindowOpen(const WindowDesc& desc) override;
     void WindowClose() override;
@@ -170,6 +186,26 @@ protected:
     PadSnapshot m_padsPrev[MAX_GAME_PAD_PORTS];
     TouchSnapshot m_touch[static_cast<uint8_t>(TouchSurface::Count)];
 
+    // --- System dialogs (Dialog.cpp) -----------------------------------
+    // Owned storage for whatever the open dialog reads across the frames it
+    // spans: sceXxxDialogInit copies the fixed top-level param struct (the
+    // trophy setup dialog already proves that), but a message string or an
+    // IME text buffer is reached through a pointer inside it, and that has to
+    // keep pointing at something real for as long as the dialog is open --
+    // a stack frame that returned before the dialog closes does not qualify.
+    enum : uint32_t
+    {
+        DIALOG_IME_TEXT_MAX = 256 // comfortably above UI_TEXT_MAX, well under the SDK's own 2048 ceiling
+    };
+    DialogKind m_dialogKind; // Count means nothing is open
+    char m_dialogBody[SCE_MSG_DIALOG_USER_MSG_SIZE];
+    SceMsgDialogUserMessageParam m_msgUserParam;
+    SceWChar16 m_imeTitle[SCE_IME_DIALOG_MAX_TITLE_LENGTH];
+    SceWChar16 m_imeInitial[DIALOG_IME_TEXT_MAX];
+    SceWChar16 m_imeInput[DIALOG_IME_TEXT_MAX];
+    char* m_dialogResultBuffer; // TextInput only: the caller's own buffer, written on Accepted
+    size_t m_dialogResultBufferSize;
+
     /// Engine memory. Arenas and the pool come from system blocks; Alloc and
     /// Free use the C heap, and the two must not be crossed.
     class VitaMemory final : public MemoryContract
@@ -200,81 +236,11 @@ protected:
         size_t m_reservedBytes;
     };
 
-    /// Trophies. Requires a player-installed plugin; reports itself unavailable
-    /// without one and the title runs normally.
-    class VitaTrophies final : public AchievementContract
-    {
-    public:
-        explicit VitaTrophies(const VitaPlatform* owner);
-        ~VitaTrophies() override = default;
-
-        /// @param commId Communication id, or null to use the packaged one.
-        /// @return False when trophies cannot be recorded on this console.
-        bool Init(const char* commId) override;
-        void Shutdown() override;
-
-        /// @param id Trophy identifier.
-        /// @return True on success or if already awarded; false when refused.
-        bool Unlock(uint32_t id) override;
-
-        bool IsUnlocked(uint32_t id) const override;
-        uint32_t GetCount() const override;
-        int32_t GetConsoleCount() const override;
-        bool IsAvailable() const override;
-        const char* GetUnavailableReason() const override;
-
-    private:
-        /// Record why nothing can be recorded, and log it.
-        /// @param format printf-style reason, kept for the player-facing notice.
-        void SetReason(const char* format, ...);
-
-        /// @return Whether the installed title actually carries a trophy pack,
-        ///         which separates a packaging fault from a console refusal.
-        bool PackPresent() const;
-
-        /// Ask the console to install this title's trophy set.
-        ///
-        /// Installing the title does not register its trophies. A set is
-        /// registered when the game asks for it, through a system dialog that
-        /// belongs to the common dialog module rather than the trophy one.
-        /// Until that has happened the service recognises the communication
-        /// identifier and answers every read and unlock with a registration
-        /// error, which looks exactly like a malformed pack.
-        ///
-        /// Attempting this is not required to succeed: a set already installed
-        /// needs nothing, so a refusal here is reported and the state read that
-        /// follows remains the test of whether trophies can be recorded.
-        /// @return Whether a dialog is now open and must be pumped each frame.
-        bool RegisterSet();
-
-        /// Advance the open setup dialog. A system dialog only progresses while
-        /// the title presents frames, so this cannot run during start.
-        /// @return True while the dialog is still running.
-        bool PumpStartup() override;
-
-        /// Take a handle and read the set's state, settling whether anything
-        /// can be recorded. Runs once registration has been attempted, whether
-        /// or not it succeeded, because a set already installed needs nothing.
-        void FinishInit();
-
-        const VitaPlatform* m_owner;
-        int32_t m_context;
-        int32_t m_handle;
-        uint32_t m_count;
-        uint32_t m_serviceCount;
-        bool m_stateRead;
-        bool m_registering;
-        int m_registerFrames;
-        char m_reason[192];
-        bool m_available;
-    };
-
     StartupArgs m_startupArgs;
     bool m_logInput;
     bool m_padReported;
     const char* m_resourceToken;
     char m_writableRoot[64];
     VitaMemory m_memory;
-    VitaTrophies m_trophies;
     bool m_initialised;
 };

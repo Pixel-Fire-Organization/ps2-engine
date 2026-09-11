@@ -11,14 +11,6 @@ namespace
     const int SAFE_PERCENT = 10;
     const int CROSS_ARM = 40;
     const int RULE = 2;
-
-    void Frame(int x, int y, int w, int h, UiColor role)
-    {
-        Ui_Rect(x, y, w, RULE, role);
-        Ui_Rect(x, y + h - RULE, w, RULE, role);
-        Ui_Rect(x, y, RULE, h, role);
-        Ui_Rect(x + w - RULE, y, RULE, h, role);
-    }
 } // namespace
 
 void Scene_ScreenAspect_Init() {}
@@ -40,11 +32,11 @@ void Scene_ScreenAspect_Update(float dt)
 
     Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
 
-    Frame(0, 0, screenW, screenH, UiColor::Border);
+    Ui_RectOutline(0, 0, screenW, screenH, RULE, UiColor::Border);
 
     const int insetX = (screenW * SAFE_PERCENT) / 100;
     const int insetY = (screenH * SAFE_PERCENT) / 100;
-    Frame(insetX, insetY, screenW - insetX * 2, screenH - insetY * 2, UiColor::TextAccent);
+    Ui_RectOutline(insetX, insetY, screenW - insetX * 2, screenH - insetY * 2, RULE, UiColor::TextAccent);
 
     const int centreX = screenW / 2;
     const int centreY = screenH / 2;
@@ -57,7 +49,7 @@ void Scene_ScreenAspect_Update(float dt)
     int boxW = boxH;
     if (aspectX > 0 && aspectY > 0)
         boxW = static_cast<int>((static_cast<long long>(boxH) * screenH * aspectX) / (static_cast<long long>(screenW) * aspectY));
-    Frame(centreX - boxW / 2, centreY - boxH / 2, boxW, boxH, UiColor::BarFill);
+    Ui_RectOutline(centreX - boxW / 2, centreY - boxH / 2, boxW, boxH, RULE, UiColor::BarFill);
 
     Ui_BeginPanel("SCREEN", PANEL_MARGIN, PANEL_MARGIN, PANEL_WIDTH, screenH / 2);
 

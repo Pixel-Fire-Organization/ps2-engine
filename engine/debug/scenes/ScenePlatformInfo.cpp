@@ -45,6 +45,22 @@ namespace
         Ui_LabelValue(label, platform.HasCapability(key) ? "YES" : "NO");
     }
 
+    const char* ButtonIconFamilyName(UiButtonIconFamily family)
+    {
+        switch (family)
+        {
+        case UiButtonIconFamily::PlayStation:
+            return "PLAYSTATION";
+        case UiButtonIconFamily::Xbox:
+            return "XBOX";
+        case UiButtonIconFamily::Keyboard:
+            return "KEYBOARD";
+        case UiButtonIconFamily::Count:
+            break;
+        }
+        return "?";
+    }
+
     void DrawIdentity(const Platform& platform, int screenW, int screenH)
     {
         const Renderer* renderer = Engine_GetRenderer();
@@ -62,6 +78,7 @@ namespace
 
         Row("FRAME US", platform.GetConstant(PlatformConstant::TargetFrameMicros));
         Row("PAD PORTS", platform.GetConstant(PlatformConstant::MaxGamepadPorts));
+        Ui_LabelValue("BUTTON ICONS", ButtonIconFamilyName(static_cast<UiButtonIconFamily>(platform.GetConstant(PlatformConstant::ButtonIconFamily))));
 
         Ui_Separator();
         Ui_Header("CAPABILITIES");

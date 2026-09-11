@@ -83,12 +83,28 @@ other fails the build rather than producing a theme with a missing colour.
 | colours | 4 each | one byte per channel, alpha last, in role order |
 | repeat delay | 4 | seconds before a held direction begins repeating |
 | repeat interval | 4 | seconds between repeats |
-| pixel metrics | 2 each, signed | padding, spacing, scales and widths |
-| reserved | 4 | zero |
+| pixel metrics | 2 each, signed | padding, spacing, scales, widths and heights |
+| reserved | 2 | zero |
 
 Times are in **seconds, never frames**. Two of this engine's platform variants
 differ only in refresh rate, so a frame-counted repeat would run measurably
 faster on one of them.
+
+**A theme is colours and metrics together.** Every field above — colours and
+pixel metrics alike — may differ from one theme to the next: a theme built for a
+smaller or poorer display can declare a larger text scale and wider borders, not
+only different colours. That authoring choice is resolved before cooking, in the
+declaration the cook stage reads; the payload itself is unaffected, since it has
+always held one complete style per theme.
+
+### Version history
+
+- **1** — the original layout: 17 colour roles, 10 pixel metrics, 4 reserved
+  bytes.
+- **2** — added the `TextDisabled` colour role and three pixel metrics
+  (`menuBarHeight`, `caretWidth`, `iconSpacing`), spending the format's reserved
+  bytes down to 2. A version-1 payload is refused, never migrated, per the
+  version-mismatch rule below.
 
 ## Why this payload has a checksum when others do not
 
@@ -137,4 +153,6 @@ it already had.
   are what a refused load falls back to.
 - Metric values may be tuned per platform at cook time — the same theme is not
   equally legible at 640 pixels wide and at 1280 — but the **layout** never
-  varies by platform.
+  varies by platform. This is independent of a theme declaring its own metrics
+  (above): one is the author choosing that a theme should look different, the
+  other is the cook stage adapting one theme's declared values to a screen.

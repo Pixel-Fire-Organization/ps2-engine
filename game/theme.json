@@ -1,4 +1,5 @@
 {
+  "$schema": "theme.schema.json",
   "themes": [
     {
       "name": "MIDNIGHT",
@@ -12,6 +13,7 @@
         "TextDim": [126, 138, 156, 255],
         "TextAccent": [255, 240, 120, 255],
         "TextWarn": [255, 128, 96, 255],
+        "TextDisabled": [70, 78, 92, 255],
         "ItemBackground": [32, 38, 52, 255],
         "ItemHovered": [46, 58, 80, 255],
         "ItemActive": [64, 84, 116, 255],
@@ -35,6 +37,7 @@
         "TextDim": [140, 140, 140, 255],
         "TextAccent": [255, 210, 120, 255],
         "TextWarn": [240, 130, 110, 255],
+        "TextDisabled": [80, 80, 80, 255],
         "ItemBackground": [42, 42, 42, 255],
         "ItemHovered": [60, 60, 60, 255],
         "ItemActive": [86, 86, 86, 255],
@@ -48,7 +51,7 @@
     },
     {
       "name": "CONTRAST",
-      "description": "Maximum separation, for a small handheld screen or a poor display.",
+      "description": "Maximum separation, for a small handheld screen or a poor display. Also demonstrates a per-theme metrics override: larger text and wider borders, not only different colours.",
       "colors": {
         "WindowBackground": [0, 0, 0, 255],
         "PanelBackground": [0, 0, 0, 255],
@@ -58,6 +61,7 @@
         "TextDim": [190, 190, 190, 255],
         "TextAccent": [0, 255, 255, 255],
         "TextWarn": [255, 80, 80, 255],
+        "TextDisabled": [110, 110, 110, 255],
         "ItemBackground": [0, 0, 0, 255],
         "ItemHovered": [60, 60, 60, 255],
         "ItemActive": [120, 120, 120, 255],
@@ -67,6 +71,17 @@
         "BarFillWarn": [255, 200, 0, 255],
         "Cursor": [255, 255, 255, 255],
         "CursorOutline": [0, 0, 0, 255]
+      },
+      "metrics": {
+        "textScale": 3,
+        "borderWidth": 2,
+        "panelPadding": 10,
+        "rowPadding": 4,
+        "cursorSize": 12,
+        "screenMargin": 20,
+        "panelGap": 10,
+        "scrollBarWidth": 8,
+        "menuBarHeight": 26
       }
     }
   ],
@@ -81,6 +96,9 @@
     "screenMargin": 16,
     "panelGap": 8,
     "scrollBarWidth": 6,
+    "menuBarHeight": 22,
+    "caretWidth": 2,
+    "iconSpacing": 4,
     "repeatDelaySeconds": 0.35,
     "repeatIntervalSeconds": 0.06
   },

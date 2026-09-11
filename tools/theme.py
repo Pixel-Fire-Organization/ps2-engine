@@ -53,6 +53,22 @@ def engine_color_roles(header_path=ENGINE_UI_HEADER):
     return roles
 
 
+ALL_METRIC_NAMES = frozenset(themelib.INT_METRICS) | {"repeatDelaySeconds", "repeatIntervalSeconds"}
+
+
+def theme_metrics(decl, entry):
+    """A theme's metrics: the declaration's defaults, with anything the theme
+    itself names overridden field by field.
+
+    A theme is a style -- colours *and* metrics -- so `CONTRAST`, sized for a
+    small or poor display, can ask for a larger textScale without every other
+    theme paying for it too.
+    """
+    merged = dict(decl.get("metrics") or {})
+    merged.update(entry.get("metrics") or {})
+    return merged
+
+
 def load(path):
     with open(path, "r", encoding="utf-8-sig") as fh:
         decl = json.load(fh)
@@ -60,6 +76,9 @@ def load(path):
     themes = decl.get("themes") or []
     if not themes:
         raise ThemeDeclarationError("no themes declared")
+
+    defaults = decl.get("metrics") or {}
+    themelib._check_metrics(defaults)
 
     roles = engine_color_roles()
     seen = set()
@@ -79,8 +98,14 @@ def load(path):
         if extra:
             raise ThemeDeclarationError(f"theme {name}: {', '.join(extra)} name no colour role")
 
-    metrics = decl.get("metrics") or {}
-    themelib._check_metrics(metrics)
+        override = entry.get("metrics") or {}
+        unknown = [k for k in override if k not in ALL_METRIC_NAMES]
+        if unknown:
+            raise ThemeDeclarationError(f"theme {name}: metrics override names unknown metric(s) {', '.join(unknown)}")
+        try:
+            themelib._check_metrics(theme_metrics(decl, entry))
+        except themelib.ThemeError as e:
+            raise ThemeDeclarationError(f"theme {name}: {e}")
 
     for role in (decl.get("fonts") or {}):
         if role not in themelib.FONT_ROLES:
@@ -119,9 +144,9 @@ def emit_ids(decl, out_path):
 
 
 def emit_table(decl, out_path):
-    """The colour tables themselves, plus the shared metrics."""
+    """The colour tables and metrics for every theme, colours and metrics both
+    per theme rather than shared, so a theme is a whole style."""
     roles = engine_color_roles()
-    metrics = decl["metrics"]
     fonts = decl.get("fonts") or {}
 
     lines = [
@@ -165,19 +190,19 @@ def emit_table(decl, out_path):
         "        s.colors[i] = Rgba(0, 0, 0, 255);",
         "",
     ]
-    for name in themelib.INT_METRICS:
-        lines.append("    s.{} = {};".format(name, metrics[name]))
-    lines.append("    s.repeatDelaySeconds = {}f;".format(metrics["repeatDelaySeconds"]))
-    lines.append("    s.repeatIntervalSeconds = {}f;".format(metrics["repeatIntervalSeconds"]))
     lines.append("    s.reserved[0] = 0;")
-    lines.append("    s.reserved[1] = 0;")
     lines += ["", "    switch (theme)", "    {"]
 
     for entry in decl["themes"]:
+        entry_metrics = theme_metrics(decl, entry)
         lines.append("    case UiBuiltinTheme::{}:".format(entry["name"]))
         for role in roles:
             r, g, b, a = entry["colors"][role]
             lines.append("        s.colors[static_cast<uint8_t>(UiColor::{})] = Rgba({}, {}, {}, {});".format(role, r, g, b, a))
+        for name in themelib.INT_METRICS:
+            lines.append("        s.{} = {};".format(name, entry_metrics[name]))
+        lines.append("        s.repeatDelaySeconds = {}f;".format(entry_metrics["repeatDelaySeconds"]))
+        lines.append("        s.repeatIntervalSeconds = {}f;".format(entry_metrics["repeatIntervalSeconds"]))
         lines.append("        break;")
     lines += [
         "    case UiBuiltinTheme::Count:",
@@ -210,7 +235,7 @@ def cook_payloads(decl):
     """Every declared theme as a cooked payload, keyed by asset name."""
     out = {}
     for entry in decl["themes"]:
-        blob, _ = themelib.write_theme(entry["colors"], decl["metrics"], decl.get("fonts"))
+        blob, _ = themelib.write_theme(entry["colors"], theme_metrics(decl, entry), decl.get("fonts"))
         out["THEME_" + entry["name"]] = blob
     return out
 

@@ -140,6 +140,40 @@ public:
     /// @return False when index is past the count, leaving outContact untouched.
     virtual bool Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const = 0;
 
+    // Characters typed since the last call, drained as they are read: a
+    // platform with no character channel (PlatformCapability::TextCharacters
+    // absent) always returns zero. The stream is printable ASCII plus three
+    // control bytes a text-editing widget needs to tell apart from typed
+    // text -- 0x08 backspace, 0x0D enter, 0x1B escape -- and nothing else;
+    // everything outside that set is dropped here, never handed up, because
+    // nothing above this boundary has a substitute glyph for a character
+    // stream the way the built-in font has for a single codepoint it cannot
+    // draw.
+    /// @param outBuffer Receives up to bufferSize bytes, NOT NUL-terminated.
+    /// @param bufferSize Capacity of outBuffer.
+    /// @return How many bytes were written.
+    virtual uint32_t Keyboard_PopCharacters(char* outBuffer, uint32_t bufferSize) = 0;
+
+    // --- System dialogs -------------------------------------------------
+    // See PlatformTypes.h for why this is shaped as a non-blocking poll rather
+    // than the ordinary call-and-return a Win32 MessageBox would suggest on
+    // its own: a Vita dialog cannot be waited on synchronously.
+
+    /// Ask for a system dialog matching `request.kind`. A platform with no
+    /// SystemDialog capability, or one that refuses this specific request,
+    /// returns false and touches nothing -- the caller's own drawn fallback is
+    /// what runs instead, not a second attempt at this call.
+    virtual bool Dialog_Open(const DialogRequest& request) = 0;
+
+    /// @return Idle when nothing is open; Pending while still waiting, in
+    ///         which case the caller must keep presenting frames; Accepted or
+    ///         Cancelled exactly once, the frame the dialog closes.
+    virtual DialogStatus Dialog_Poll() = 0;
+
+    /// Abandon whatever Dialog_Open opened. A platform with nothing open
+    /// ignores this.
+    virtual void Dialog_Cancel() = 0;
+
     // --- Window / presentation ----------------------------------------------
     // A platform with a fixed framebuffer implements these as stubs that report
     // its constant size and never ask to close.

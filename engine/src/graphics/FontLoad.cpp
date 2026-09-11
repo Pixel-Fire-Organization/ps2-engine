@@ -43,13 +43,19 @@ bool Font_LoadBaked(const void* data, size_t size, int32_t atlasResourceId, Font
     const uint16_t firstCode = ReadU16(base + 18);
     const uint16_t glyphCount = ReadU16(base + 20);
     const uint16_t missingIndex = ReadU16(base + 22);
-    const uint16_t whiteU = ReadU16(base + 24);
-    const uint16_t whiteV = ReadU16(base + 26);
+    const uint16_t cellCount = ReadU16(base + 24);
+    const uint16_t cellOffset = ReadU16(base + 26);
 
-    const size_t expected = static_cast<size_t>(FONT_HEADER_SIZE) + static_cast<size_t>(glyphCount) * FONT_GLYPH_SIZE;
+    const size_t glyphTableEnd = static_cast<size_t>(FONT_HEADER_SIZE) + static_cast<size_t>(glyphCount) * FONT_GLYPH_SIZE;
+    const size_t expected = glyphTableEnd + static_cast<size_t>(cellCount) * FONT_GLYPH_SIZE;
     if (glyphCount == 0 || size < expected)
     {
-        Engine_LogError("Font: %u glyphs need %u bytes, payload is %u", glyphCount, static_cast<unsigned>(expected), static_cast<unsigned>(size));
+        Engine_LogError("Font: %u glyphs and %u cell(s) need %u bytes, payload is %u", glyphCount, cellCount, static_cast<unsigned>(expected), static_cast<unsigned>(size));
+        return false;
+    }
+    if (cellOffset != glyphTableEnd)
+    {
+        Engine_LogError("Font: cell table declared at %u, the glyph table ends at %u", cellOffset, static_cast<unsigned>(glyphTableEnd));
         return false;
     }
     if (missingIndex >= glyphCount)
@@ -68,6 +74,18 @@ bool Font_LoadBaked(const void* data, size_t size, int32_t atlasResourceId, Font
     {
         Engine_LogError("Font: out of memory for a %u-glyph table", glyphCount);
         return false;
+    }
+
+    FontGlyph* cells = nullptr;
+    if (cellCount > 0)
+    {
+        cells = static_cast<FontGlyph*>(Engine_PlatformAlloc(static_cast<size_t>(cellCount) * sizeof(FontGlyph), 16));
+        if (!cells)
+        {
+            Engine_LogError("Font: out of memory for a %u-cell table", cellCount);
+            Engine_PlatformFree(glyphs);
+            return false;
+        }
     }
 
     const uint8_t* g = base + FONT_HEADER_SIZE;
@@ -89,19 +107,44 @@ bool Font_LoadBaked(const void* data, size_t size, int32_t atlasResourceId, Font
         {
             Engine_LogError("Font: glyph %u falls outside the %ux%u atlas", static_cast<unsigned>(firstCode + i), atlasWidth, atlasHeight);
             Engine_PlatformFree(glyphs);
+            Engine_PlatformFree(cells);
+            return false;
+        }
+    }
+
+    const uint8_t* c = base + cellOffset;
+    for (uint16_t i = 0; i < cellCount; ++i, c += FONT_GLYPH_SIZE)
+    {
+        FontGlyph& out = cells[i];
+        out.u = ReadU16(c);
+        out.v = ReadU16(c + 2);
+        out.w = c[4];
+        out.h = c[5];
+        out.bearingX = static_cast<int8_t>(c[6]);
+        out.bearingY = static_cast<int8_t>(c[7]);
+        out.advance = c[8];
+        out.reserved[0] = 0;
+        out.reserved[1] = 0;
+        out.reserved[2] = 0;
+
+        if (static_cast<uint32_t>(out.u) + out.w > atlasWidth || static_cast<uint32_t>(out.v) + out.h > atlasHeight)
+        {
+            Engine_LogError("Font: cell %u falls outside the %ux%u atlas", static_cast<unsigned>(i), atlasWidth, atlasHeight);
+            Engine_PlatformFree(glyphs);
+            Engine_PlatformFree(cells);
             return false;
         }
     }
 
     outFont->glyphs = glyphs;
+    outFont->cells = cells;
     outFont->atlasResourceId = atlasResourceId;
     outFont->glyphCount = glyphCount;
     outFont->firstCode = firstCode;
     outFont->missingIndex = missingIndex;
     outFont->atlasWidth = atlasWidth;
     outFont->atlasHeight = atlasHeight;
-    outFont->whiteU = whiteU;
-    outFont->whiteV = whiteV;
+    outFont->cellCount = cellCount;
     outFont->lineHeight = static_cast<uint8_t>(lineHeight);
     outFont->baseline = static_cast<uint8_t>(baseline);
     outFont->spaceAdvance = static_cast<uint8_t>(spaceAdvance);
@@ -115,6 +158,8 @@ void Font_FreeBaked(Font* font)
         return;
     if (font->glyphs)
         Engine_PlatformFree(const_cast<FontGlyph*>(font->glyphs));
+    if (font->cells)
+        Engine_PlatformFree(const_cast<FontGlyph*>(font->cells));
     std::memset(font, 0, sizeof(*font));
     font->atlasResourceId = -1;
 }
@@ -129,4 +174,11 @@ const FontGlyph* Font_GetGlyph(const Font* font, uint32_t codepoint)
     if (index >= font->glyphCount)
         return &font->glyphs[font->missingIndex];
     return &font->glyphs[index];
+}
+
+const FontGlyph* Font_GetCell(const Font* font, uint8_t index)
+{
+    if (!font || !font->cells || index >= font->cellCount)
+        return nullptr;
+    return &font->cells[index];
 }

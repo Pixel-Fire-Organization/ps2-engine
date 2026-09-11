@@ -87,6 +87,13 @@ public:
     float Mouse_GetWheelDelta() const override;
     uint8_t Touch_GetContactCount(TouchSurface surface) const override;
     bool Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const override;
+    uint32_t Keyboard_PopCharacters(char* outBuffer, uint32_t bufferSize) override;
+
+    // No character channel and no system dialog service: the interface's own
+    // drawn fallback is the whole of text entry here.
+    bool Dialog_Open(const DialogRequest& request) override;
+    DialogStatus Dialog_Poll() override;
+    void Dialog_Cancel() override;
 
     // --- Window.cpp ---------------------------------------------------------
     // The GS framebuffer is fixed and owned by the renderer, so these report the

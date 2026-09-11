@@ -23,6 +23,7 @@ Win32Platform::Win32Platform() : m_startupArgs(), m_memory(this)
     memset(&m_mouse, 0, sizeof(m_mouse));
     memset(&m_mousePrev, 0, sizeof(m_mousePrev));
     m_dataRoot[0] = '\0';
+    m_dialogResult = DialogStatus::Idle;
 
     m_startupArgs.commandLine = nullptr;
     m_startupArgs.argv = nullptr;
@@ -106,6 +107,9 @@ uint32_t Win32Platform::GetConstant(PlatformConstant key) const
     case PlatformConstant::MaxGamepadPorts:
         return MAX_GAME_PAD_PORTS;
 
+    case PlatformConstant::ButtonIconFamily:
+        return static_cast<uint32_t>(UiButtonIconFamily::Xbox);
+
     case PlatformConstant::Count:
         break;
     }
@@ -134,6 +138,14 @@ bool Win32Platform::HasCapability(PlatformCapability key) const
 
     case PlatformCapability::Touch:
         return false;
+
+    // MessageBox blocks the calling thread but the Dialog_Open/Dialog_Poll
+    // contract hides that: the first poll simply reports the result Open
+    // already has. WM_CHAR is a genuine character channel, independent of the
+    // keyboard-to-virtual-pad bridge.
+    case PlatformCapability::SystemDialog:
+    case PlatformCapability::TextCharacters:
+        return true;
 
     case PlatformCapability::Count:
         break;

@@ -6,8 +6,6 @@
 
 namespace
 {
-    const int PANEL_MARGIN = 16;
-    const int COLUMN_GAP = 8;
     const int SWATCH_HEIGHT = 18;
 
     int s_Role = 0;
@@ -35,10 +33,7 @@ void Scene_Style_Update(float dt)
 
     Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
 
-    const int width = (screenW - PANEL_MARGIN * 2 - COLUMN_GAP) / 2;
-    const int height = screenH - PANEL_MARGIN * 2;
-
-    Ui_BeginPanel("ROLES", PANEL_MARGIN, PANEL_MARGIN, width, height);
+    Ui_BeginPanelSlot("ROLES", UiPanelSlot::Left);
 
     const int roles = static_cast<int>(UiColor::Count);
     if (Ui_BeginScroll("roles", Ui_ContentHeight()))
@@ -53,7 +48,7 @@ void Scene_Style_Update(float dt)
     }
     Ui_EndPanel();
 
-    Ui_BeginPanel("EDIT", PANEL_MARGIN + width + COLUMN_GAP, PANEL_MARGIN, width, height);
+    Ui_BeginPanelSlot("EDIT", UiPanelSlot::Right);
     if (s_Role < 0 || s_Role >= roles)
         s_Role = 0;
 
@@ -67,7 +62,7 @@ void Scene_Style_Update(float dt)
     ChannelSlider("BLUE", &colour->b);
     Ui_SetStyle(style);
 
-    Ui_RectRgba(PANEL_MARGIN + width + COLUMN_GAP * 2, Ui_CursorY(), width - COLUMN_GAP * 3, SWATCH_HEIGHT * 2, style.colors[s_Role]);
+    Ui_RectRgba(Ui_ContentX(), Ui_CursorY(), Ui_ContentWidth(), SWATCH_HEIGHT * 2, style.colors[s_Role]);
     Ui_Spacing(SWATCH_HEIGHT * 2 + 6);
 
     if (Ui_Button("RESET THEME"))

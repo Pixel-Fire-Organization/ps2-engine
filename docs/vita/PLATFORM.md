@@ -61,6 +61,8 @@ Everything else — memory, storage, renderers, budgets — is shared.
 | Async IO | Yes | Yes | |
 | File write | Yes | Yes | To the per-title data location only |
 | Touch | Yes | No | Front surface and rear surface, reported separately |
+| System dialog | Yes | Yes | `sceMsgDialog` and `sceImeDialog`, both via `sceCommonDialog` |
+| Text characters | No | No | Typed text only ever arrives through the IME dialog above, not key by key |
 
 The touch capability is the reason the two variants exist as separate binaries
 rather than one binary with a runtime probe.
@@ -153,6 +155,10 @@ buttons. They still answer it separately rather than inheriting a family default
 which is what keeps the handheld free to differ the moment an intent needs a
 button it does not have.
 
+Button prompts draw PlayStation shapes on both variants — the handheld's own
+face buttons and the set-top's wireless controller are both DualShock-family
+hardware. See [subsystems/UI.md](../subsystems/UI.md).
+
 **Touch is a device group of its own**, not a mouse. Two surfaces are reported
 separately: the front screen, which is the one a player points at, and the rear
 pad, which is behind the device and has no visible cursor. Neither is mapped onto
@@ -223,10 +229,33 @@ This is why the flag saying a dialog is open is platform state rather than
 something a caller passes: a renderer added later must observe it, and a caller
 must not be able to forget to.
 
+**`Dialog_Open`/`Dialog_Poll`/`Dialog_Cancel` are the non-blocking contract this
+frame-servicing hazard requires**, and this platform is the reason that
+contract is shaped the way it is rather than as an ordinary blocking call: a
+message box or a confirmation opens `sceMsgDialog`, a text field opens
+`sceImeDialog`, both through `sceCommonDialog`, and neither can be waited on
+synchronously without hanging the title per the two failure modes above.
+`Dialog_Poll` reports `Pending` for as long as `sceCommonDialogGetStatus`
+does, and `Accepted`/`Cancelled` exactly once, the frame the dialog's own
+result becomes available. Win32's `MessageBox`, which blocks the calling
+thread and already knows its answer by the time `Dialog_Open` returns, is
+still driven through this same poll — its first call simply reports what
+already happened, rather than this platform's contract growing a second,
+blocking shape for a host that does not need one. Typed text arrives only
+through `sceImeDialog`'s own on-screen keyboard, converted between the
+engine's ASCII and the dialog's UTF-16 at the platform boundary; characters
+outside printable ASCII are dropped in that conversion, in both directions.
+
 ## Known limitations
 
-- **Trophies require software the player must install themselves**, and never
-  reach the online service. See [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md).
+- **The native trophy service is not integrated.** `GetAchievements()` returns
+  null on this platform; unlocks are never mirrored into the console's own
+  trophy application. This is a decision, not a gap in progress: the service
+  requires software the player installs themselves and never reaches the
+  online service even then, and the engine's own cross-platform achievement
+  system (`game/achievements.json`) is what actually ships, unaffected by
+  this. See [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md) and
+  [PACKAGING.md](PACKAGING.md)'s Trophies section.
 - **Textures are cooked to plain 32-bit colour.** The hardware supports
   compressed formats that would cost far less video memory, but the cook list has
   no vocabulary for them yet, so the budget is spent uncompressed.
@@ -238,6 +267,4 @@ must not be able to forget to.
 - **Motion sensors, camera and microphone are not exposed.** The hardware has
   them; the platform contract has no vocabulary for them, and inventing one for a
   single platform would encode this platform's assumptions into it.
-- **The system text-entry dialog is not wired up**, so there is no way to type on
-  either variant.
 - Sector recentring is synchronous, as everywhere.

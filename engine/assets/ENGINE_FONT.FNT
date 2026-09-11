@@ -1,11 +1,9 @@
 {
   "atlas_width": 128,
-  "atlas_height": 64,
+  "atlas_height": 128,
   "line_height": 7,
   "baseline": 7,
   "space_advance": 6,
-  "white_u": 127,
-  "white_v": 63,
   "missing_index": 31,
   "first_code": 32,
   "glyphs": [
@@ -863,6 +861,238 @@
       "bearingX": 0,
       "bearingY": 2,
       "advance": 6
+    }
+  ],
+  "cells": [
+    {
+      "name": "ButtonSouth",
+      "u": 0,
+      "v": 64,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonEast",
+      "u": 10,
+      "v": 64,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonWest",
+      "u": 20,
+      "v": 64,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonNorth",
+      "u": 30,
+      "v": 64,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonA",
+      "u": 40,
+      "v": 64,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonB",
+      "u": 0,
+      "v": 74,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonX",
+      "u": 10,
+      "v": 74,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ButtonY",
+      "u": 20,
+      "v": 74,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "L1",
+      "u": 30,
+      "v": 74,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "R1",
+      "u": 40,
+      "v": 74,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "L2",
+      "u": 0,
+      "v": 84,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "R2",
+      "u": 10,
+      "v": 84,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "DPad",
+      "u": 20,
+      "v": 84,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "StickLeft",
+      "u": 30,
+      "v": 84,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "StickRight",
+      "u": 40,
+      "v": 84,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "Check",
+      "u": 0,
+      "v": 94,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "Cross",
+      "u": 10,
+      "v": 94,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "Warning",
+      "u": 20,
+      "v": 94,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "Info",
+      "u": 30,
+      "v": 94,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "Folder",
+      "u": 40,
+      "v": 94,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "File",
+      "u": 0,
+      "v": 104,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ChevronDown",
+      "u": 10,
+      "v": 104,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
+    },
+    {
+      "name": "ChevronRight",
+      "u": 20,
+      "v": 104,
+      "w": 9,
+      "h": 9,
+      "bearingX": 0,
+      "bearingY": 0,
+      "advance": 10
     }
   ]
 }

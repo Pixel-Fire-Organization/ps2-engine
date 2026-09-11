@@ -242,6 +242,30 @@ int Ui_TextFit(int scale, const char* text, int maxWidth)
     return fitted;
 }
 
+const char* Ui_TextFitTail(int scale, const char* text, int maxWidth)
+{
+    if (!text || scale <= 0)
+        return text;
+    if (maxWidth <= 0 || Ui_TextWidth(scale, text) <= maxWidth)
+        return text;
+
+    // Removing characters from the front only ever removes non-negative width,
+    // so the fitted width is monotonic in the start offset and a binary search
+    // finds the longest fitting tail in O(log n) measurements rather than O(n).
+    const int length = static_cast<int>(std::strlen(text));
+    int lo = 0;
+    int hi = length;
+    while (lo < hi)
+    {
+        const int mid = lo + (hi - lo) / 2;
+        if (Ui_TextWidth(scale, text + mid) <= maxWidth)
+            hi = mid;
+        else
+            lo = mid + 1;
+    }
+    return text + lo;
+}
+
 int Ui_MeasureTextQuads(int scale, const char* text)
 {
     if (!text || scale <= 0)

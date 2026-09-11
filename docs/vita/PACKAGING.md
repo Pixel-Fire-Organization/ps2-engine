@@ -103,6 +103,20 @@ right-aligns it. A hand-written template is used verbatim.
 
 ## Trophies
 
+**Disabled, and the runtime integration removed.** `trophies.enabled` is `false`
+in `game/platform/vita/package.json`, `VitaPlatform::GetAchievements()` returns
+null, and the code that called `sceNpTrophy*` (`engine/platform/vita/Trophy.cpp`)
+no longer exists — see [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md)'s
+off-the-shelf evaluation for why: the console's own trophy system was the
+original implementation and does not work for a title the platform holder did
+not sign, which this section's own registration findings below do not change.
+The engine's own cross-platform achievement system, declared once in
+`game/achievements.json`, is what actually ships and is unaffected by any of
+this — it has no dependency on the native trophy service. The rest of this
+section is kept as a record of how the packaging and registration mechanism
+works, for if a signed build ever re-enables it; none of it describes
+currently-running code.
+
 **Trophies on unsigned software require a plugin the player installs**, because
 the console verifies two signatures this project cannot produce: one over the
 title communication identifier, and one over the trophy pack. The `NoTrpDrm`

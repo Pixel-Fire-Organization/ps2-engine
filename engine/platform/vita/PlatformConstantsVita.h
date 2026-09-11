@@ -96,6 +96,13 @@
 // every platform: a smaller console value would let a message fit on desktop and
 // truncate on the console, which is the worst place to discover it.
 #define UI_TEXT_MAX 192
+
+// The most a Ui_TextInput/Ui_TextDialog field will ever hold open for editing
+// at once -- bounds the snapshot the interface keeps to restore on cancel.
+// Deliberately the same on every platform, for the reason UI_TEXT_MAX already
+// carries: a value that fits on desktop and overflows on the console is the
+// worst place to discover it.
+#define UI_TEXT_INPUT_MAX 64
 #define GFX_GXM_MAX_FRAME_VERTICES 65536
 #define GFX_GXM_DISPLAY_BUFFERS 2
 

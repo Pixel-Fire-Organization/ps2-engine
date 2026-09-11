@@ -177,6 +177,65 @@ def test_duplicate_theme_names_fail_the_build(tmp_path):
         theme_tool.load(str(path))
 
 
+# --- a theme is colours and metrics together, not colours alone -------------
+
+def test_a_theme_may_override_some_metrics_and_inherit_the_rest():
+    decl = _decl()
+    decl["metrics"] = _metrics()
+    decl["themes"] = [dict(decl["themes"][0], metrics={"textScale": 5})]
+    merged = theme_tool.theme_metrics(decl, decl["themes"][0])
+    assert merged["textScale"] == 5
+    assert merged["panelPadding"] == decl["metrics"]["panelPadding"]
+
+
+def test_an_unknown_metric_override_key_fails_the_build(tmp_path):
+    decl = _decl()
+    decl["themes"][0]["metrics"] = {"notAMetric": 1}
+    path = tmp_path / "theme.json"
+    path.write_text(json.dumps(decl), encoding="utf-8")
+    with pytest.raises(theme_tool.ThemeDeclarationError, match="notAMetric"):
+        theme_tool.load(str(path))
+
+
+def test_a_metrics_override_that_goes_out_of_range_fails_the_build(tmp_path):
+    decl = _decl()
+    decl["themes"][0]["metrics"] = {"textScale": 0}
+    path = tmp_path / "theme.json"
+    path.write_text(json.dumps(decl), encoding="utf-8")
+    with pytest.raises(theme_tool.ThemeDeclarationError, match="textScale"):
+        theme_tool.load(str(path))
+
+
+def test_cooking_uses_each_themes_own_merged_metrics():
+    decl = _decl()
+    decl["metrics"] = _metrics()
+    decl["themes"] = [
+        dict(decl["themes"][0], name="A", metrics={"textScale": 4}),
+        dict(decl["themes"][0], name="B"),
+    ]
+    payloads = theme_tool.cook_payloads(decl)
+    a = themelib.describe(payloads["THEME_A"])
+    b = themelib.describe(payloads["THEME_B"])
+    assert a["metrics"]["textScale"] == 4
+    assert b["metrics"]["textScale"] == decl["metrics"]["textScale"]
+
+
+def test_generated_table_assigns_metrics_per_theme(tmp_path):
+    decl = _decl()
+    decl["metrics"] = _metrics()
+    decl["themes"] = [
+        dict(decl["themes"][0], name="A", metrics={"textScale": 4}),
+        dict(decl["themes"][0], name="B"),
+    ]
+    table = theme_tool.emit_table(decl, str(tmp_path / "UiThemeTable.cpp"))
+    text = open(table, encoding="utf-8").read()
+    body = text.split("UiStyle Ui_BuiltinTheme(UiBuiltinTheme theme)", 1)[1]
+    case_a = body.split("case UiBuiltinTheme::A:", 1)[1].split("break;", 1)[0]
+    case_b = body.split("case UiBuiltinTheme::B:", 1)[1].split("break;", 1)[0]
+    assert "s.textScale = 4;" in case_a
+    assert "s.textScale = {};".format(decl["metrics"]["textScale"]) in case_b
+
+
 # --- the shipped declaration ------------------------------------------------
 
 def test_shipped_declaration_is_valid_and_cooks():

@@ -22,32 +22,42 @@ def _glyphs(count=font.GLYPH_COUNT, advance=6, w=5, h=7):
     return [{"u": 0, "v": 0, "w": w, "h": h, "bearingX": 0, "bearingY": 0, "advance": advance} for _ in range(count)]
 
 
+def _cells(count=2, w=9, h=9):
+    return [{"u": 0, "v": 0, "w": w, "h": h, "bearingX": 0, "bearingY": 0, "advance": w} for _ in range(count)]
+
+
 def _font(**over):
     args = {"glyphs": _glyphs(), "atlas_w": 128, "atlas_h": 64, "line_height": 7,
-            "baseline": 7, "space_advance": 6, "white_u": 127, "white_v": 63}
+            "baseline": 7, "space_advance": 6, "cells": []}
     args.update(over)
     return font.write_font(args["glyphs"], args["atlas_w"], args["atlas_h"], args["line_height"],
-                           args["baseline"], args["space_advance"], args["white_u"], args["white_v"],
-                           args.get("missing_index", 0))
+                           args["baseline"], args["space_advance"], args.get("missing_index", 0),
+                           args["cells"])
 
 
 # --- the format round-trips -------------------------------------------------
 
 def test_round_trip_preserves_every_field():
-    blob, ext = _font()
+    blob, ext = _font(cells=_cells())
     assert ext == ".fnt"
     d = font.describe(blob)
     assert d["glyph_count"] == font.GLYPH_COUNT
     assert d["first_code"] == font.FIRST_CODE
     assert d["atlas_width"] == 128 and d["atlas_height"] == 64
     assert d["line_height"] == 7 and d["baseline"] == 7
-    assert d["white_u"] == 127 and d["white_v"] == 63
+    assert d["cell_count"] == 2
     assert len(d["glyphs"]) == font.GLYPH_COUNT
+    assert len(d["cells"]) == 2
 
 
 def test_payload_size_is_exactly_the_declared_layout():
     blob, _ = _font()
     assert len(blob) == font.HEADER_SIZE + font.GLYPH_COUNT * font.GLYPH_SIZE
+
+
+def test_payload_size_grows_by_exactly_one_record_per_cell():
+    blob, _ = _font(cells=_cells(count=3))
+    assert len(blob) == font.HEADER_SIZE + font.GLYPH_COUNT * font.GLYPH_SIZE + 3 * font.GLYPH_SIZE
 
 
 def test_uniform_advances_are_reported_as_monospaced():
@@ -91,9 +101,40 @@ def test_substitute_glyph_outside_the_table_is_refused():
         _font(missing_index=font.GLYPH_COUNT)
 
 
-def test_white_texel_outside_the_atlas_is_refused():
-    with pytest.raises(font.FontError, match="white texel"):
-        _font(white_u=200)
+def test_a_font_with_no_cells_is_exactly_as_valid_as_one_with_some():
+    assert font.describe(_font()[0])["cell_count"] == 0
+
+
+def test_cell_outside_the_atlas_is_refused():
+    bad = _cells()
+    bad[1]["u"] = 126
+    bad[1]["w"] = 8
+    with pytest.raises(font.FontError, match="outside"):
+        _font(cells=bad)
+
+
+def test_a_cell_may_have_a_zero_advance_unlike_a_glyph():
+    # Icons are not stacked in a run of their own the way glyphs are, so
+    # nothing about a zero advance is an authoring slip for one.
+    cells = _cells()
+    cells[0]["advance"] = 0
+    d = font.describe(_font(cells=cells)[0])
+    assert d["cells"][0]["advance"] == 0
+
+
+def test_too_many_cells_is_refused():
+    with pytest.raises(font.FontError, match="cells"):
+        _font(cells=_cells(count=font.MAX_CELLS + 1))
+
+
+def test_cell_table_declared_at_the_wrong_offset_is_refused():
+    blob, _ = _font(cells=_cells())
+    # The offset field sits right after cellCount, both in the header's last
+    # two uint16 slots.
+    corrupted = bytearray(blob)
+    corrupted[26:28] = (9999).to_bytes(2, "little")
+    with pytest.raises(font.FontError, match="cell table"):
+        font.describe(bytes(corrupted))
 
 
 # --- the reader refuses a payload it cannot trust ---------------------------
@@ -145,12 +186,14 @@ def test_shipped_default_font_cooks_and_is_readable():
         metrics = json.load(fh)
     blob, _ = font.write_font(metrics["glyphs"], metrics["atlas_width"], metrics["atlas_height"],
                               metrics["line_height"], metrics["baseline"], metrics["space_advance"],
-                              metrics["white_u"], metrics["white_v"], metrics["missing_index"])
+                              metrics["missing_index"], metrics.get("cells"))
     d = font.describe(blob)
     assert d["glyph_count"] == font.GLYPH_COUNT
     # Lowercase is the whole reason this font exists alongside the built-in one.
     assert d["glyphs"][ord("a") - font.FIRST_CODE]["w"] > 0
     assert d["glyphs"][ord("g") - font.FIRST_CODE]["bearingY"] > 0
+    # The icon and controller-glyph set the interface's atlas cells serve.
+    assert d["cell_count"] == len(metrics["cells"]) > 0
 
 
 # --- the tree gate ----------------------------------------------------------

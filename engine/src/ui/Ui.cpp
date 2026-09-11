@@ -8,6 +8,7 @@
 #include "EngineInput.h"
 #include "UiInternal.h"
 #include "graphics/Renderer.h"
+#include "graphics/StagedGeometry.h"
 #include "platform/Platform.h"
 
 namespace
@@ -43,6 +44,17 @@ namespace
 
     UiFrameState s_State;
     float s_StickHeld = 0.0f;
+
+    // Ui_BeginBudget/Ui_EndBudget: at most one scope open at a time, so this
+    // is file-local state rather than a UiFrameState field the way the
+    // disabled-scope stack is -- nothing outside this file's own push choke
+    // point ever needs to see it.
+    bool s_BudgetOpen = false;
+    int s_BudgetCap = 0;
+    uint32_t s_BudgetStartCount = 0;
+    uint32_t s_BudgetDropped = 0;
+    uint32_t s_LastContainerQuads = 0;
+    uint32_t s_RunsUsed = 0;
 
     void ReadScreenSize()
     {
@@ -223,6 +235,10 @@ UiFrameState& UiInternal_State() { return s_State; }
 
 bool UiInternal_CanDraw() { return s_Active && s_State.inFrame; }
 
+bool UiInternal_Disabled() { return s_State.disabledDepth > 0; }
+
+UiColor UiInternal_TextRole(UiColor normal) { return (s_State.disabledDepth > 0) ? UiColor::TextDisabled : normal; }
+
 bool UiInternal_PushClip(int x, int y, int w, int h)
 {
     if (s_State.clipDepth >= UI_MAX_CLIP_DEPTH)
@@ -341,9 +357,19 @@ void UiInternal_PushTexturedQuad(int x, int y, int w, int h, uint32_t texture, u
     quad.a = color.a;
 
     if (s_State.inOverlay)
+    {
         UiInternal_PushOverlayQuad(quad);
-    else
-        s_Ui.Add(quad);
+        return;
+    }
+
+    // A budgeted container never reaches into the overlay's own, separately
+    // protected allowance -- only the base layer is capped here.
+    if (s_BudgetOpen && (s_Ui.Count() - s_BudgetStartCount) >= static_cast<uint32_t>(s_BudgetCap))
+    {
+        ++s_BudgetDropped;
+        return;
+    }
+    s_Ui.Add(quad);
 }
 
 void UiInternal_PushOverlayQuad(const UiQuad& quad)
@@ -360,18 +386,12 @@ bool UiInternal_InOverlay() { return s_State.inOverlay; }
 
 void UiInternal_PushRect(int x, int y, int w, int h, UiRgba color)
 {
-    const Font* font = UiInternal_CookedFont();
-    if (!font)
-    {
-        UiInternal_PushTexturedQuad(x, y, w, h, 0, 0, 0, 0, 0, color);
-        return;
-    }
-
-    // The centre of the atlas's opaque texel, as a zero-width span so clipping
-    // cannot walk it onto a neighbour.
-    const uint16_t u = static_cast<uint16_t>((static_cast<uint32_t>(font->whiteU) * 2u + 1u) * 65535u / (static_cast<uint32_t>(font->atlasWidth) * 2u));
-    const uint16_t v = static_cast<uint16_t>((static_cast<uint32_t>(font->whiteV) * 2u + 1u) * 65535u / (static_cast<uint32_t>(font->atlasHeight) * 2u));
-    UiInternal_PushTexturedQuad(x, y, w, h, UiInternal_AtlasTexture(), u, v, u, v, color);
+    // Deliberately untextured. Sampling the atlas's white texel here would pay
+    // a texture fetch on every pixel of every panel, row, border and bar on a
+    // fill-rate-bound GS, plus a third qword per quad for UV registers, to save
+    // a TEX0 rebind at a run boundary. Vertex and colour only is cheaper on
+    // both counts; GFX_MAX_2D_RUNS exists to absorb the resulting run count.
+    UiInternal_PushTexturedQuad(x, y, w, h, 0, 0, 0, 0, 0, color);
 }
 
 void UiInternal_PushBorder(int x, int y, int w, int h, int thickness, UiRgba color)
@@ -429,11 +449,89 @@ bool UiInternal_RegisterFocusable(uint32_t id)
     {
         if (s_State.focusId == id)
             s_State.focusIndex = static_cast<int>(s_State.focusableCount);
+        s_State.focusRows[s_State.focusableCount] = static_cast<int16_t>(s_State.lastRowTop);
         s_State.focusables[s_State.focusableCount++] = id;
         if (s_State.groupCount > 0)
             ++s_State.groups[s_State.groupCount - 1].count;
     }
     return s_State.focusId == id;
+}
+
+namespace
+{
+    int UiRowHeight()
+    {
+        const UiStyle& style = Ui_GetStyle();
+        return Ui_TextHeight(style.textScale) + style.rowPadding * 2;
+    }
+
+    UiRgba UiRowBackground(bool focused, bool hovered, bool held)
+    {
+        if (held)
+            return Ui_GetColor(UiColor::ItemActive);
+        if (hovered)
+            return Ui_GetColor(UiColor::ItemHovered);
+        if (focused)
+            return Ui_GetColor(UiColor::Focus);
+        return Ui_GetColor(UiColor::ItemBackground);
+    }
+} // namespace
+
+bool UiInternal_ActivatableRow(uint32_t id, bool highlight, int* outX, int* outY, int* outW)
+{
+    const UiStyle& style = Ui_GetStyle();
+    const int height = UiRowHeight();
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    bool visible = false;
+    if (!UiInternal_CanDraw() || !UiInternal_TakeRow(height, &x, &y, &w, &visible) || !visible)
+        return false;
+
+    *outX = x;
+    *outY = y;
+    *outW = w;
+
+    if (s_State.disabledDepth > 0)
+    {
+        // Not registered focusable, so it is unreachable by navigation; and any
+        // focus this row held before it became disabled is dropped here rather
+        // than surviving as a stale id nothing will ever re-register.
+        if (s_State.focusId == id)
+            s_State.focusId = 0;
+        UiInternal_PushRect(x, y, w, height, Ui_GetColor(UiColor::ItemBackground));
+        return false;
+    }
+
+    const bool focused = UiInternal_RegisterFocusable(id);
+    const bool hovered = UiInternal_PointerOver(x, y, w, height);
+
+    if (hovered)
+    {
+        s_State.hotId = id;
+        if (s_State.pointerMoved)
+        {
+            s_State.focusId = id;
+            s_State.focusIndex = static_cast<int>(s_State.focusableCount) - 1;
+            s_State.navDelta = 0;
+        }
+    }
+
+    if (focused)
+    {
+        s_State.focusRowTop = y;
+        s_State.focusRowHeight = height;
+        s_State.focusRowValid = true;
+    }
+
+    const bool held = hovered && s_State.pointer.down;
+    UiInternal_PushRect(x, y, w, height, UiRowBackground(focused || highlight, hovered, held));
+    if (focused)
+        UiInternal_PushBorder(x, y, w, height, style.borderWidth, Ui_GetColor(UiColor::Border));
+
+    const bool byFocus = focused && s_State.accept;
+    const bool byPointer = hovered && s_State.pointer.pressed;
+    return byFocus || byPointer;
 }
 
 void UiInternal_BeginFocusGroup(uint32_t id)
@@ -463,11 +561,44 @@ bool UiInternal_TakeRow(int height, int* outX, int* outY, int* outW, bool* outVi
         return false;
 
     const UiStyle& style = Ui_GetStyle();
+
+    if (s_State.inlineActive)
+    {
+        // Continuing a row Ui_SameLine placed the pen on: same top, the width
+        // the caller asked for, and cursorY does not move again until either
+        // another Ui_SameLine extends the row or a fresh row closes it.
+        *outX = s_State.inlineX;
+        *outY = s_State.lastRowTop;
+        *outW = s_State.inlineWidth;
+        if (outVisible)
+            *outVisible = UiInternal_ClipVisible(*outX, *outY, *outW, height);
+
+        s_State.inlineActive = false;
+        s_State.lastRowRight = *outX + *outW;
+        if (height > s_State.lastRowHeight)
+            s_State.lastRowHeight = height;
+        return true;
+    }
+
+    // A row still open from a previous Ui_SameLine run has not yet paid for
+    // its tallest item; close it before starting the fresh one. For a row
+    // that never had a Ui_SameLine, this recomputes the position cursorY
+    // already tentatively holds, so it costs nothing.
+    if (s_State.rowOpen)
+        s_State.cursorY = s_State.lastRowTop + s_State.lastRowHeight + style.itemSpacing;
+
     *outX = s_State.contentX;
     *outY = s_State.cursorY;
     *outW = s_State.contentW;
     if (outVisible)
         *outVisible = UiInternal_ClipVisible(s_State.contentX, s_State.cursorY, s_State.contentW, height);
+
+    s_State.lastRowTop = s_State.cursorY;
+    s_State.lastRowHeight = height;
+    s_State.lastRowRight = *outX + *outW;
+    s_State.rowOpen = true;
+    s_State.runActive = false;
+
     s_State.cursorY += height + style.itemSpacing;
     return true;
 }
@@ -500,6 +631,11 @@ void Ui_ResetRuntimeState()
     s_OverlayCount = 0;
     s_OverlayDropped = 0;
     UiInternal_ToastsReset();
+    UiInternal_DialogReset();
+    s_BudgetOpen = false;
+    s_BudgetDropped = 0;
+    s_LastContainerQuads = 0;
+    s_RunsUsed = 0;
 
     const int screenW = s_State.screenW;
     const int screenH = s_State.screenH;
@@ -547,15 +683,33 @@ void Ui_BeginFrame()
     s_State.navDelta = 0;
     s_State.pointerMoved = false;
     s_State.clipOverflowReported = false;
+    s_State.disabledDepth = 0;
+    s_State.disabledStackDepth = 0;
+    s_State.disabledOverflowCount = 0;
+    s_State.disabledOverflowReported = false;
     s_State.idDepth = 0;
     s_State.groupCount = 0;
     s_State.groupDelta = 0;
     s_State.consumedHorizontal = false;
+    s_State.menuCapturing = false;
+    s_State.textEditCapturing = false;
     s_State.inScroll = false;
+    s_State.scrollNestingReported = false;
     s_State.inColumns = false;
     s_State.inOverlay = false;
     s_State.modalOpen = false;
     s_State.focusRowValid = false;
+    if (s_BudgetOpen)
+    {
+        // A scope left open past its own frame is the same "container left
+        // open" mistake a panel or a clip already discards the frame over --
+        // here it simply closes rather than capping nothing all frame.
+        s_BudgetOpen = false;
+        s_BudgetDropped = 0;
+    }
+    s_State.rowOpen = false;
+    s_State.runActive = false;
+    s_State.inlineActive = false;
     s_OverlayCount = 0;
     s_Ui.Reset();
     UiInternal_StateBeginFrame();
@@ -601,53 +755,107 @@ void Ui_EndFrame()
         Engine_LogError("Ui: EndFrame called with no frame open");
         return;
     }
-    if (s_State.inPanel || s_State.clipDepth != 1)
+    if (s_State.inPanel || s_State.clipDepth != 1 || s_State.disabledStackDepth != 0 || s_State.disabledOverflowCount != 0)
     {
         Engine_LogError("Ui: a container was left open at end of frame; nothing submitted");
         s_State.inFrame = false;
         s_State.inPanel = false;
         s_State.clipDepth = 1;
+        s_State.disabledDepth = 0;
+        s_State.disabledStackDepth = 0;
+        s_State.disabledOverflowCount = 0;
         s_Ui.Reset();
         return;
     }
 
-    if (s_State.focusableCount > 0)
+    if (s_State.menuCapturing || s_State.textEditCapturing)
+    {
+        // An open menu moved its own highlighted item directly against
+        // navDelta/accept/back as it drew, so focusId is left exactly as the
+        // menu's own title cell set it -- resolving it again here would fight
+        // that instead of leaving the open menu's title looking focused. A
+        // Ui_TextInput row being edited needs the same thing: focusId already
+        // names it, and nothing here should move it away mid-edit.
+    }
+    else if (s_State.focusableCount > 0)
     {
         const int count = static_cast<int>(s_State.focusableCount);
         int index = (s_State.focusIndex < 0) ? 0 : s_State.focusIndex;
 
-        // Left and right belong to the focused widget when it edits with them;
-        // only when it does not do they move between groups. Without this rule,
-        // grouping silently steals a slider's own gesture.
-        if (s_State.groupDelta != 0 && !s_State.consumedHorizontal && s_State.groupCount > 1)
+        // Left and right have three claimants, in order: the focused widget
+        // itself when it edits with them (a slider, a stepper, a tab strip);
+        // failing that, the run it shares a row with, if it is not alone on
+        // that row; failing that, movement between groups. Without the first
+        // rule, grouping would silently steal a slider's own gesture; without
+        // the second, two widgets placed side by side with Ui_SameLine would
+        // be unreachable by the axis that separates them.
+        if (s_State.groupDelta != 0 && !s_State.consumedHorizontal)
         {
-            int current = 0;
+            int first = 0;
+            int span = count;
             for (uint8_t g = 0; g < s_State.groupCount; ++g)
             {
                 if (index >= s_State.groups[g].first && index < s_State.groups[g].first + s_State.groups[g].count)
                 {
-                    current = g;
+                    first = s_State.groups[g].first;
+                    span = s_State.groups[g].count;
                     break;
                 }
             }
-            for (uint8_t step = 0; step < s_State.groupCount; ++step)
+
+            const int16_t rowKey = s_State.focusRows[index];
+            int runFirst = index;
+            while (runFirst > first && s_State.focusRows[runFirst - 1] == rowKey)
+                --runFirst;
+            int runLast = index;
+            while (runLast + 1 < first + span && s_State.focusRows[runLast + 1] == rowKey)
+                ++runLast;
+
+            if (runLast > runFirst)
             {
-                current += s_State.groupDelta;
-                while (current < 0)
-                    current += s_State.groupCount;
-                while (current >= s_State.groupCount)
-                    current -= s_State.groupCount;
-                if (s_State.groups[current].count > 0)
-                    break;
+                int next = index + s_State.groupDelta;
+                if (next < runFirst)
+                    next = runFirst;
+                if (next > runLast)
+                    next = runLast;
+                index = next;
+                s_State.pointer.visible = false;
             }
-            index = s_State.groups[current].first;
-            s_State.pointer.visible = false;
+            else if (s_State.groupCount > 1)
+            {
+                int current = 0;
+                for (uint8_t g = 0; g < s_State.groupCount; ++g)
+                {
+                    if (index >= s_State.groups[g].first && index < s_State.groups[g].first + s_State.groups[g].count)
+                    {
+                        current = g;
+                        break;
+                    }
+                }
+                for (uint8_t step = 0; step < s_State.groupCount; ++step)
+                {
+                    current += s_State.groupDelta;
+                    while (current < 0)
+                        current += s_State.groupCount;
+                    while (current >= s_State.groupCount)
+                        current -= s_State.groupCount;
+                    if (s_State.groups[current].count > 0)
+                        break;
+                }
+                index = s_State.groups[current].first;
+                s_State.pointer.visible = false;
+            }
         }
         else if (s_State.navDelta != 0 && s_State.groupCount > 0)
         {
             // Cycling stays inside the active group; crossing between them is
             // the other axis. Without this, moving down the last row of one
             // panel walks into whichever panel happened to be built next.
+            //
+            // A run shares one row, so cycling steps over the whole run rather
+            // than one focusable at a time within it: walk in the requested
+            // direction until the row key changes, or the group has only one
+            // row and there is nowhere to go.
             int first = 0;
             int span = count;
             for (uint8_t g = 0; g < s_State.groupCount; ++g)
@@ -659,12 +867,21 @@ void Ui_EndFrame()
                     break;
                 }
             }
-            int offset = index - first + s_State.navDelta;
-            while (offset < 0)
-                offset += span;
-            while (offset >= span)
-                offset -= span;
-            index = first + offset;
+
+            const int16_t rowKey = s_State.focusRows[index];
+            int next = index;
+            for (int step = 0; step < span; ++step)
+            {
+                int offset = (next - first) + s_State.navDelta;
+                while (offset < 0)
+                    offset += span;
+                while (offset >= span)
+                    offset -= span;
+                next = first + offset;
+                if (s_State.focusRows[next] != rowKey)
+                    break;
+            }
+            index = next;
         }
         else
         {
@@ -684,6 +901,7 @@ void Ui_EndFrame()
     }
 
     s_State.clipDepth = 1;
+    UiInternal_DrawTextEditOverlay();
     UiInternal_DrawToasts(Engine_GetDeltaTime());
 
     // The cursor is drawn last within the overlay, so nothing can cover it.
@@ -705,6 +923,26 @@ void Ui_EndFrame()
     {
         Engine_LogError("Ui: dropped %u overlay quad(s) this frame (budget %u).", static_cast<unsigned>(s_OverlayDropped), static_cast<unsigned>(UI_MAX_OVERLAY_QUADS));
         s_OverlayDropped = 0;
+    }
+
+    // A run opens at the first quad and at every quad after whose texture
+    // differs from the one before it -- the same coalescing rule
+    // StagedGeometry::AddQuad2D uses, computed here directly against this
+    // frame's own quad sequence so it reads the same on every backend,
+    // including PS2's GIFTAG path, which does not itself count runs at all.
+    s_RunsUsed = 0;
+    {
+        const UiQuad* quads = s_Ui.Quads();
+        const uint32_t count = s_Ui.Count();
+        if (count > 0)
+        {
+            s_RunsUsed = 1;
+            for (uint32_t i = 1; i < count; ++i)
+            {
+                if (quads[i].texture != quads[i - 1].texture)
+                    ++s_RunsUsed;
+            }
+        }
     }
 
     Renderer* renderer = Engine_GetRenderer();
@@ -737,3 +975,40 @@ uint32_t Ui_ClipDepthBudget() { return UI_MAX_CLIP_DEPTH; }
 uint32_t Ui_QuadsUsed() { return s_Ui.Count(); }
 
 uint32_t Ui_QuadBudget() { return UI::Capacity(); }
+
+bool Ui_WouldFit(int quads)
+{
+    const uint32_t add = (quads > 0) ? static_cast<uint32_t>(quads) : 0;
+    if (s_BudgetOpen)
+        return (s_Ui.Count() - s_BudgetStartCount) + add <= static_cast<uint32_t>(s_BudgetCap);
+    return s_Ui.Count() + add <= UI::Capacity();
+}
+
+void Ui_BeginBudget(int quads)
+{
+    if (!UiInternal_CanDraw() || s_BudgetOpen)
+        return;
+    s_BudgetOpen = true;
+    s_BudgetCap = (quads > 0) ? quads : 0;
+    s_BudgetStartCount = s_Ui.Count();
+    s_BudgetDropped = 0;
+}
+
+void Ui_EndBudget()
+{
+    if (!UiInternal_CanDraw() || !s_BudgetOpen)
+        return;
+    s_LastContainerQuads = s_Ui.Count() - s_BudgetStartCount;
+    if (s_BudgetDropped > 0)
+    {
+        Engine_LogError("Ui: a budgeted container dropped %u quad(s) (cap %d).", static_cast<unsigned>(s_BudgetDropped), s_BudgetCap);
+        s_BudgetDropped = 0;
+    }
+    s_BudgetOpen = false;
+}
+
+uint32_t Ui_ContainerQuadsUsed() { return s_LastContainerQuads; }
+
+uint32_t Ui_RunsUsed() { return s_RunsUsed; }
+
+uint32_t Ui_RunBudget() { return GFX_MAX_2D_RUNS; }

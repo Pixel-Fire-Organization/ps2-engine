@@ -22,6 +22,17 @@ struct Win32WindowState
     bool keyHit[256];
     bool mouseDown[8];
     bool mouseHit[8];
+
+    // WM_CHAR, filtered at the WndProc to printable ASCII plus backspace/enter/
+    // escape so nothing above this boundary ever sees a byte it has no meaning
+    // for. Drained by Keyboard_PopCharacters; a frame that does not drain it
+    // keeps what did not fit rather than dropping it.
+    enum : uint32_t
+    {
+        CHAR_BUFFER_SIZE = 64
+    };
+    char charBuffer[CHAR_BUFFER_SIZE];
+    uint32_t charCount;
 };
 
 // ---------------------------------------------------------------------------
@@ -117,6 +128,15 @@ public:
     float Mouse_GetWheelDelta() const override;
     uint8_t Touch_GetContactCount(TouchSurface surface) const override;
     bool Touch_GetContact(TouchSurface surface, uint8_t index, TouchContact* outContact) const override;
+    uint32_t Keyboard_PopCharacters(char* outBuffer, uint32_t bufferSize) override;
+
+    // MessageBoxA blocks the calling thread, so Dialog_Open has already
+    // decided the result by the time it returns; the first Dialog_Poll simply
+    // reports it. Text input has no host dialog on this platform, only the
+    // character channel above, so Dialog_Open refuses DialogKind::TextInput.
+    bool Dialog_Open(const DialogRequest& request) override;
+    DialogStatus Dialog_Poll() override;
+    void Dialog_Cancel() override;
 
     // --- Window.cpp ---------------------------------------------------------
     bool WindowOpen(const WindowDesc& desc) override;
@@ -205,4 +225,5 @@ private:
 
     Win32Memory m_memory;
     Win32WindowState m_window;
+    DialogStatus m_dialogResult;
 };

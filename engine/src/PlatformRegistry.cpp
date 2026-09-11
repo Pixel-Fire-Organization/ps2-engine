@@ -150,6 +150,8 @@ const char* Platform_ConstantName(PlatformConstant key)
         return "MaxTextureHeight";
     case PlatformConstant::MaxGamepadPorts:
         return "MaxGamepadPorts";
+    case PlatformConstant::ButtonIconFamily:
+        return "ButtonIconFamily";
     case PlatformConstant::Count:
         break;
     }
@@ -218,6 +220,10 @@ const char* Platform_CapabilityName(PlatformCapability key)
         return "FileWrite";
     case PlatformCapability::Touch:
         return "Touch";
+    case PlatformCapability::SystemDialog:
+        return "SystemDialog";
+    case PlatformCapability::TextCharacters:
+        return "TextCharacters";
     case PlatformCapability::Count:
         break;
     }

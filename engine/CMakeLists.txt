@@ -8,6 +8,13 @@
 # the EE dearly.
 # ---------------------------------------------------------------------------
 
+# Defined here, ahead of ENGINE_CORE_SOURCES below, because that list already
+# references it (the generated theme table). A CACHE variable is visible from
+# the start of every configure after the first, which is why this ordering
+# only matters -- and only fails silently into an empty path -- on a build
+# directory's very first configure.
+set(THEME_GEN_DIR "${CMAKE_BINARY_DIR}/generated/theme" CACHE INTERNAL "")
+
 set(ENGINE_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/CommandLine.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EngineMain.cpp"
@@ -38,6 +45,10 @@ set(ENGINE_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiTheme.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiFontAsset.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiStyle.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiIcon.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiTable.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiMenu.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiDialog.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/NullRenderer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/tim2.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/FontLoad.cpp"
@@ -160,7 +171,6 @@ add_custom_target(title-generate DEPENDS "${TITLE_GEN_DIR}/TitleInfo.h")
 # back to. The generator checks the declaration against UiColor, so a role added
 # to the engine and forgotten there fails the build rather than producing a
 # theme with a missing colour.
-set(THEME_GEN_DIR "${CMAKE_BINARY_DIR}/generated/theme" CACHE INTERNAL "")
 set(THEME_JSON   "${CMAKE_SOURCE_DIR}/game/theme.json")
 set(THEME_GEN_PY "${CMAKE_SOURCE_DIR}/tools/theme.py")
 

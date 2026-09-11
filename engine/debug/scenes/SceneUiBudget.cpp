@@ -4,6 +4,11 @@
 namespace
 {
     const int PLOT_SAMPLES = 64;
+    // Deliberately tight: thirty rows always overruns a cap of twenty quads
+    // regardless of which font is active, so this scene exercises the drop
+    // path rather than merely declaring it exists.
+    const int CAPPED_LIST_QUAD_CAP = 20;
+    const int CAPPED_LIST_ROW_COUNT = 30;
 
     float s_Quads[PLOT_SAMPLES];
     int s_Filled = 0;
@@ -31,6 +36,7 @@ namespace
         Ui_Bar("FOCUSABLES", static_cast<int>(Ui_FocusablesUsed()), static_cast<int>(Ui_FocusableBudget()));
         Ui_Bar("STATES", static_cast<int>(Ui_StatesUsed()), static_cast<int>(Ui_StateBudget()));
         Ui_Bar("CLIP DEPTH", static_cast<int>(Ui_ClipDepthUsed()), static_cast<int>(Ui_ClipDepthBudget()));
+        Ui_Bar("RUNS", static_cast<int>(Ui_RunsUsed()), static_cast<int>(Ui_RunBudget()));
 
         Ui_Separator();
         Ui_LabelValue("FONT", Ui_FontIsCooked() ? "COOKED" : "BUILT-IN");
@@ -82,6 +88,15 @@ namespace
             Ui_Toast("A NOTIFICATION", 2.5f);
         if (Ui_Button("MODAL"))
             s_ShowModal = true;
+
+        Ui_Separator();
+        Ui_Header("A CONTAINER CAPPED WITH Ui_BeginBudget");
+        Ui_BeginBudget(CAPPED_LIST_QUAD_CAP);
+        for (int i = 0; i < CAPPED_LIST_ROW_COUNT; ++i)
+            Ui_LabelValueFormat("ROW", "%d", i);
+        Ui_EndBudget();
+        Ui_LabelValueFormat("CONTAINER QUADS", "%u OF %d", static_cast<unsigned>(Ui_ContainerQuadsUsed()), CAPPED_LIST_QUAD_CAP);
+        Ui_LabelValue("A FEW MORE QUADS WOULD FIT", Ui_WouldFit(4) ? "YES" : "NO");
 
         Ui_Separator();
         Ui_LabelWrapped("This scene is the observable proof of the interface budget: every bar above is a real ceiling, and a screen that overruns one is reported once per frame.", UiColor::TextDim);

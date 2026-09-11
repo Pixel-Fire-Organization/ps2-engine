@@ -139,6 +139,7 @@ def pack_asset(json_path, src_dir, dst_dir, cooklist=None):
         try:
             with open(source_path, "r", encoding="utf-8-sig") as fh:
                 metrics = json.load(fh)
+            cells = metrics.get("cells") or []
             payload, ext_str = font.write_font(
                 metrics["glyphs"],
                 metrics["atlas_width"],
@@ -146,11 +147,10 @@ def pack_asset(json_path, src_dir, dst_dir, cooklist=None):
                 metrics["line_height"],
                 metrics["baseline"],
                 metrics["space_advance"],
-                metrics["white_u"],
-                metrics["white_v"],
                 metrics.get("missing_index", 0),
+                cells,
             )
-            print(f"  BAKE:  {source_name} -> PSFN {len(metrics['glyphs'])} glyphs ({len(payload)} bytes)")
+            print(f"  BAKE:  {source_name} -> PSFN {len(metrics['glyphs'])} glyphs, {len(cells)} cell(s) ({len(payload)} bytes)")
         except (KeyError, font.FontError) as e:
             print(f"  ERROR: font bake failed for {source_name}: {e}")
             return False

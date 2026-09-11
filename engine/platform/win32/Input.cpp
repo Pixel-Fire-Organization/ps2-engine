@@ -417,3 +417,20 @@ bool Win32Platform::Touch_GetContact(TouchSurface surface, uint8_t index, TouchC
     UNUSED_VAR(outContact);
     return false;
 }
+
+uint32_t Win32Platform::Keyboard_PopCharacters(char* outBuffer, uint32_t bufferSize)
+{
+    const uint32_t count = (m_window.charCount < bufferSize) ? m_window.charCount : bufferSize;
+    for (uint32_t i = 0; i < count; ++i)
+        outBuffer[i] = m_window.charBuffer[i];
+
+    // Anything left over did not fit this poll; shift it down rather than
+    // dropping it, so a caller that pops in small batches still sees every
+    // character eventually instead of losing whatever arrived between polls.
+    const uint32_t remaining = m_window.charCount - count;
+    for (uint32_t i = 0; i < remaining; ++i)
+        m_window.charBuffer[i] = m_window.charBuffer[count + i];
+    m_window.charCount = remaining;
+
+    return count;
+}

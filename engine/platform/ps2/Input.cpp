@@ -216,3 +216,20 @@ bool Ps2Platform::Touch_GetContact(TouchSurface surface, uint8_t index, TouchCon
     UNUSED_VAR(outContact);
     return false;
 }
+
+uint32_t Ps2Platform::Keyboard_PopCharacters(char* outBuffer, uint32_t bufferSize)
+{
+    UNUSED_VAR(outBuffer);
+    UNUSED_VAR(bufferSize);
+    return 0;
+}
+
+bool Ps2Platform::Dialog_Open(const DialogRequest& request)
+{
+    UNUSED_VAR(request);
+    return false;
+}
+
+DialogStatus Ps2Platform::Dialog_Poll() { return DialogStatus::Idle; }
+
+void Ps2Platform::Dialog_Cancel() {}

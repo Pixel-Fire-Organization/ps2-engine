@@ -12,10 +12,10 @@ See docs/formats/THEME_FORMAT.md.
 import struct
 
 MAGIC = b"PSTH"
-VERSION = 1
+VERSION = 2
 
 HEADER_SIZE = 16
-STYLE_BYTES = 100
+STYLE_BYTES = 108
 KEY_MAX = 48
 FONT_REF_SIZE = 1 + KEY_MAX
 MAX_FONT_REFS = 8
@@ -24,14 +24,17 @@ MAX_FONT_REFS = 8
 # list against the engine header, so the two cannot drift.
 COLOR_ROLES = [
     "WindowBackground", "PanelBackground", "Border", "Header", "Text", "TextDim",
-    "TextAccent", "TextWarn", "ItemBackground", "ItemHovered", "ItemActive",
-    "Focus", "BarTrack", "BarFill", "BarFillWarn", "Cursor", "CursorOutline",
+    "TextAccent", "TextWarn", "TextDisabled", "ItemBackground", "ItemHovered",
+    "ItemActive", "Focus", "BarTrack", "BarFill", "BarFillWarn", "Cursor", "CursorOutline",
 ]
 
-# int16 metrics, in declaration order after the two floats.
+# int16 metrics, in declaration order after the two floats. Version 2 spent the
+# format's last two reserved slots on menuBarHeight and caretWidth, plus one
+# more byte pair of colour growth (TextDisabled, above) covering iconSpacing.
 INT_METRICS = [
     "panelPadding", "itemSpacing", "borderWidth", "textScale", "rowPadding",
     "barHeight", "cursorSize", "screenMargin", "panelGap", "scrollBarWidth",
+    "menuBarHeight", "caretWidth", "iconSpacing",
 ]
 
 FONT_ROLES = ["Body", "Header", "Value"]
@@ -42,7 +45,8 @@ METRIC_RANGES = {
     "panelPadding": (0, 256), "itemSpacing": (0, 256), "borderWidth": (0, 64),
     "textScale": (1, 16), "rowPadding": (0, 256), "barHeight": (1, 256),
     "cursorSize": (1, 256), "screenMargin": (0, 512), "panelGap": (0, 512),
-    "scrollBarWidth": (1, 128),
+    "scrollBarWidth": (1, 128), "menuBarHeight": (1, 256), "caretWidth": (1, 32),
+    "iconSpacing": (0, 128),
 }
 REPEAT_RANGE = (0.01, 5.0)
 
@@ -97,7 +101,7 @@ def pack_style(colors, metrics):
     blob += struct.pack("<ff", float(metrics["repeatDelaySeconds"]), float(metrics["repeatIntervalSeconds"]))
     for name in INT_METRICS:
         blob += struct.pack("<h", metrics[name])
-    blob += struct.pack("<hh", 0, 0)  # reserved
+    blob += struct.pack("<h", 0)  # reserved
 
     if len(blob) != STYLE_BYTES:
         raise ThemeError(f"style image is {len(blob)} bytes, the format declares {STYLE_BYTES}")

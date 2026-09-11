@@ -55,7 +55,8 @@ namespace
         const Check checks[] = {
             {"panelPadding", style.panelPadding, 0, 256}, {"itemSpacing", style.itemSpacing, 0, 256},       {"borderWidth", style.borderWidth, 0, 64}, {"textScale", style.textScale, 1, 16},
             {"rowPadding", style.rowPadding, 0, 256},     {"barHeight", style.barHeight, 1, 256},           {"cursorSize", style.cursorSize, 1, 256},  {"screenMargin", style.screenMargin, 0, 512},
-            {"panelGap", style.panelGap, 0, 512},         {"scrollBarWidth", style.scrollBarWidth, 1, 128},
+            {"panelGap", style.panelGap, 0, 512},         {"scrollBarWidth", style.scrollBarWidth, 1, 128}, {"menuBarHeight", style.menuBarHeight, 1, 256}, {"caretWidth", style.caretWidth, 1, 32},
+            {"iconSpacing", style.iconSpacing, 0, 128},
         };
 
         for (size_t i = 0; i < sizeof(checks) / sizeof(checks[0]); ++i)

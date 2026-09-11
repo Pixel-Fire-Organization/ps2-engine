@@ -135,8 +135,8 @@ function(platform_configure PLATFORM)
         "${_baseDir}/Filesystem.cpp"
         "${_baseDir}/Input.cpp"
         "${_baseDir}/Window.cpp"
-        "${_baseDir}/Trophy.cpp"
         "${_baseDir}/CommonDialog.cpp"
+        "${_baseDir}/Dialog.cpp"
         "${_baseDir}/CommonDialog.h"
         "${_baseDir}/Platform.h"
         "${_baseDir}/PlatformConstantsVita.h"
@@ -154,17 +154,18 @@ function(platform_configure PLATFORM)
 
     set(ENGINE_PLATFORM_${PLATFORM}_DEFINES
         "VITA_TITLE_ID_STR=\"${VITA_TITLE_ID}\""
-        "VITA_NP_COMM_ID_STR=\"${VITA_NP_COMM_ID}\""
-        "VITA_TROPHIES_PACKAGED=$<IF:$<STREQUAL:${VITA_TROPHIES_ENABLED},ON>,1,0>"
-        "VITA_TROPHY_DECLARED=${VITA_TROPHY_COUNT}"
         PARENT_SCOPE)
 
     # Not optional: see docs/vita/BUILD.md. The executable conversion appends
     # module metadata after the code segment and can only use the padding the
     # linker left before the next one; without this the two segments are packed
-    # tight enough that the conversion fails rather than the link.
+    # tight enough that the conversion fails rather than the link. max-page-size
+    # raises the ceiling on that gap -- one of two changes BUILD.md documents
+    # for this failure; the other was removing the SCE data the trophy
+    # integration's imports no longer contribute now that it is gone.
     set(ENGINE_PLATFORM_${PLATFORM}_LIBS
         "-Wl,-z,separate-code"
+        "-Wl,-z,max-page-size=0x10000"
         "${VITAGL_LIB}"
         vitashark SceShaccCgExt taihen_stub SceShaccCg_stub mathneon
         SceDisplay_stub SceGxm_stub
@@ -172,7 +173,7 @@ function(platform_configure PLATFORM)
         SceLibKernel_stub SceSysmem_stub SceKernelThreadMgr_stub
         SceIofilemgr_stub SceSysmodule_stub SceKernelDmacMgr_stub
         SceAppMgr_stub SceProcessmgr_stub ScePower_stub SceCommonDialog_stub
-        SceNpTrophy_stub SceNpManager_stub SceNet_stub SceNetCtl_stub
+        SceIme_stub
         m
         PARENT_SCOPE)
 endfunction()
@@ -237,6 +238,13 @@ function(platform_package PLATFORM EXE_TARGET DIST_DIR)
                 --dir "${CMAKE_SOURCE_DIR}/dist/cooked/${_variant}/rassets"
                 --prefix RASSETS
                 --dst "${DIST_DIR}/RASSETS.PS2R"
+        # EXE_TARGET's link crosses the WSL/DrvFs boundary this project builds
+        # on; make's dependency ordering guarantees that process exited but
+        # not that the write is visible yet through that bridge. Left in
+        # place as a harmless precaution, not because it was shown to matter
+        # -- see docs/vita/BUILD.md for what actually explained the
+        # segment-overlap failure this was investigated alongside.
+        COMMAND sync
         COMMAND ${VITA_ELF_CREATE} "$<TARGET_FILE:${EXE_TARGET}>" "${_velf}"
         COMMAND ${VITA_MAKE_FSELF} ${_fselfArgs} "${_velf}" "${_eboot}"
         COMMAND ${VITA_MKSFOEX} ${_mksfoexArgs} "${VITA_TITLE_NAME}" "${_sfo}"

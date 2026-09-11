@@ -52,6 +52,17 @@ do not discover it as you go.
 - [ ] Threads and semaphores
 - [ ] Console write and panic
 - [ ] Input: poll, and the gamepad, keyboard and mouse groups
+- [ ] `Keyboard_PopCharacters` — the character channel behind
+      `PlatformCapability::TextCharacters`; a platform with no character device
+      returns zero always, honestly, the same as an absent capability elsewhere
+- [ ] `Dialog_Open` / `Dialog_Poll` / `Dialog_Cancel` — the non-blocking dialog
+      contract behind `PlatformCapability::SystemDialog`; shaped for a host
+      that renders a dialog into its own frame and cannot be waited on
+      synchronously, so implement the poll even where the host's own call
+      blocks (see Win32's `MessageBox` for the pattern). A platform with no
+      system dialog service answers `Dialog_Open` false and touches nothing —
+      the UI subsystem's own drawn modal is what runs instead, unconditionally,
+      so this is never a feature the platform can leave half-built
 - [ ] Window: open, close, should-close, framebuffer size, native handle
 - [ ] Debug combinations: the buttons **this** pad can actually produce
 - [ ] Renderers: supported set, default, fallback chain, create, destroy

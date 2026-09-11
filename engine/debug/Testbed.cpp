@@ -122,7 +122,6 @@ namespace
         const Platform* platform = Engine_GetPlatform();
         const int screenW = platform ? static_cast<int>(platform->GetConstant(PlatformConstant::ScreenWidth)) : GFX_SCREEN_WIDTH;
         const int screenH = platform ? static_cast<int>(platform->GetConstant(PlatformConstant::ScreenHeight)) : GFX_SCREEN_HEIGHT;
-        const UiStyle& style = Ui_GetStyle();
 
         Ui_Rect(0, 0, screenW, screenH, UiColor::WindowBackground);
 
@@ -139,9 +138,14 @@ namespace
         if (right >= 0)
             chosen = right;
 
-        char footer[128];
-        snprintf(footer, sizeof(footer), "X SELECT   O CLOSE   %s TOGGLES", s_ChordText);
-        Ui_Text((screenW - Ui_TextWidth(style.textScale, footer)) / 2, screenH - MENU_FOOTER_HEIGHT, style.textScale, footer, UiColor::TextDim);
+        char toggles[80];
+        snprintf(toggles, sizeof(toggles), "%s TOGGLES", s_ChordText);
+        const UiHint hints[] = {
+            {Ui_ButtonIcon(GamepadButton::Cross), "SELECT"},
+            {Ui_ButtonIcon(GamepadButton::Circle), "CLOSE"},
+            {UiIcon::None, toggles},
+        };
+        Ui_HintBar(hints, static_cast<int>(sizeof(hints) / sizeof(hints[0])));
 
         if (chosen == EXIT_CHOSEN)
         {

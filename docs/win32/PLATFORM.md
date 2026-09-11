@@ -33,6 +33,8 @@ Two consequences worth stating plainly:
 | Resizable window | Yes | |
 | Async IO | Yes | |
 | File write | Yes | |
+| System dialog | Yes | `MessageBox`; refuses text entry, see below |
+| Text characters | Yes | `WM_CHAR`, the only text-entry mechanism here |
 
 ## Memory
 
@@ -105,9 +107,27 @@ unpressable from the keyboard. See [DEBUG.md](../subsystems/DEBUG.md).
 | Overlay toggle | L1 + L2 + L3 + R3 | 1 + 3 + 5 + 6 |
 | Debug menu | Select + Start | Tab + Escape |
 
+Button prompts draw Xbox letters, matching the XInput convention the gamepad
+bridge already follows. See [subsystems/UI.md](../subsystems/UI.md).
+
 The keyboard column is the bridge, not a second binding: it disappears with the
 bridge, so with the bridge disabled every combination above is reachable only
 from a controller.
+
+**A second, separate character stream rides the same `WM_CHAR` messages the
+window already receives**, behind `PlatformCapability::TextCharacters`: this is
+the printable-ASCII-plus-backspace/enter/escape channel `Platform.h` documents
+for `Keyboard_PopCharacters`, not the keyboard device queries above and not the
+pad bridge. `MessageBox` (`Dialog_Open`) blocks the calling thread and refuses
+`DialogKind::TextInput` outright — this platform has no host text dialog, so
+the UI subsystem's text-entry widgets use the character channel directly,
+inline, with no dialog box at all, matching what a desktop with a keyboard
+already expects. Physical Backspace reaches both streams at once, meaning both
+"the Back gamepad signal fired" and "a 0x08 byte is waiting in the character
+channel" become true on the same keystroke; a widget reading the character
+channel must not also read the ordinary Back signal while it does, or the same
+key would both edit and cancel. See the *Dialogs and text entry* section of
+[subsystems/UI.md](../subsystems/UI.md).
 
 ## Window
 

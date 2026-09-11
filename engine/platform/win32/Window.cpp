@@ -63,6 +63,16 @@ namespace
                 g_State->keyDown[wParam] = false;
             return 0;
 
+        // Printable ASCII, plus the three control bytes Platform.h documents
+        // for Keyboard_PopCharacters: this is the character channel behind
+        // PlatformCapability::TextCharacters, and its whole contract is that
+        // nothing above the platform boundary ever sees a byte it has no
+        // meaning for.
+        case WM_CHAR:
+            if (((wParam >= 32 && wParam < 127) || wParam == 8 || wParam == 13 || wParam == 27) && g_State->charCount < Win32WindowState::CHAR_BUFFER_SIZE)
+                g_State->charBuffer[g_State->charCount++] = static_cast<char>(wParam);
+            return 0;
+
         // Losing focus would otherwise leave keys stuck down forever: the
         // matching WM_KEYUP is delivered to whoever took focus, not to us.
         case WM_KILLFOCUS:
@@ -107,6 +117,7 @@ bool Win32Platform::WindowOpen(const WindowDesc& desc)
     m_window.shouldClose = false;
     m_window.resized = false;
     m_window.wheelDelta = 0.0f;
+    m_window.charCount = 0;
     g_State = &m_window;
 
     HINSTANCE instance = GetModuleHandleA(nullptr);
@@ -190,4 +201,39 @@ void Win32Platform::GetFramebufferSize(uint32_t* outWidth, uint32_t* outHeight) 
 }
 
 void* Win32Platform::GetNativeWindowHandle() const { return m_window.hwnd; }
+
+bool Win32Platform::Dialog_Open(const DialogRequest& request)
+{
+    if (request.kind == DialogKind::TextInput)
+    {
+        // No host text dialog on this platform -- WM_CHAR already delivers
+        // typed characters directly, which is what PlatformCapability::
+        // TextCharacters is for, so there is nothing this call would add.
+        return false;
+    }
+
+    const UINT type = (request.kind == DialogKind::Confirm) ? MB_OKCANCEL : MB_OK;
+    const int result = MessageBoxA(static_cast<HWND>(m_window.hwnd), request.body ? request.body : "", request.title ? request.title : "", type);
+
+    // MessageBoxA blocks until dismissed, so the result is already known by
+    // the time this returns; Dialog_Poll's non-blocking contract is honoured
+    // by handing that known result to the first poll instead.
+    m_dialogResult = (result == IDCANCEL) ? DialogStatus::Cancelled : DialogStatus::Accepted;
+    return true;
+}
+
+DialogStatus Win32Platform::Dialog_Poll()
+{
+    const DialogStatus result = m_dialogResult;
+    if (result == DialogStatus::Accepted || result == DialogStatus::Cancelled)
+        m_dialogResult = DialogStatus::Idle;
+    return result;
+}
+
+void Win32Platform::Dialog_Cancel()
+{
+    // MessageBoxA has already returned by the time Dialog_Open does; there is
+    // nothing left running to cancel, only the result of one still unread.
+    m_dialogResult = DialogStatus::Idle;
+}
 
