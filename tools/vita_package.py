@@ -38,7 +38,7 @@ import title as title_declaration
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "game", "config", "platform", "vita", "package.json")
-DEFAULT_SCHEMA = os.path.join(PROJECT_ROOT, "game", "config", "platform", "package.schema.json")
+DEFAULT_SCHEMA = os.path.join(PROJECT_ROOT, "tools", "schemas", "package.schema.json")
 DEFAULT_TITLE = os.path.join(PROJECT_ROOT, "game", "config", "title.json")
 
 ACHV_MAX_ENTRIES = 128

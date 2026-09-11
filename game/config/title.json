@@ -1,5 +1,5 @@
 {
-  "$schema": "title.schema.json",
+  "$schema": "../../tools/schemas/title.schema.json",
   "description": "Who made this and what it is called, declared once for every platform. Platform packaging and the engine's writable-storage location are both built from this. See docs/subsystems/ACHIEVEMENT.md and each platform's spec.",
   "developer": "Pixel Fire",
   "name": "PS2 Engine",

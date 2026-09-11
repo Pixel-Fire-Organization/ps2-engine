@@ -73,7 +73,7 @@ endfunction()
 
 set(VITA_PACKAGE_TOOL   "${CMAKE_SOURCE_DIR}/tools/vita_package.py")
 set(VITA_PACKAGE_CONFIG "${CMAKE_SOURCE_DIR}/game/config/platform/vita/package.json")
-set(VITA_PACKAGE_SCHEMA "${CMAKE_SOURCE_DIR}/game/config/platform/package.schema.json")
+set(VITA_PACKAGE_SCHEMA "${CMAKE_SOURCE_DIR}/tools/schemas/package.schema.json")
 
 # Validate the package config and read it into CMake variables.
 function(vita_read_package PLATFORM OUT_GENERATED_DIR)

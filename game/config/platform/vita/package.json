@@ -1,5 +1,5 @@
 {
-  "$schema": "../package.schema.json",
+  "$schema": "../../../../tools/schemas/package.schema.json",
   "platform": "vita",
   "description": "Title identity, store-front presentation and achievements for the Vita family. Describes the game, not the hardware - the cook list in engine/platform/vita/ is the hardware half. See docs/vita/PACKAGING.md.",
 

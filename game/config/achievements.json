@@ -1,5 +1,5 @@
 {
-  "$schema": "achievements.schema.json",
+  "$schema": "../../tools/schemas/achievements.schema.json",
   "description": "The title's achievement set, declared once for every platform. The engine reads this for its own record and its display; each platform's packaging reads it for whatever container that platform needs. See docs/subsystems/ACHIEVEMENT.md.",
 
   "achievements": [

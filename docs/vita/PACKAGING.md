@@ -8,11 +8,11 @@ Unlike the PS2 disc, a Vita package carries **per-title metadata**: a title
 identifier, a display name, an icon, a store-front layout and optionally a trophy
 set. None of that is a build setting, so none of it lives in CMake. It is declared
 in `game/config/platform/vita/package.json`, validated against
-`game/config/platform/package.schema.json`, and consumed by `tools/vita_package.py`.
+`tools/schemas/package.schema.json`, and consumed by `tools/vita_package.py`.
 
 ---
 
-## Why the config lives under `game/`
+## Why the config lives under `game/`, and the schema does not
 
 The cook list under `engine/platform/<name>/` answers a hardware question — how
 this machine wants textures baked. A title identifier and an icon answer a
@@ -26,6 +26,13 @@ else. It sits under `game/config/` alongside every other declarative file this
 project owns — achievements, theme, title — rather than under `game/platform/`
 directly, for the same reason those do: one place a person looks for "what does
 this project declare," not one place per kind of declaration.
+
+The schema that validates it is not part of that declaration, though, and does
+not live beside it: `tools/schemas/package.schema.json`, alongside every other
+`.schema.json` this project has, since a schema is read by the cook system that
+enforces it, not authored by the game the way the data it validates is. The
+declaration's own `$schema` field still points at it, by relative path, purely
+so an editor can offer completion — nothing here reads that field back.
 
 ---
 

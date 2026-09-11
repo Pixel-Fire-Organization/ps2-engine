@@ -96,7 +96,7 @@ def test_repo_config_validates_for_both_variants():
 def test_repo_config_matches_its_schema():
     pytest.importorskip("jsonschema")
     raw = vp.load_config(str(ROOT / "game" / "config" / "platform" / "vita" / "package.json"))
-    vp.schema_validate(raw, str(ROOT / "game" / "config" / "platform" / "package.schema.json"))
+    vp.schema_validate(raw, str(ROOT / "tools" / "schemas" / "package.schema.json"))
 
 
 @pytest.mark.parametrize("bad", ["PSEN0001", "psen00001", "PSEN000012", "PS2N0001X", ""])
