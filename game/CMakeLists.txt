@@ -52,12 +52,12 @@ add_custom_target(ecs-generate
 )
 
 # --- Achievement code generation (shared by every platform) -----------------
-# game/achievements.json is the single source of truth for the set. The enum is
-# what game code names an achievement by; the table is what the engine reads to
-# show one. Generating at build time is what keeps the declaration, the engine
-# and every platform's packaging describing one set.
+# game/config/achievements.json is the single source of truth for the set. The
+# enum is what game code names an achievement by; the table is what the engine
+# reads to show one. Generating at build time is what keeps the declaration,
+# the engine and every platform's packaging describing one set.
 set(ACHV_GEN_DIR "${CMAKE_BINARY_DIR}/generated/achievements" CACHE INTERNAL "")
-set(ACHV_JSON   "${CMAKE_CURRENT_SOURCE_DIR}/achievements.json")
+set(ACHV_JSON   "${CMAKE_CURRENT_SOURCE_DIR}/config/achievements.json")
 set(ACHV_GEN_PY "${CMAKE_SOURCE_DIR}/tools/achievements.py")
 
 add_custom_command(
@@ -99,7 +99,7 @@ function(game_add_cook_target PLATFORM)
             --platform "${_lower}"
             --src "${GAME_ASSETS_SRC_DIR}"
             --src "${ENGINE_ASSETS_SRC_DIR}"
-            --themes "${CMAKE_SOURCE_DIR}/game/theme.json"
+            --themes "${CMAKE_SOURCE_DIR}/game/config/theme.json"
             --dst "${_cooked}/rassets"
         COMMENT "Cook: engine + game source assets -> dist/cooked/${_lower}/rassets"
         VERBATIM

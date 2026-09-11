@@ -5,7 +5,7 @@ packaging and the engine's writable-storage location are both built from this, s
 the identity a console shows and the identity a save is filed under cannot
 disagree.
 
-    python3 tools/title.py --declaration game/title.json
+    python3 tools/title.py --declaration game/config/title.json
 
 See docs/subsystems/ACHIEVEMENT.md and each platform's spec.
 """
@@ -16,7 +16,7 @@ import os
 import re
 import sys
 
-DEFAULT_DECLARATION = os.path.join("game", "title.json")
+DEFAULT_DECLARATION = os.path.join("game", "config", "title.json")
 
 ID_PATTERN = re.compile(r"^[A-Z]{4}[0-9]{5}$")
 VERSION_PATTERN = re.compile(r"^[0-9][0-9]\.[0-9][0-9]$")

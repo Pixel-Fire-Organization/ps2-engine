@@ -213,22 +213,25 @@ new platform boot and be validated before any graphics code exists.
 - **Toolchains**: `toolchains/ps2dev.cmake` (PS2, `mips64r5900el-ps2-elf`), `toolchains/mingw-w64.cmake`
   (Win32, cross-compiled from WSL — needs `sudo apt install mingw-w64`), and `toolchains/vitasdk.cmake`
   (Vita, `arm-vita-eabi`).
-- **Title metadata is game-owned, and declared once**: `game/title.json` (schema `game/title.schema.json`, reader
-  `tools/title.py`) holds who made the title, what it is called, and what each platform files it under. Every
-  platform's packaging and every platform's writable-storage location are built from it, so the identity a console
-  shows and the identity a save is filed under cannot disagree. `game/achievements.json` (schema and reader
-  alongside) is the same idea for the achievement set, and `game/theme.json` (schema and reader alongside) for
-  the interface's look — its themes are generated into the binary *and* cooked as loadable assets from one
-  declaration, and the generator checks it against `UiColor` so a colour role cannot exist in the engine without
-  one. A theme is colours *and* metrics together: the declaration's top-level `metrics` are defaults, and any
-  theme may override individual fields, so a theme built for a smaller or poorer display can ask for larger text
-  without every other theme paying for it.
+- **Every declarative JSON/schema file the game owns lives under `game/config/`**, one unified space rather than one
+  per kind of declaration. `game/config/title.json` (schema `game/config/title.schema.json`, reader `tools/title.py`)
+  holds who made the title, what it is called, and what each platform files it under. Every platform's packaging and
+  every platform's writable-storage location are built from it, so the identity a console shows and the identity a
+  save is filed under cannot disagree. `game/config/achievements.json` (schema and reader alongside) is the same
+  idea for the achievement set, and `game/config/theme.json` (schema and reader alongside) for the interface's
+  look — its themes are generated into the binary *and* cooked as loadable assets from one declaration, and the
+  generator checks it against `UiColor` so a colour role cannot exist in the engine without one. A theme is colours
+  *and* metrics together: the declaration's top-level `metrics` are defaults, and any theme may override individual
+  fields, so a theme built for a smaller or poorer display can ask for larger text without every other theme paying
+  for it.
   The PS2 memory card save icon is generated from the same title declaration (`tools/ps2/save_icon.py`): a save
-  directory without it is reported as corrupted by the console browser even though its data is intact. A platform config — `game/platform/<name>/package.json`,
-  validated against `game/platform/package.schema.json` — carries only what is *specific* to that platform's
-  container, and has its identity folded in when it is read; it does not restate one. The cook list answers a
-  *hardware* question and stays in `engine/platform/<name>/`; a title id and an icon answer a question about the
-  *game* and do not.
+  directory without it is reported as corrupted by the console browser even though its data is intact. A platform
+  config — `game/config/platform/<name>/package.json`, validated against `game/config/platform/package.schema.json`
+  — carries only what is *specific* to that platform's container, and has its identity folded in when it is read; it
+  does not restate one. The cook list answers a *hardware* question and stays in `engine/platform/<name>/`; a title
+  id and an icon answer a question about the *game* and do not. A platform's own non-JSON packaging assets (Vita's
+  `sce_sys/`, its trophy icons) move with its `package.json`, under `game/config/platform/<name>/`, since those paths
+  are declared relative to it.
 - **Adding a platform**: one `engine/platform/<name>/` directory containing a `platform.cmake`, a `cooklist.json`,
   plus one entry in `ENGINE_KNOWN_PLATFORMS` and its metadata block. **No shared build file names a platform** — the
   root drives, each fragment declares. The fragment defines `platform_configure()` and optionally

@@ -143,14 +143,14 @@ endif()
 find_program(PYTHON3_BIN python3 REQUIRED)
 
 # --- Title identity ---------------------------------------------------------
-# game/title.json is the single source of who made the title and what each
-# platform files it under. A platform builds its writable-storage location from
-# this, so the identity a console shows and the identity a save is filed under
-# cannot disagree.
+# game/config/title.json is the single source of who made the title and what
+# each platform files it under. A platform builds its writable-storage location
+# from this, so the identity a console shows and the identity a save is filed
+# under cannot disagree.
 set(ENGINE_ASSETS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets" CACHE INTERNAL "Engine-owned source assets")
 
 set(TITLE_GEN_DIR "${CMAKE_BINARY_DIR}/generated/title" CACHE INTERNAL "")
-set(TITLE_JSON   "${CMAKE_SOURCE_DIR}/game/title.json")
+set(TITLE_JSON   "${CMAKE_SOURCE_DIR}/game/config/title.json")
 set(TITLE_GEN_PY "${CMAKE_SOURCE_DIR}/tools/title.py")
 
 add_custom_command(
@@ -165,13 +165,13 @@ add_custom_command(
 set_source_files_properties("${TITLE_GEN_DIR}/TitleInfo.h" PROPERTIES GENERATED TRUE)
 add_custom_target(title-generate DEPENDS "${TITLE_GEN_DIR}/TitleInfo.h")
 
-# game/theme.json is the single source of truth for the interface's look. Its
-# themes are compiled in, because the interface must be able to draw before a
-# filesystem exists and because a built-in theme is what a refused load falls
-# back to. The generator checks the declaration against UiColor, so a role added
-# to the engine and forgotten there fails the build rather than producing a
-# theme with a missing colour.
-set(THEME_JSON   "${CMAKE_SOURCE_DIR}/game/theme.json")
+# game/config/theme.json is the single source of truth for the interface's
+# look. Its themes are compiled in, because the interface must be able to draw
+# before a filesystem exists and because a built-in theme is what a refused
+# load falls back to. The generator checks the declaration against UiColor, so
+# a role added to the engine and forgotten there fails the build rather than
+# producing a theme with a missing colour.
+set(THEME_JSON   "${CMAKE_SOURCE_DIR}/game/config/theme.json")
 set(THEME_GEN_PY "${CMAKE_SOURCE_DIR}/tools/theme.py")
 
 add_custom_command(

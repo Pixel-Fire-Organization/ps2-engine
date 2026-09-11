@@ -253,7 +253,7 @@ outside printable ASCII are dropped in that conversion, in both directions.
   trophy application. This is a decision, not a gap in progress: the service
   requires software the player installs themselves and never reaches the
   online service even then, and the engine's own cross-platform achievement
-  system (`game/achievements.json`) is what actually ships, unaffected by
+  system (`game/config/achievements.json`) is what actually ships, unaffected by
   this. See [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md) and
   [PACKAGING.md](PACKAGING.md)'s Trophies section.
 - **Textures are cooked to plain 32-bit colour.** The hardware supports

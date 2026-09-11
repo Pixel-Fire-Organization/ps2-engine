@@ -93,7 +93,7 @@ def test_malformed_json_is_reported_as_such(tmp_path):
 
 
 def test_the_shipped_declaration_is_valid():
-    declaration = title.load(str(ROOT / "game" / "title.json"))
+    declaration = title.load(str(ROOT / "game" / "config" / "title.json"))
     assert title.platform_id(declaration, "vita")
     assert title.platform_id(declaration, "ps2")
 
@@ -101,12 +101,12 @@ def test_the_shipped_declaration_is_valid():
 def test_vita_packaging_takes_its_identity_from_the_shared_declaration():
     """The identity a console shows and the identity a save is filed under come
     from one place; a second copy in the package config would drift."""
-    package = json.loads((ROOT / "game" / "platform" / "vita" / "package.json").read_text(encoding="utf-8"))
+    package = json.loads((ROOT / "game" / "config" / "platform" / "vita" / "package.json").read_text(encoding="utf-8"))
     assert "title" not in package
 
     vp = _load("vita_package", "tools/vita_package.py")
-    declaration = title.load(str(ROOT / "game" / "title.json"))
-    config = vp.load_config(str(ROOT / "game" / "platform" / "vita" / "package.json"))
+    declaration = title.load(str(ROOT / "game" / "config" / "title.json"))
+    config = vp.load_config(str(ROOT / "game" / "config" / "platform" / "vita" / "package.json"))
     assert config["title"]["id"] == title.platform_id(declaration, "vita")
     assert config["title"]["name"] == declaration["name"]
     assert config["title"]["version"] == declaration["version"]

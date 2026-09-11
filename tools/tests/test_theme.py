@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 from ps2lib import ps2a, theme as themelib  # noqa: E402
 import theme as theme_tool  # noqa: E402
 
-DECLARATION = os.path.join(ROOT, "game", "theme.json")
+DECLARATION = os.path.join(ROOT, "game", "config", "theme.json")
 
 
 def _decl():

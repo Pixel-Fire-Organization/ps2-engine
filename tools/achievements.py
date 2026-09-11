@@ -4,7 +4,7 @@ One description of the set feeds the engine and every platform's packaging. This
 module owns reading and checking it; platform packaging imports it rather than
 parsing the declaration itself, so the two cannot disagree about what the set is.
 
-    python3 tools/achievements.py --declaration game/achievements.json \
+    python3 tools/achievements.py --declaration game/config/achievements.json \
         --emit-ids build/generated/AchievementIds.h \
         --emit-table build/generated/AchievementTable.cpp
 
@@ -20,7 +20,7 @@ ACHV_MAX_ENTRIES = 128
 
 GRADES = ("platinum", "gold", "silver", "bronze")
 
-DEFAULT_DECLARATION = os.path.join("game", "achievements.json")
+DEFAULT_DECLARATION = os.path.join("game", "config", "achievements.json")
 
 
 class AchievementError(Exception):

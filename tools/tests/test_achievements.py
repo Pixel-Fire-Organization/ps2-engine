@@ -133,6 +133,6 @@ def test_generated_table_escapes_quoted_text(tmp_path):
 
 def test_the_shipped_declaration_is_valid():
     """The title's own set is held to every rule above."""
-    entries = ach.load(str(ROOT / "game" / "achievements.json"))
+    entries = ach.load(str(ROOT / "game" / "config" / "achievements.json"))
     assert entries
     assert [e["id"] for e in entries] == list(range(len(entries)))

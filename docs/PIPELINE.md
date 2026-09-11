@@ -22,10 +22,10 @@ below. Stage 5 assembles the two halves.
 **Stage 5 may need title metadata**, where the platform distributes an installable
 package rather than a directory. That metadata — display name, identifier, icon,
 store-front layout, achievements — describes the *game*, not the hardware, so it
-is declared under `game/platform/<name>/` and validated before it is used, in the
-same way stage 4 is gated on validating the cooked tree. A platform that ships a
-plain directory declares none of it. See [vita/PACKAGING.md](vita/PACKAGING.md)
-for the only current instance.
+is declared under `game/config/platform/<name>/` and validated before it is
+used, in the same way stage 4 is gated on validating the cooked tree. A
+platform that ships a plain directory declares none of it. See
+[vita/PACKAGING.md](vita/PACKAGING.md) for the only current instance.
 
 **Worlds are the exception.** A compiled world has no platform-varying encoding,
 so it is compiled once, directly into its container form, and staged into every

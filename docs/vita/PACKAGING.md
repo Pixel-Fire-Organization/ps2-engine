@@ -7,8 +7,8 @@ worlds. One is produced per variant, into `dist/vita/` and `dist/vitatv/`.
 Unlike the PS2 disc, a Vita package carries **per-title metadata**: a title
 identifier, a display name, an icon, a store-front layout and optionally a trophy
 set. None of that is a build setting, so none of it lives in CMake. It is declared
-in `game/platform/vita/package.json`, validated against
-`game/platform/package.schema.json`, and consumed by `tools/vita_package.py`.
+in `game/config/platform/vita/package.json`, validated against
+`game/config/platform/package.schema.json`, and consumed by `tools/vita_package.py`.
 
 ---
 
@@ -20,8 +20,12 @@ question about **the game**, and would be wrong to inherit from the engine. A
 second game built on this engine ships its own identity while sharing the cook
 list unchanged.
 
-This is a new convention, and it is deliberately narrow: `game/platform/<name>/`
-holds title metadata for one platform, nothing else.
+This is a new convention, and it is deliberately narrow:
+`game/config/platform/<name>/` holds title metadata for one platform, nothing
+else. It sits under `game/config/` alongside every other declarative file this
+project owns — achievements, theme, title — rather than under `game/platform/`
+directly, for the same reason those do: one place a person looks for "what does
+this project declare," not one place per kind of declaration.
 
 ---
 
@@ -104,15 +108,16 @@ right-aligns it. A hand-written template is used verbatim.
 ## Trophies
 
 **Disabled, and the runtime integration removed.** `trophies.enabled` is `false`
-in `game/platform/vita/package.json`, `VitaPlatform::GetAchievements()` returns
-null, and the code that called `sceNpTrophy*` (`engine/platform/vita/Trophy.cpp`)
-no longer exists — see [ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md)'s
-off-the-shelf evaluation for why: the console's own trophy system was the
-original implementation and does not work for a title the platform holder did
-not sign, which this section's own registration findings below do not change.
-The engine's own cross-platform achievement system, declared once in
-`game/achievements.json`, is what actually ships and is unaffected by any of
-this — it has no dependency on the native trophy service. The rest of this
+in `game/config/platform/vita/package.json`, `VitaPlatform::GetAchievements()`
+returns null, and the code that called `sceNpTrophy*`
+(`engine/platform/vita/Trophy.cpp`) no longer exists — see
+[ACHIEVEMENT.md](../subsystems/ACHIEVEMENT.md)'s off-the-shelf evaluation for
+why: the console's own trophy system was the original implementation and does
+not work for a title the platform holder did not sign, which this section's
+own registration findings below do not change. The engine's own cross-platform
+achievement system, declared once in `game/config/achievements.json`, is what
+actually ships and is unaffected by any of this — it has no dependency on the
+native trophy service. The rest of this
 section is kept as a record of how the packaging and registration mechanism
 works, for if a signed build ever re-enables it; none of it describes
 currently-running code.

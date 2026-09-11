@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Theme declaration reader and generator.
 
-game/theme.json is the single source of truth for the interface's look. The
+game/config/theme.json is the single source of truth for the interface's look. The
 themes it declares are compiled into the binary, because the interface must be
 able to draw before any filesystem exists and because a built-in theme is what a
 refused load falls back to. The same declaration also cooks to loadable theme
@@ -20,7 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ps2lib import theme as themelib
 
-DEFAULT_DECLARATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "game", "theme.json")
+DEFAULT_DECLARATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "game", "config", "theme.json")
 ENGINE_UI_HEADER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine", "include", "EngineUi.h")
 
 

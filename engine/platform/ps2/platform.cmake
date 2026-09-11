@@ -69,9 +69,9 @@ function(platform_configure PLATFORM)
         add_custom_command(
             OUTPUT  "${_iconHeader}"
             COMMAND ${PYTHON3_BIN} "${CMAKE_SOURCE_DIR}/tools/ps2/save_icon.py"
-                    --declaration "${CMAKE_SOURCE_DIR}/game/title.json"
+                    --declaration "${CMAKE_SOURCE_DIR}/game/config/title.json"
                     --emit-header "${_iconHeader}"
-            DEPENDS "${CMAKE_SOURCE_DIR}/game/title.json" "${CMAKE_SOURCE_DIR}/tools/ps2/save_icon.py"
+            DEPENDS "${CMAKE_SOURCE_DIR}/game/config/title.json" "${CMAKE_SOURCE_DIR}/tools/ps2/save_icon.py"
             COMMENT "Generating the PS2 save icon from title.json"
             VERBATIM
         )

@@ -10,7 +10,7 @@ the title declares, and emitted as a C header so the engine can write them when
 it first creates the directory: no dependency on the disc, and the same bytes
 whatever device the title was launched from.
 
-    python3 tools/ps2/save_icon.py --declaration game/title.json --emit-header out/Ps2SaveIcon.h
+    python3 tools/ps2/save_icon.py --declaration game/config/title.json --emit-header out/Ps2SaveIcon.h
 """
 
 import argparse

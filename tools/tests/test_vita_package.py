@@ -86,8 +86,8 @@ def test_achv_max_entries_matches_the_engine_header():
 
 
 def test_repo_config_validates_for_both_variants():
-    raw = vp.load_config(str(ROOT / "game" / "platform" / "vita" / "package.json"))
-    config_dir = str(ROOT / "game" / "platform" / "vita")
+    raw = vp.load_config(str(ROOT / "game" / "config" / "platform" / "vita" / "package.json"))
+    config_dir = str(ROOT / "game" / "config" / "platform" / "vita")
     for variant in ("vita", "vitatv"):
         resolved = vp.resolve_variant(raw, variant)
         vp.validate(resolved, config_dir, variant)
@@ -95,8 +95,8 @@ def test_repo_config_validates_for_both_variants():
 
 def test_repo_config_matches_its_schema():
     pytest.importorskip("jsonschema")
-    raw = vp.load_config(str(ROOT / "game" / "platform" / "vita" / "package.json"))
-    vp.schema_validate(raw, str(ROOT / "game" / "platform" / "package.schema.json"))
+    raw = vp.load_config(str(ROOT / "game" / "config" / "platform" / "vita" / "package.json"))
+    vp.schema_validate(raw, str(ROOT / "game" / "config" / "platform" / "package.schema.json"))
 
 
 @pytest.mark.parametrize("bad", ["PSEN0001", "psen00001", "PSEN000012", "PS2N0001X", ""])

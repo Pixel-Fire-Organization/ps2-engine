@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools", "ps2"))
 
 import save_icon  # noqa: E402
 
-DECLARATION = os.path.join(ROOT, "game", "title.json")
+DECLARATION = os.path.join(ROOT, "game", "config", "title.json")
 
 
 def test_descriptor_is_exactly_the_size_the_browser_expects():
