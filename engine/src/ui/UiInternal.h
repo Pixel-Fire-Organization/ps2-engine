@@ -118,6 +118,18 @@ struct UiFrameState
     int navRepeat;
     int horizontalRepeat;
 
+    // Which way a shoulder button asks the open tab bar to step this frame:
+    // -1 for L1, +1 for R1, 0 when neither was pressed. An edge, not a held
+    // repeat -- tab counts are small enough that discrete taps are what a
+    // player expects, the same way they would from a settings menu.
+    int tabDelta;
+
+    // Pixels the right stick asks the open scroll region to move by this
+    // frame, already scaled by deflection and dt. Independent of focus-follow
+    // scrolling: this lets a player look ahead in a list without moving focus
+    // off whatever is already selected.
+    float scrollStickDelta;
+
     int scrollY;
     int scrollTop;
     int scrollBottom;

@@ -284,6 +284,12 @@ void Ui_EndScroll()
             remembered->whole = rowBottom - viewHeight;
     }
 
+    // The right stick moves the band directly, on top of whatever focus-follow
+    // above already did -- a separate axis from navigation, not a replacement
+    // for it, so looking ahead with the stick never fights moving focus with
+    // the pad.
+    remembered->whole += static_cast<int>(state.scrollStickDelta);
+
     const int maximum = (contentHeight > viewHeight) ? (contentHeight - viewHeight) : 0;
     if (remembered->whole > maximum)
         remembered->whole = maximum;
@@ -492,7 +498,24 @@ bool Ui_BeginTabBar(const char* id)
         return false;
 
     s_TabBarId = UiInternal_Id(id);
-    s_TabActive = UiInternal_StateFor(s_TabBarId)->whole;
+    UiState* remembered = UiInternal_StateFor(s_TabBarId);
+
+    // L1/R1 step the bar directly, against how many tabs it held last frame --
+    // the same "sized from what was measured the frame before" answer a menu's
+    // own item count already uses, since this frame's real count is not known
+    // until every Ui_Tab call below has run.
+    if (state.tabDelta != 0)
+    {
+        const int lastCount = (remembered->fraction >= 1.0f) ? static_cast<int>(remembered->fraction) : 1;
+        int next = remembered->whole + state.tabDelta;
+        while (next < 0)
+            next += lastCount;
+        while (next >= lastCount)
+            next -= lastCount;
+        remembered->whole = next;
+    }
+
+    s_TabActive = remembered->whole;
     s_TabIndex = 0;
     s_TabX = x;
     s_TabY = y;
@@ -537,6 +560,7 @@ void Ui_EndTabBar()
 {
     if (!UiInternal_CanDraw() || !s_InTabBar)
         return;
+    UiInternal_StateFor(s_TabBarId)->fraction = static_cast<float>((s_TabIndex > 0) ? s_TabIndex : 1);
     UiInternal_PopId();
     s_InTabBar = false;
 }

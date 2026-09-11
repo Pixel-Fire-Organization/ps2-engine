@@ -16,6 +16,11 @@ namespace
     const float CURSOR_SPEED_SLOW = 0.35f;
     const float CURSOR_SPEED_FAST = 1.60f;
     const float CURSOR_RAMP_SECONDS = 0.45f;
+
+    // Pixels per second a fully-deflected right stick scrolls the open region,
+    // proportional to deflection below that. No ramp: unlike the cursor, there
+    // is no fine-positioning case that needs distinguishing a tap from a hold.
+    const float SCROLL_STICK_SPEED = 900.0f;
     const uint32_t FNV_OFFSET_BASIS = 2166136261u;
     const uint32_t FNV_PRIME = 16777619u;
 
@@ -735,6 +740,17 @@ void Ui_BeginFrame()
 
     s_State.accept = WasGamePadButtonPressed(0, GamepadButton::Cross);
     s_State.back = WasGamePadButtonPressed(0, GamepadButton::Circle);
+
+    s_State.tabDelta = 0;
+    if (WasGamePadButtonPressed(0, GamepadButton::R1))
+        s_State.tabDelta = 1;
+    else if (WasGamePadButtonPressed(0, GamepadButton::L1))
+        s_State.tabDelta = -1;
+
+    const Vector2 scrollStick = GetGamePadAxis(0, GamepadStick::Right);
+    s_State.scrollStickDelta = scrollStick.y * SCROLL_STICK_SPEED * dt;
+    if (scrollStick.y != 0.0f)
+        s_State.pointer.visible = false;
 
     UpdateStickPointer(Engine_GetDeltaTime());
     UpdateMousePointer();

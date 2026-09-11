@@ -230,6 +230,23 @@ delay and then at an interval, both measured in seconds. They are never measured
 in frames: two of this engine's platform variants differ only in refresh rate,
 and a frame-counted repeat would run measurably faster on one of them.
 
+**The right stick scrolls directly; the left one only ever points.** Scrolling
+by directional navigation alone reaches only what is focusable — a region of
+plain text with nothing to focus in it cannot be reached by Up and Down at
+all, which is the whole reason a second, unconditional path exists. The right
+stick moves the open scroll region's band by a pixel amount proportional to
+its deflection, independently of focus: a player can look ahead in a list
+without moving focus off whatever is already selected, and the two compose
+rather than conflict, since focus-follow (see the scroll-region paragraph
+above) only ever adjusts the band when a focused row would otherwise leave it.
+
+**A tab bar also answers to the shoulder buttons.** L1 and R1 step it to the
+previous or next tab directly, without first moving focus onto a tab title —
+the same shape a menu's own item highlight already has, sized from how many
+tabs the bar held the frame before, since this frame's count is not known
+until every tab has been asked for. This is in addition to, not instead of,
+picking a tab by focusing its title and accepting, or by pointing at it.
+
 **One cursor, several sources, last mover wins.** A mouse, a front touch surface
 and the left stick all drive the same cursor; whichever moved it most recently
 owns it. The stick source exists on every platform, so pointing is never absent —

@@ -227,7 +227,9 @@ int Ui_ScreenHeight();
 ///
 /// Content is clipped to it and the scroll position is remembered between
 /// frames; directional navigation scrolls the focused row into view, so a
-/// region that does not fit is scrolled rather than paged. A row entirely
+/// region that does not fit is scrolled rather than paged. The right stick
+/// also moves the band directly, independently of focus, which is the only
+/// way to scroll a region with nothing focusable inside it. A row entirely
 /// outside the region costs nothing: it is neither drawn nor focusable.
 /// @param id Identity of the region, which is where its scroll position is filed.
 /// @param height Region height in pixels.
@@ -293,7 +295,8 @@ bool Ui_BeginTree(const char* label, bool defaultOpen);
 
 void Ui_EndTree();
 
-/// A strip of pages across the top of a panel.
+/// A strip of pages across the top of a panel. L1 and R1 step it directly, in
+/// addition to focusing and accepting a title or pointing at one.
 /// @param id Identity of the strip, which is where the active page is filed.
 /// @return False when no panel is open.
 bool Ui_BeginTabBar(const char* id);

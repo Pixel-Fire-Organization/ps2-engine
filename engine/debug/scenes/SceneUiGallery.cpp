@@ -6,7 +6,6 @@
 
 namespace
 {
-    const int PANEL_MARGIN = 16;
     const int PAGE_COUNT = 3;
     const int PLOT_SAMPLES = 48;
     const int BOX_HEIGHT = 90;
@@ -297,6 +296,13 @@ void Scene_UiGallery_Update(float dt)
     }
 
     Ui_Label("SCALES 1 2 3");
+    // Read before EndPanel closes it: the panel's own cursor is exactly where
+    // its content left off, in absolute screen coordinates, which is what
+    // keeps this raw-drawn content from landing back over the tab bar above
+    // it -- a fixed offset here previously did not account for how much of
+    // the panel's own header the current theme and screen size leave above it.
+    const int glyphX = Ui_ContentX();
+    const int glyphY = Ui_CursorY();
     Ui_EndPanel();
-    DrawGlyphs(PANEL_MARGIN * 2, PANEL_MARGIN + 40);
+    DrawGlyphs(glyphX, glyphY);
 }
